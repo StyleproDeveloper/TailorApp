@@ -61,3 +61,4 @@ trap cleanup SIGINT
 # Wait for backend process
 wait $BACKEND_PID
 
+
