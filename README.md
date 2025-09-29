@@ -8,6 +8,8 @@ A comprehensive tailor shop management application built with Flutter (frontend)
 tailorapp/
 ├── lib/                    # Flutter frontend code
 ├── backend/               # Node.js backend code
+├── web/                   # Flutter web assets
+├── assets/                # Images and fonts
 ├── scripts/               # Development scripts
 ├── package.json           # Root package.json for managing both projects
 └── README.md             # This file

@@ -11,23 +11,6 @@ linked_*.ds
 unlinked.ds
 unlinked_spec.ds
 
-# Android
-android/app/debug
-android/app/profile
-android/app/release
-
-# iOS
-ios/Flutter/App.framework
-ios/Flutter/Flutter.framework
-ios/Flutter/Flutter.podspec
-ios/Flutter/Generated.xcconfig
-ios/Flutter/app.flx
-ios/Flutter/app.zip
-ios/Flutter/flutter_assets/
-ios/Flutter/flutter_export_environment.sh
-ios/ServiceDefinitions.json
-ios/Runner/GeneratedPluginRegistrant.*
-
 # Web
 web/assets/AssetManifest.json
 web/assets/FontManifest.json
