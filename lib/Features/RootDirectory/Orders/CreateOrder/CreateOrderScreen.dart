@@ -16,6 +16,7 @@ import '../../../../Core/Widgets/CustomDatePicker.dart';
 import '../../../../Core/Widgets/CustomLoader.dart';
 import '../../../../Core/Widgets/CustomSnakBar.dart';
 import '../../../../GlobalVariables.dart';
+import '../../customer/CustomerInfo.dart';
 
 class CreateOrderScreen extends StatefulWidget {
   CreateOrderScreen({super.key, this.orderId});
@@ -67,12 +68,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
     // Fetch data and handle orderId
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // First, fetch customers and dress types
+      // First, fetch only initial customers (10) and dress types for faster loading
       await Future.wait([
-        fetchCustomerData(),
+        _fetchInitialCustomers(),
         fetchDressTypeData(
           pageNumber: 1,
-          pageSize: 10,
+          pageSize: 20,
           existingDressTypes: [],
           initialFetch: true,
         ),
@@ -119,6 +120,39 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     super.dispose();
   }
 
+  Future<void> _fetchInitialCustomers() async {
+    int? id = GlobalVariables.shopIdGet;
+    if (id == null) {
+      Future.microtask(() => CustomSnackbar.showSnackbar(
+            context,
+            "Shop ID is missing",
+            duration: Duration(seconds: 2),
+          ));
+      return;
+    }
+
+    // Fetch only first 10 customers for fast initial load
+    try {
+      final String requestUrl = "${Urls.customer}/$id?pageNumber=1&pageSize=10";
+      final response = await ApiService().get(requestUrl, context);
+      
+      if (response.data is Map<String, dynamic>) {
+        List<dynamic> customerData = response.data['data'];
+        setState(() {
+          customers = customerData.cast<Map<String, dynamic>>();
+        });
+      } else {
+        setState(() {
+          customers = [];
+        });
+      }
+    } catch (e) {
+      setState(() {
+        customers = [];
+      });
+    }
+  }
+
   Future<void> fetchCustomerData() async {
     int? id = GlobalVariables.shopIdGet;
     if (id == null) {
@@ -130,15 +164,31 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       return;
     }
 
-    final String requestUrl = "${Urls.customer}/$id";
+    // Fetch all customers with pagination (for refresh scenarios)
+    await _fetchAllCustomers(id);
+  }
 
+  Future<void> _fetchAllCustomers(int shopId, {int pageNumber = 1, int pageSize = 50}) async {
     try {
+      final String requestUrl = "${Urls.customer}/$shopId?pageNumber=$pageNumber&pageSize=$pageSize";
       final response = await ApiService().get(requestUrl, context);
+      
       if (response.data is Map<String, dynamic>) {
         List<dynamic> customerData = response.data['data'];
+        List<Map<String, dynamic>> newCustomers = customerData.cast<Map<String, dynamic>>();
+        
         setState(() {
-          customers = customerData.cast<Map<String, dynamic>>();
+          if (pageNumber == 1) {
+            customers = newCustomers;
+          } else {
+            customers.addAll(newCustomers);
+          }
         });
+
+        // If we got a full page, there might be more customers
+        if (newCustomers.length == pageSize) {
+          await _fetchAllCustomers(shopId, pageNumber: pageNumber + 1, pageSize: pageSize);
+        }
       } else {
         Future.microtask(() => CustomSnackbar.showSnackbar(
               context,
@@ -715,6 +765,42 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     // TODO: Implement audio recording logic
   }
 
+  Future<void> _navigateToCreateCustomer() async {
+    print('🚀 Navigating to create customer page...');
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Customerinfo(shouldNavigateBack: true),
+      ),
+    );
+    
+    print('📥 Received result from customer creation: $result');
+    print('📥 Result type: ${result.runtimeType}');
+    
+    if (result != null && result is Map<String, dynamic>) {
+      // New customer was created, add it to the current list and select it
+      final newCustomer = result as Map<String, dynamic>;
+      print('✅ Processing new customer: $newCustomer');
+      
+      setState(() {
+        // Add new customer to the beginning of the list
+        customers.insert(0, newCustomer);
+        selectedCustomer = newCustomer;
+        selectedCustomerId = newCustomer['customerId'];
+        dropdownCustomerController.text = newCustomer['name'];
+      });
+      
+      // Show success message
+      CustomSnackbar.showSnackbar(
+        context,
+        'Customer "${newCustomer['name']}" created and selected successfully!',
+        duration: Duration(seconds: 3),
+      );
+    } else {
+      print('❌ No customer data received or invalid format');
+    }
+  }
+
  void onHandleSaveOrder() async {
   int? shopId = GlobalVariables.shopIdGet;
   int? branchId = GlobalVariables.branchId;
@@ -908,13 +994,41 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
               ? Textstring().updateOrder
               : Textstring().createorder),
       body: isLoading
-          ? null
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    color: ColorPalatte.primary,
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Loading order form...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            )
           : SingleChildScrollView(
               padding: const EdgeInsets.all(15),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Customer', style: Createorderstyle.selecteCustomer),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text('Customer', style: Createorderstyle.selecteCustomer),
+                      ),
+                      IconButton(
+                        onPressed: _navigateToCreateCustomer,
+                        icon: Icon(Icons.person_add, color: ColorPalatte.primary),
+                        tooltip: 'Add New Customer',
+                      ),
+                    ],
+                  ),
                   SizedBox(height: 10),
                   _buildDropdownCustomer(
                     "Select Customer",
@@ -1315,32 +1429,42 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     List<T> items,
     void Function(T) onChanged,
   ) {
-    T? validatedValue = value != null && items.contains(value) ? value : null;
-    return DropdownButtonFormField<T>(
-      value: validatedValue,
-      hint: Text(hint),
-      items: items.isEmpty
-          ? [
-              DropdownMenuItem<T>(
-                value: null,
-                child: Text('No $hint available'),
-                enabled: false,
-              )
-            ]
-          : items.map((item) {
-              return DropdownMenuItem<T>(
-                value: item,
-                child: Text(
-                  item is Map<String, dynamic>
-                      ? item['name'].toString()
-                      : item.toString(),
-                ),
-              );
-            }).toList(),
-      onChanged: items.isEmpty ? null : (newValue) => onChanged(newValue!),
-      decoration: InputDecoration(
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    return InkWell(
+      onTap: () {
+        _showCustomerDialog(
+          context,
+          hint,
+          value,
+          items,
+          (selectedItem) {
+            onChanged(selectedItem);
+          },
+        );
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          hintText: hint,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          suffixIcon: Icon(Icons.arrow_drop_down, color: Colors.grey),
+        ),
+        child: Text(
+          value != null &&
+                  value is Map<String, dynamic> &&
+                  value['name'] != null
+              ? value['name'].toString()
+              : dropdownCustomerController.text.isNotEmpty
+                  ? dropdownCustomerController.text
+                  : hint,
+          style: TextStyle(
+            color: (value != null &&
+                        value is Map<String, dynamic> &&
+                        value['name'] != null) ||
+                    dropdownCustomerController.text.isNotEmpty
+                ? Colors.black
+                : Colors.grey,
+          ),
+        ),
       ),
     );
   }
@@ -1397,6 +1521,26 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showCustomerDialog<T>(
+    BuildContext context,
+    String hint,
+    T? selectedValue,
+    List<T> items,
+    void Function(T) onChanged,
+  ) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return _CustomerDialog<T>(
+          hint: hint,
+          selectedValue: selectedValue,
+          onChanged: onChanged,
+          customers: customers,
+        );
+      },
     );
   }
 
@@ -1631,6 +1775,268 @@ class OrderItem {
         deliveryDate = deliveryDate ??
             TextEditingController(
                 text: DateFormat('yyyy-MM-dd').format(DateTime.now()));
+}
+
+class _CustomerDialog<T> extends StatefulWidget {
+  final String hint;
+  final T? selectedValue;
+  final void Function(T) onChanged;
+  final List<Map<String, dynamic>> customers;
+
+  const _CustomerDialog({
+    required this.hint,
+    required this.selectedValue,
+    required this.onChanged,
+    required this.customers,
+  });
+
+  @override
+  _CustomerDialogState<T> createState() => _CustomerDialogState<T>();
+}
+
+class _CustomerDialogState<T> extends State<_CustomerDialog<T>> {
+  String _searchQuery = '';
+  List<Map<String, dynamic>> _filteredCustomers = [];
+  final ScrollController _scrollController = ScrollController();
+  Timer? _debounce;
+  int _pageNumber = 1;
+  final int _pageSize = 15;
+  bool _isLoading = false;
+  bool _hasMoreData = true;
+  List<Map<String, dynamic>> _allCustomers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _allCustomers = List.from(widget.customers);
+    _filteredCustomers = List.from(_allCustomers);
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_debounce?.isActive ?? false) return;
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 50 &&
+        _hasMoreData &&
+        !_isLoading) {
+      _debounce = Timer(const Duration(milliseconds: 300), () {
+        _loadMoreCustomers();
+      });
+    }
+  }
+
+  Future<void> _loadMoreCustomers() async {
+    if (_isLoading || !_hasMoreData) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null) return;
+
+    try {
+      final String requestUrl = "${Urls.customer}/$shopId?pageNumber=${_pageNumber + 1}&pageSize=$_pageSize";
+      final response = await ApiService().get(requestUrl, context);
+      
+      if (response.data is Map<String, dynamic>) {
+        List<dynamic> customerData = response.data['data'];
+        List<Map<String, dynamic>> newCustomers = customerData.cast<Map<String, dynamic>>();
+        
+        setState(() {
+          _allCustomers.addAll(newCustomers);
+          _pageNumber++;
+          _hasMoreData = newCustomers.length == _pageSize;
+          _isLoading = false;
+        });
+        
+        _filterCustomers();
+      } else {
+        setState(() {
+          _hasMoreData = false;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _filterCustomers() {
+    setState(() {
+      if (_searchQuery.isEmpty) {
+        _filteredCustomers = List.from(_allCustomers);
+      } else {
+        _filteredCustomers = _allCustomers.where((customer) {
+          final name = customer['name']?.toString().toLowerCase() ?? '';
+          final mobile = customer['mobile']?.toString() ?? '';
+          final searchLower = _searchQuery.toLowerCase();
+          
+          return name.contains(searchLower) || mobile.contains(_searchQuery);
+        }).toList();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Container(
+        width: double.infinity,
+        height: 500,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.hint,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: Icon(Icons.close, color: Colors.grey),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Search by name or mobile number...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+                _filterCustomers();
+              },
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: _filteredCustomers.isEmpty && !_isLoading
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.person_search,
+                            size: 64,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _searchQuery.isEmpty 
+                                ? 'No customers available'
+                                : 'No customers found matching "$_searchQuery"',
+                            style: TextStyle(
+                              fontSize: 16, 
+                              color: Colors.grey.shade600
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      itemCount: _filteredCustomers.length + (_hasMoreData || _isLoading ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == _filteredCustomers.length) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: _isLoading
+                                  ? const CircularProgressIndicator()
+                                  : const SizedBox.shrink(),
+                            ),
+                          );
+                        }
+                        
+                        final customer = _filteredCustomers[index];
+                        final isSelected = customer == widget.selectedValue;
+                        final name = customer['name']?.toString() ?? 'Unknown';
+                        final mobile = customer['mobile']?.toString() ?? '';
+                        
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: ColorPalatte.primary,
+                            child: Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            name,
+                            style: TextStyle(
+                              color: isSelected
+                                  ? ColorPalatte.primary
+                                  : Colors.black,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                          subtitle: mobile.isNotEmpty 
+                              ? Text(
+                                  mobile,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                )
+                              : null,
+                          onTap: () {
+                            widget.onChanged(customer as T);
+                            Navigator.pop(context);
+                          },
+                          selected: isSelected,
+                          selectedTileColor: Colors.grey[100],
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  "Cancel",
+                  style: TextStyle(color: ColorPalatte.primary),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _DressTypeDialog<T> extends StatefulWidget {

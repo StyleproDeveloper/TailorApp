@@ -19,9 +19,10 @@ import '../../../GlobalVariables.dart';
 import 'Widgets/GenderSelection.dart';
 
 class Customerinfo extends StatefulWidget {
-  const Customerinfo({super.key, this.customerId});
+  const Customerinfo({super.key, this.customerId, this.shouldNavigateBack = false});
 
   final int? customerId;
+  final bool shouldNavigateBack; // New parameter to control navigation
 
   @override
   State<Customerinfo> createState() => _CustomerinfoState();
@@ -155,6 +156,31 @@ void initState() {
 
       String formattedDob = '';
       if (dob.text.trim().isNotEmpty) {
+        // Check if date is in the future
+        try {
+          final List<String> dateParts = dob.text.trim().split('/');
+          if (dateParts.length == 3) {
+            final int day = int.parse(dateParts[0]);
+            final int month = int.parse(dateParts[1]);
+            final int year = int.parse(dateParts[2]);
+            final DateTime selectedDate = DateTime(year, month, day);
+            final DateTime now = DateTime.now();
+            final DateTime today = DateTime(now.year, now.month, now.day);
+            
+            if (selectedDate.isAfter(today)) {
+              hideLoader(context);
+              CustomSnackbar.showSnackbar(
+                context,
+                "Date of birth cannot be in the future",
+                duration: Duration(seconds: 2),
+              );
+              return;
+            }
+          }
+        } catch (e) {
+          // If date parsing fails, continue with format validation
+        }
+        
         formattedDob = formatDateForApi(dob.text.trim());
         if (formattedDob.isEmpty && dob.text.trim().isNotEmpty) {
           hideLoader(context);
@@ -209,14 +235,51 @@ void initState() {
             message = response.data['message'];
           }
 
+          print('✅ Customer operation successful - Customer ID: $customerId');
+          print('✅ Message: $message');
+          
           CustomSnackbar.showSnackbar(
             context, 
             message,
             duration: Duration(seconds: 2)
           );
           
-          // Return true to indicate successful update/creation
-          Navigator.pop(context, true);
+          // Navigate back for new customer creation when called from create order page
+          if (customerId == null && widget.shouldNavigateBack) {
+            print('🔄 Navigating back for new customer creation from create order page');
+            print('📊 Full API Response: ${response.data}');
+            
+            // Try different possible response structures
+            int? returnedCustomerId;
+            if (response.data['customerId'] != null) {
+              returnedCustomerId = response.data['customerId'];
+            } else if (response.data['id'] != null) {
+              returnedCustomerId = response.data['id'];
+            } else if (response.data['customer'] != null && response.data['customer']['id'] != null) {
+              returnedCustomerId = response.data['customer']['id'];
+            } else {
+              print('⚠️ Could not find customer ID in response');
+              returnedCustomerId = 0; // Fallback
+            }
+            
+            // Return the created customer data
+            final customerData = {
+              'customerId': returnedCustomerId,
+              'name': name.text.trim(),
+              'mobile': mobile.text.trim(),
+              'email': email.text.trim(),
+              'address': address.text.trim(),
+              'dateOfBirth': dob.text.trim(),
+              'gender': selectedGender,
+            };
+            print('📤 Returning customer data: $customerData');
+            Navigator.pop(context, customerData);
+          } else if (customerId == null) {
+            print('✅ Customer created successfully, staying on page');
+            // For direct customer creation (not from create order), stay on page
+          } else {
+            print('✅ Staying on page for customer update');
+          }
         } else {
           CustomSnackbar.showSnackbar(
             context, 

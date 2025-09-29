@@ -32,6 +32,8 @@ class _AddDressModalState extends State<AddDressModal> {
   bool _showPatterns = false;
   List<Map<String, dynamic>> allMeasurementsList = [];
   List<Map<String, dynamic>> allPatternsList = [];
+  Map<String, int?> measurementTypeIds = {}; // Store dressTypeMeasurementId for each measurement
+  Map<String, int?> patternTypeIds = {}; // Store dressTypePatternId for each pattern
 
   @override
   void initState() {
@@ -90,6 +92,8 @@ class _AddDressModalState extends State<AddDressModal> {
             );
             String id = matchingMeasurement["_id"].toString();
             selectedMeasurements[id] = true;
+            // Store the dressTypeMeasurementId
+            measurementTypeIds[id] = fetchedMeasurement["dressTypeMeasurementId"];
           }
 
           for (var fetchedPattern in fetchedPatterns) {
@@ -100,6 +104,8 @@ class _AddDressModalState extends State<AddDressModal> {
             );
             String id = matchingPattern["_id"].toString();
             selectedPatterns[id] = true;
+            // Store the dressTypePatternId
+            patternTypeIds[id] = fetchedPattern["dressTypePatternId"];
           }
         });
       }
@@ -165,9 +171,11 @@ class _AddDressModalState extends State<AddDressModal> {
 
       for (var pattern in patternsList) {
         print('tttttttt::::: $pattern');
-        if (selectedPatterns[pattern["_id"].toString()] == true) {
+        String patternId = pattern["_id"].toString();
+        if (selectedPatterns[patternId] == true) {
           selectedPatternIds.add(pattern["dressPatternId"]);
-          selectedDressTypePatternId.add(pattern["dressTypePatternId"]);
+          // Use stored dressTypePatternId if available, otherwise null
+          selectedDressTypePatternId.add(patternTypeIds[patternId]);
           if (!selectedCategories.contains(pattern["category"])) {
             selectedCategories.add(pattern["category"]);
           }
@@ -176,10 +184,12 @@ class _AddDressModalState extends State<AddDressModal> {
 
       for (var measure in measurements) {
         print('llllllll::::::: $measure');
-        if (selectedMeasurements[measure["_id"].toString()] == true) {
+        String measureId = measure["_id"].toString();
+        if (selectedMeasurements[measureId] == true) {
           selectedMeasurementIds.add(measure["measurementId"]);
           selectedMeasurementNames.add(measure["name"]);
-          selectedDressTypeMeasurementId.add(measure["dressTypeMeasurementId"]);
+          // Use stored dressTypeMeasurementId if available, otherwise null
+          selectedDressTypeMeasurementId.add(measurementTypeIds[measureId]);
         }
       }
 
@@ -190,7 +200,7 @@ class _AddDressModalState extends State<AddDressModal> {
           "shop_id": shopId,
           "dressTypeId": widget.dressDataId ?? dressTypeId,
           "dressTypePatternId":
-              widget.dressDataId != null ? selectedDressTypePatternId : null,
+              widget.dressDataId != null ? selectedDressTypePatternId[index] : null,
           "category": (index < selectedCategories.length)
               ? selectedCategories[index]
               : "string",
@@ -203,7 +213,7 @@ class _AddDressModalState extends State<AddDressModal> {
           List.generate(selectedMeasurementIds.length, (index) {
         return {
           "dressTypeMeasurementId": widget.dressDataId != null
-              ? selectedDressTypeMeasurementId
+              ? selectedDressTypeMeasurementId[index]
               : null,
           "shop_id": shopId,
           "dressTypeId": widget.dressDataId ?? dressTypeId,

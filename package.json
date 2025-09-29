@@ -1,0 +1,31 @@
+{
+  "name": "tailorapp-fullstack",
+  "version": "1.0.0",
+  "description": "Full-stack Tailor App with Flutter frontend and Node.js backend",
+  "scripts": {
+    "install:backend": "cd backend && npm install",
+    "install:frontend": "flutter pub get",
+    "install:all": "npm run install:backend && npm run install:frontend",
+    "start:backend": "cd backend && npm run dev",
+    "start:frontend": "flutter run -d chrome --web-port 8144 --release",
+    "start:dev": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "build:frontend": "flutter build web --release",
+    "clean": "flutter clean && cd backend && rm -rf node_modules",
+    "test:backend": "cd backend && npm test",
+    "lint:backend": "cd backend && npm run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "flutter",
+    "nodejs",
+    "express",
+    "mongodb",
+    "tailor",
+    "business-management"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
+

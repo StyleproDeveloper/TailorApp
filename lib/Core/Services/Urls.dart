@@ -1,5 +1,8 @@
 class Urls {
-  static const String baseUrl = 'http://54.174.213.173';
+  // Use local backend for development
+  static const String baseUrl = 'http://localhost:5500';
+  // Fallback to production backend if needed
+  // static const String baseUrl = 'http://54.174.213.173';
   static const String shopName = '/shops';
   static const String customer = '/customer';
   static const String login = '/auth/login';

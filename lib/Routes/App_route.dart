@@ -5,6 +5,7 @@ import 'package:tailorapp/Features/AuthDirectory/SignUp/RegisterScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/Orders/OrderDetail/OrderDetailsScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/Settings/BillingTerms/billing_details_screen.dart';
 import 'package:tailorapp/Features/RootDirectory/Settings/Branches/BranchesScreen.dart';
+import 'package:tailorapp/Features/RootDirectory/Settings/Shop/ShopDetailsScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/Settings/contactUs/ContactSupportScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/customer/CustomerInfo.dart';
 import 'package:tailorapp/Features/RootDirectory/BottomTabs/BottomTabs.dart';
@@ -33,6 +34,7 @@ class AppRoutes {
   static const String contactSupportScreen = './contactSupportScreen';
   static const String billingTermsScreen = './billingTermsScreen';
   static const String orderDetailsScreen = './orderDetailsScreen';
+  static const String shopDetailsScreen = './shopDetailsScreen';
 
   static Map<String, WidgetBuilder> routes = {
     splash: (context) => const Splashscreen(),
@@ -51,5 +53,6 @@ class AppRoutes {
     contactSupportScreen: (context) => ContactSupportScreen(),
     billingTermsScreen: (context) => BillingDetailsScreen(),
     orderDetailsScreen: (context) => OrderDetailsScreen(),
+    shopDetailsScreen: (context) => ShopDetailsScreen(),
   };
 }
