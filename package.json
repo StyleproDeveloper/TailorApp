@@ -12,11 +12,17 @@
     "build:frontend": "flutter build web --release",
     "build:all": "npm run build:frontend",
     "deploy:prepare": "./scripts/deploy.sh",
+    "deploy:github": "git add . && git commit -m 'Deploy to production' && git push origin main",
     "deploy:frontend": "echo 'Deploy frontend to Vercel: https://vercel.com/new'",
     "deploy:backend": "echo 'Deploy backend to Railway: https://railway.app/new'",
     "clean": "flutter clean && cd backend && rm -rf node_modules",
     "test:backend": "cd backend && npm test",
-    "lint:backend": "cd backend && npm run lint"
+    "test:frontend": "flutter test",
+    "test:all": "npm run test:backend && npm run test:frontend",
+    "lint:backend": "cd backend && npm run lint",
+    "lint:frontend": "flutter analyze",
+    "lint:all": "npm run lint:backend && npm run lint:frontend",
+    "ci:local": "npm run lint:all && npm run test:all && npm run build:all"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

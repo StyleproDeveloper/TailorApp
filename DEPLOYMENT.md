@@ -1,270 +1,241 @@
 # 🚀 Deployment Guide - Tailor App
 
-This guide will help you deploy your full-stack Tailor App to production so it can be accessed from any device or network.
+This guide covers deploying your Tailor App to production using GitHub, Railway (backend), and Vercel (frontend).
 
-## 🌐 **Recommended Hosting Setup: Vercel + Railway**
+## 📋 Prerequisites
 
-### **Frontend (Flutter Web) → Vercel**
-### **Backend (Node.js) → Railway**
+- GitHub repository
+- Railway account (for backend)
+- Vercel account (for frontend)
+- MongoDB Atlas account (for production database)
 
----
+## 🔧 Setup Instructions
 
-## 📋 **Prerequisites**
+### 1. GitHub Repository Setup
 
-1. **GitHub Repository:** Your code should be pushed to GitHub
-2. **Vercel Account:** Sign up at [vercel.com](https://vercel.com)
-3. **Railway Account:** Sign up at [railway.app](https://railway.app)
-4. **MongoDB Atlas:** Free database at [mongodb.com/atlas](https://mongodb.com/atlas)
+1. **Push your code to GitHub:**
+   ```bash
+   git add .
+   git commit -m "Initial commit with deployment setup"
+   git push origin main
+   ```
 
----
+2. **Enable GitHub Actions:**
+   - Go to your repository settings
+   - Navigate to "Actions" → "General"
+   - Ensure "Allow all actions and reusable workflows" is selected
 
-## 🔧 **Step 1: Prepare Your Code**
+### 2. Railway Backend Setup
 
-### 1.1 Build Flutter Web App
+1. **Create Railway account:**
+   - Visit [railway.app](https://railway.app)
+   - Sign up with GitHub
+
+2. **Deploy backend:**
+   - Click "New Project"
+   - Select "Deploy from GitHub repo"
+   - Choose your repository
+   - Select the `backend` folder as the root directory
+   - Railway will automatically detect it's a Node.js project
+
+3. **Configure environment variables:**
+   - Go to your Railway project settings
+   - Add these environment variables:
+     ```
+     NODE_ENV=production
+     PORT=5500
+     MONGODB_URI=your_mongodb_atlas_connection_string
+     JWT_SECRET=your_jwt_secret_key
+     ```
+
+4. **Get Railway credentials:**
+   - Go to Railway project settings
+   - Copy your `RAILWAY_TOKEN` and `RAILWAY_SERVICE_ID`
+
+### 3. Vercel Frontend Setup
+
+1. **Create Vercel account:**
+   - Visit [vercel.com](https://vercel.com)
+   - Sign up with GitHub
+
+2. **Deploy frontend:**
+   - Click "New Project"
+   - Import your GitHub repository
+   - Configure build settings:
+     - **Framework Preset:** Other
+     - **Root Directory:** `./` (root)
+     - **Build Command:** `flutter build web --release`
+     - **Output Directory:** `build/web`
+
+3. **Get Vercel credentials:**
+   - Go to Vercel project settings
+   - Copy your `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID`
+
+### 4. GitHub Secrets Configuration
+
+Add these secrets to your GitHub repository:
+
+1. **Go to repository settings → Secrets and variables → Actions**
+
+2. **Add the following secrets:**
+   ```
+   RAILWAY_TOKEN=your_railway_token
+   RAILWAY_SERVICE_ID=your_railway_service_id
+   VERCEL_TOKEN=your_vercel_token
+   VERCEL_ORG_ID=your_vercel_org_id
+   VERCEL_PROJECT_ID=your_vercel_project_id
+   ```
+
+### 5. MongoDB Atlas Setup
+
+1. **Create MongoDB Atlas cluster:**
+   - Visit [mongodb.com/atlas](https://mongodb.com/atlas)
+   - Create a free cluster
+   - Get your connection string
+
+2. **Configure database access:**
+   - Add your IP address to the whitelist
+   - Create a database user
+   - Update the connection string with credentials
+
+## 🔄 Automated Deployment
+
+Once everything is set up, deployment happens automatically:
+
+1. **Push to main branch:**
+   ```bash
+   git add .
+   git commit -m "Deploy to production"
+   git push origin main
+   ```
+
+2. **GitHub Actions will:**
+   - Build and test the backend
+   - Build the Flutter frontend
+   - Deploy backend to Railway
+   - Deploy frontend to Vercel
+   - Notify deployment status
+
+## 🌐 Production URLs
+
+After successful deployment, you'll have:
+
+- **Frontend:** `https://your-app.vercel.app`
+- **Backend:** `https://your-app.railway.app`
+- **API Docs:** `https://your-app.railway.app/api-docs`
+
+## 🔧 Manual Deployment
+
+If you prefer manual deployment:
+
+### Backend (Railway)
 ```bash
-# Run the deployment script
-./scripts/deploy.sh
+# Install Railway CLI
+npm install -g @railway/cli
 
-# Or manually:
-flutter build web --release
+# Login to Railway
+railway login
+
+# Deploy backend
+cd backend
+railway up
 ```
 
-### 1.2 Commit and Push to GitHub
+### Frontend (Vercel)
 ```bash
-git add .
-git commit -m "Prepare for production deployment"
-git push origin main
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy frontend
+vercel --prod
 ```
 
----
+## 🐛 Troubleshooting
 
-## 🎨 **Step 2: Deploy Frontend to Vercel**
+### Common Issues
 
-### 2.1 Connect to Vercel
-1. Go to [vercel.com](https://vercel.com)
-2. Click "New Project"
-3. Import your GitHub repository
-4. Select the root directory
-
-### 2.2 Configure Vercel
-- **Framework Preset:** Other
-- **Root Directory:** `./` (root)
-- **Build Command:** `flutter build web --release`
-- **Output Directory:** `build/web`
-
-### 2.3 Deploy
-- Click "Deploy"
-- Wait for deployment to complete
-- Your app will be available at: `https://your-app-name.vercel.app`
-
----
-
-## ⚙️ **Step 3: Deploy Backend to Railway**
-
-### 3.1 Connect to Railway
-1. Go to [railway.app](https://railway.app)
-2. Click "New Project"
-3. Select "Deploy from GitHub repo"
-4. Choose your repository
-5. Select the `backend` folder
-
-### 3.2 Configure Environment Variables
-In Railway dashboard, add these environment variables:
-
-```env
-PORT=5500
-MONGO_URL=mongodb+srv://username:password@cluster.mongodb.net/tailorapp
-JWT_SECRET=your_super_secret_jwt_key_here
-JWT_EXPIRE=7d
-NODE_ENV=production
-CORS_ORIGIN=https://your-app-name.vercel.app
-```
-
-### 3.3 Deploy
-- Railway will automatically detect it's a Node.js app
-- It will run `npm install` and `npm start`
-- Your API will be available at: `https://your-backend-name.railway.app`
-
----
-
-## 🔗 **Step 4: Connect Frontend to Backend**
-
-### 4.1 Update Frontend URLs
-1. Go to your Vercel deployment
-2. In the project settings, add environment variable:
-   - **Name:** `REACT_APP_API_URL`
-   - **Value:** `https://your-backend-name.railway.app`
-
-### 4.2 Update CORS in Backend
-In your Railway backend, ensure CORS allows your Vercel domain:
-```javascript
-// In backend/src/app.js
-app.use(
-  cors({
-    origin: ['https://your-app-name.vercel.app', 'http://localhost:8144'],
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    allowedHeaders: 'Content-Type, Authorization',
-  })
-);
-```
-
----
-
-## 🗄️ **Step 5: Setup MongoDB Atlas**
-
-### 5.1 Create MongoDB Atlas Account
-1. Go to [mongodb.com/atlas](https://mongodb.com/atlas)
-2. Create a free account
-3. Create a new cluster (free tier)
-
-### 5.2 Get Connection String
-1. Click "Connect" on your cluster
-2. Choose "Connect your application"
-3. Copy the connection string
-4. Replace `<password>` with your database password
-5. Use this string in Railway environment variables
-
-### 5.3 Configure Network Access
-1. In Atlas dashboard, go to "Network Access"
-2. Add IP address `0.0.0.0/0` (allow all IPs)
-3. Or add specific IPs for better security
-
----
-
-## 🧪 **Step 6: Test Your Deployment**
-
-### 6.1 Test Frontend
-- Visit your Vercel URL
-- Check if the app loads correctly
-- Test navigation and UI
-
-### 6.2 Test Backend
-- Visit `https://your-backend-name.railway.app/api-docs`
-- Check if Swagger documentation loads
-- Test API endpoints
-
-### 6.3 Test Integration
-- Try logging in from the frontend
-- Check if API calls work
-- Test all major features
-
----
-
-## 🔄 **Step 7: Update URLs for Production**
-
-### 7.1 Update Frontend URLs
-```dart
-// In lib/Core/Services/Urls.dart
-class Urls {
-  static const String baseUrl = 'https://your-backend-name.railway.app';
-  // ... rest of your URLs
-}
-```
-
-### 7.2 Redeploy Frontend
-```bash
-# After updating URLs
-git add .
-git commit -m "Update URLs for production"
-git push origin main
-# Vercel will automatically redeploy
-```
-
----
-
-## 📱 **Step 8: Test from Other Devices**
-
-### 8.1 Mobile Testing
-- Open your Vercel URL on mobile browser
-- Test responsive design
-- Check touch interactions
-
-### 8.2 Network Testing
-- Test from different networks (WiFi, mobile data)
-- Test from different locations
-- Check loading times
-
----
-
-## 🛠️ **Alternative Hosting Options**
-
-### **Option A: Netlify + Render**
-- **Frontend:** [netlify.com](https://netlify.com)
-- **Backend:** [render.com](https://render.com)
-
-### **Option B: Firebase + Google Cloud**
-- **Frontend:** [firebase.google.com](https://firebase.google.com)
-- **Backend:** [cloud.google.com](https://cloud.google.com)
-
-### **Option C: AWS**
-- **Frontend:** AWS Amplify
-- **Backend:** AWS Elastic Beanstalk
-
----
-
-## 🔧 **Troubleshooting**
-
-### Common Issues:
-
-1. **CORS Errors:**
-   - Check CORS configuration in backend
-   - Ensure frontend URL is in allowed origins
+1. **Build Failures:**
+   - Check GitHub Actions logs
+   - Ensure all dependencies are in package.json
+   - Verify Flutter version compatibility
 
 2. **Environment Variables:**
-   - Verify all environment variables are set in Railway
-   - Check MongoDB connection string
+   - Double-check all secrets are set correctly
+   - Ensure MongoDB connection string is valid
+   - Verify Railway and Vercel tokens are correct
 
-3. **Build Failures:**
-   - Check build logs in Vercel/Railway
-   - Ensure all dependencies are in package.json
+3. **CORS Issues:**
+   - Update backend CORS settings for production domain
+   - Check frontend API URLs point to Railway backend
 
-4. **API Not Working:**
-   - Check Railway logs for errors
-   - Verify MongoDB connection
-   - Test API endpoints directly
+4. **Database Connection:**
+   - Verify MongoDB Atlas cluster is running
+   - Check IP whitelist includes Railway's IPs
+   - Ensure database user has proper permissions
 
----
+### Debugging Steps
 
-## 📊 **Monitoring & Maintenance**
+1. **Check deployment logs:**
+   - Railway: Project dashboard → Deployments
+   - Vercel: Project dashboard → Functions
+   - GitHub: Actions tab → Workflow runs
 
-### **Vercel:**
-- Monitor deployment status
-- Check build logs
-- Set up custom domain (optional)
+2. **Test endpoints:**
+   ```bash
+   # Test backend health
+   curl https://your-app.railway.app/
+   
+   # Test API endpoint
+   curl https://your-app.railway.app/api/shops
+   ```
 
-### **Railway:**
-- Monitor app logs
-- Check resource usage
-- Set up alerts
+3. **Verify environment variables:**
+   - Railway: Project settings → Variables
+   - Vercel: Project settings → Environment Variables
 
-### **MongoDB Atlas:**
-- Monitor database performance
-- Set up backups
-- Check connection metrics
+## 📊 Monitoring
 
----
+### Railway Monitoring
+- View logs in Railway dashboard
+- Monitor resource usage
+- Set up alerts for downtime
 
-## 🎉 **You're Live!**
+### Vercel Monitoring
+- Check function logs
+- Monitor performance metrics
+- Set up error tracking
 
-Once deployed, your Tailor App will be accessible from:
-- **Frontend:** `https://your-app-name.vercel.app`
-- **Backend API:** `https://your-backend-name.railway.app`
-- **API Docs:** `https://your-backend-name.railway.app/api-docs`
+## 🔄 Updates and Maintenance
 
-Share these URLs with your team or clients for testing!
+### Regular Updates
+1. **Dependencies:**
+   ```bash
+   # Update backend dependencies
+   cd backend && npm update
+   
+   # Update Flutter dependencies
+   flutter pub upgrade
+   ```
 
----
+2. **Security:**
+   - Regularly update JWT secrets
+   - Monitor for security vulnerabilities
+   - Keep dependencies up to date
 
-## 💰 **Cost Estimation**
+### Backup Strategy
+- MongoDB Atlas provides automatic backups
+- Keep code backups in GitHub
+- Document environment configurations
 
-### **Free Tier:**
-- **Vercel:** Free (with limitations)
-- **Railway:** Free (with limitations)
-- **MongoDB Atlas:** Free (512MB storage)
+## 📞 Support
 
-### **Paid Tier (Recommended for Production):**
-- **Vercel Pro:** $20/month
-- **Railway:** $5/month
-- **MongoDB Atlas:** $9/month
+If you encounter issues:
 
-**Total:** ~$34/month for production hosting
+1. Check the troubleshooting section above
+2. Review GitHub Actions logs
+3. Check Railway and Vercel documentation
+4. Verify all environment variables are set correctly
+
+## 🎉 Success!
+
+Once deployed, your Tailor App will be live and accessible worldwide! The automated deployment ensures that every push to the main branch will automatically update your production application.

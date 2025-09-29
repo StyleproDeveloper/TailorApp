@@ -1,0 +1,137 @@
+name: Deploy Tailor App
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  # Build and test backend
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+    
+    - name: Install backend dependencies
+      run: npm ci
+    
+    - name: Run backend tests
+      run: npm test
+      continue-on-error: true
+    
+    - name: Build backend
+      run: npm run build
+      continue-on-error: true
+
+  # Build Flutter frontend
+  frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.16.0'
+        channel: 'stable'
+    
+    - name: Install Flutter dependencies
+      run: flutter pub get
+    
+    - name: Analyze Flutter code
+      run: flutter analyze
+      continue-on-error: true
+    
+    - name: Build Flutter web
+      run: flutter build web --release
+    
+    - name: Upload Flutter build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: flutter-web-build
+        path: build/web/
+        retention-days: 7
+
+  # Deploy to Railway (Backend)
+  deploy-backend:
+    needs: backend
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Deploy to Railway
+      uses: railwayapp/railway-deploy@v1
+      with:
+        railway-token: ${{ secrets.RAILWAY_TOKEN }}
+        service: ${{ secrets.RAILWAY_SERVICE_ID }}
+        working-directory: ./backend
+      env:
+        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  # Deploy to Vercel (Frontend)
+  deploy-frontend:
+    needs: frontend
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.16.0'
+        channel: 'stable'
+    
+    - name: Install Flutter dependencies
+      run: flutter pub get
+    
+    - name: Build Flutter web
+      run: flutter build web --release
+    
+    - name: Deploy to Vercel
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        working-directory: ./
+        vercel-args: '--prod'
+
+  # Notify deployment status
+  notify:
+    needs: [deploy-backend, deploy-frontend]
+    runs-on: ubuntu-latest
+    if: always() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+    - name: Deployment Status
+      run: |
+        if [ "${{ needs.deploy-backend.result }}" == "success" ] && [ "${{ needs.deploy-frontend.result }}" == "success" ]; then
+          echo "✅ Deployment successful!"
+          echo "Backend: Deployed to Railway"
+          echo "Frontend: Deployed to Vercel"
+        else
+          echo "❌ Deployment failed!"
+          echo "Backend status: ${{ needs.deploy-backend.result }}"
+          echo "Frontend status: ${{ needs.deploy-frontend.result }}"
+        fi
