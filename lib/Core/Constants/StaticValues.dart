@@ -1,0 +1,45 @@
+class Staticvalues {
+  static const List<String> shopTypes = [
+    "Store",
+    "Workshop"
+  ];
+
+  static const List<String> states = [
+    'Select State',
+    'Jammu & Kashmir',
+    'Himachal Pradesh',
+    'Punjab',
+    'Uttarakhand',
+    'Haryana',
+    'Uttar Pradesh',
+    'Rajasthan',
+    'Gujarat',
+    'Maharashtra',
+    'Goa',
+    'Karnataka',
+    'Kerala',
+    'Tamil Nadu',
+    'Andhra Pradesh',
+    'Telangana',
+    'Odisha',
+    'West Bengal',
+    'Bihar',
+    'Jharkhand',
+    'Madhya Pradesh',
+    'Chhattisgarh',
+    'Assam',
+    'Arunachal Pradesh',
+    'Manipur',
+    'Meghalaya',
+    'Mizoram',
+    'Nagaland',
+    'Tripura',
+    'Andaman and Nicobar Islands',
+    'Chandigarh',
+    'Dadra and Nagar Haveli and Daman and Diu',
+    'Lakshadweep',
+    'Delhi (National Capital Territory)',
+    'Puducherry',
+    'Ladakh',
+  ];
+}
