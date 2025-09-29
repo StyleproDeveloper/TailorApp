@@ -10,6 +10,10 @@
     "start:frontend": "flutter run -d chrome --web-port 8144 --release",
     "start:dev": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "build:frontend": "flutter build web --release",
+    "build:all": "npm run build:frontend",
+    "deploy:prepare": "./scripts/deploy.sh",
+    "deploy:frontend": "echo 'Deploy frontend to Vercel: https://vercel.com/new'",
+    "deploy:backend": "echo 'Deploy backend to Railway: https://railway.app/new'",
     "clean": "flutter clean && cd backend && rm -rf node_modules",
     "test:backend": "cd backend && npm test",
     "lint:backend": "cd backend && npm run lint"
