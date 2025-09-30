@@ -122,22 +122,22 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         setState(() {
           widget.orderId = args;
         });
-        // For edit mode, load all customers to ensure we have the right customer
+        // For edit mode, load all customers and dress types first
         await _fetchAllCustomers(GlobalVariables.shopIdGet!);
+        await _loadDressTypesInBackground(); // Load dress types before processing order
         await fetchProductDetail();
       } else {
         // For create mode, load only initial customers for faster loading
         await _fetchInitialCustomers();
+        // Load dress types in background (non-blocking)
+        _loadDressTypesInBackground();
       }
-      
-      // Load dress types in background (non-blocking)
-      _loadDressTypesInBackground();
     } catch (e) {
       print('Error loading data in background: $e');
     }
   }
 
-  void _loadDressTypesInBackground() async {
+  Future<void> _loadDressTypesInBackground() async {
     try {
       await fetchDressTypeData(
         pageNumber: 1,
@@ -148,6 +148,41 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     } catch (e) {
       print('Error loading dress types: $e');
     }
+  }
+
+  Future<Map<String, dynamic>?> _fetchSpecificDressType(int dressTypeId) async {
+    try {
+      int? shopId = GlobalVariables.shopIdGet;
+      if (shopId == null) return null;
+
+      // Search for the specific dress type
+      final String requestUrl = "${Urls.addDress}/$shopId?pageNumber=1&pageSize=1000";
+      final response = await ApiService().get(requestUrl, context);
+      
+      if (response.data is Map<String, dynamic> && response.data['data'] != null) {
+        List<dynamic> allDressTypes = response.data['data'];
+        final foundDressType = allDressTypes.firstWhere(
+          (dressType) => dressType['dressTypeId'] == dressTypeId,
+          orElse: () => null,
+        );
+        
+        if (foundDressType != null) {
+          print('✅ Specific dress type fetched: ${foundDressType['name']} (ID: $dressTypeId)');
+          // Add to dress types list if not already there
+          if (!dressTypes.any((d) => d['dressTypeId'] == dressTypeId)) {
+            setState(() {
+              dressTypes.insert(0, foundDressType);
+            });
+          }
+          return foundDressType;
+        } else {
+          print('❌ Dress type ID $dressTypeId not found in any list');
+        }
+      }
+    } catch (e) {
+      print('❌ Error fetching specific dress type: $e');
+    }
+    return null;
   }
 
   @override
@@ -625,39 +660,41 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
           orderItems = (order['items'] as List<dynamic>).map((item) {
             print("Selected Dress Type::::: ${item['dressTypeId']}");
+            print("Available dress types: ${dressTypes.map((d) => '${d['name']} (${d['id']})').join(', ')}");
+            
             final dressType = dressTypes.firstWhere(
               (dress) => dress['id'] == item['dressTypeId'],
-              orElse: () => {},
+              orElse: () => <String, dynamic>{},
             );
 
-            if (dressType.isEmpty) {
-              print(
-                  "Warning: No dress type found for dressTypeId: ${item['dressTypeId']}");
-              fetchDressTypeData(
-                pageNumber: 1,
-                pageSize: 20,
-                existingDressTypes: dressTypes,
-              ).then((newDressTypes) {
-                setState(() {
-                  dressTypes = newDressTypes;
-                  final updatedDressType = dressTypes.firstWhere(
-                    (dress) => dress['id'] == item['dressTypeId'],
-                    orElse: () => {},
-                  );
-                  if (updatedDressType.isNotEmpty) {
-                    dressType.addAll(updatedDressType);
-                  }
-                });
+            String selectedDressTypeName = 'Unknown';
+            Map<String, dynamic> selectedDressType = {};
+
+            if (dressType.isNotEmpty) {
+              selectedDressType = dressType;
+              selectedDressTypeName = dressType['name'] ?? 'Unknown';
+              print("✅ Dress type found: $selectedDressTypeName");
+            } else {
+              print("⚠️ No dress type found for dressTypeId: ${item['dressTypeId']}");
+              // Try to fetch the specific dress type
+              _fetchSpecificDressType(item['dressTypeId']).then((fetchedDressType) {
+                if (fetchedDressType != null && mounted) {
+                  setState(() {
+                    // Update the order item with the fetched dress type
+                    final itemIndex = orderItems.indexWhere((oi) => oi.selectedDressTypeId == item['dressTypeId']);
+                    if (itemIndex != -1) {
+                      orderItems[itemIndex].selectedDressType = fetchedDressType;
+                      orderItems[itemIndex].dropdownDressController.text = fetchedDressType['name'] ?? 'Unknown';
+                    }
+                  });
+                }
               });
             }
 
-            final selectedDressTypeName =
-                dressType.isNotEmpty ? dressType['name'] : 'Unknown';
-            print(
-                "Updated dropdownDressController with selected dress type: $selectedDressTypeName ::: $dressType");
+            print("Updated dropdownDressController with selected dress type: $selectedDressTypeName");
 
             return OrderItem(
-              selectedDressType: dressType.isNotEmpty ? dressType : null,
+              selectedDressType: selectedDressType.isNotEmpty ? selectedDressType : null,
               selectedDressTypeId: item['dressTypeId'],
               selectedOrderType: selectedOrderType,
               orderItemId: widget.orderId != null ? item['orderItemId'] ?? 0 : null,
