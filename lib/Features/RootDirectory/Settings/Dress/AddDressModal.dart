@@ -22,16 +22,23 @@ class AddDressModal extends StatefulWidget {
   _AddDressModalState createState() => _AddDressModalState();
 }
 
-class _AddDressModalState extends State<AddDressModal> {
+class _AddDressModalState extends State<AddDressModal> with SingleTickerProviderStateMixin {
   late TextEditingController dressNameController;
-  List<Map<String, dynamic>> measurements = [];
-  List<Map<String, dynamic>> patternsList = [];
-  Map<String, bool> selectedMeasurements = {};
-  bool _showMeasurements = true;
-  Map<String, bool> selectedPatterns = {};
-  bool _showPatterns = false;
+  late TabController _tabController;
+  
+  // Master lists (all available options)
   List<Map<String, dynamic>> allMeasurementsList = [];
   List<Map<String, dynamic>> allPatternsList = [];
+  
+  // Existing assignments for this dress
+  List<Map<String, dynamic>> existingMeasurements = [];
+  List<Map<String, dynamic>> existingPatterns = [];
+  
+  // Selected items (what user has checked)
+  Map<String, bool> selectedMeasurements = {};
+  Map<String, bool> selectedPatterns = {};
+  
+  // Store IDs for updates
   Map<String, int?> measurementTypeIds = {}; // Store dressTypeMeasurementId for each measurement
   Map<String, int?> patternTypeIds = {}; // Store dressTypePatternId for each pattern
 
@@ -39,23 +46,34 @@ class _AddDressModalState extends State<AddDressModal> {
   void initState() {
     super.initState();
     dressNameController = TextEditingController(text: widget.dressName ?? '');
-    getDressMeasurement().then((_) {
-      getDressPattern().then((_) {
-        if (widget.dressDataId != null) {
-          fetchDressPattMea(widget.dressDataId);
-        }
-      });
-    });
+    _tabController = TabController(length: 2, vsync: this);
+    
+    // Load data
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    // Load master lists first
+    await getDressMeasurement();
+    await getDressPattern();
+    
+    // Then load existing assignments for this dress
+    if (widget.dressDataId != null) {
+      await fetchDressPattMea(widget.dressDataId);
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    dressNameController.dispose();
+    super.dispose();
   }
 
   Future<void> fetchDressPattMea(int? dressTypeId) async {
     int? shopId = GlobalVariables.shopIdGet;
     if (shopId == null) {
-      Future.microtask(() => CustomSnackbar.showSnackbar(
-            context,
-            "Shop ID is missing",
-            duration: Duration(seconds: 2),
-          ));
+      print("Shop ID is missing");
       return;
     }
 
@@ -64,53 +82,66 @@ class _AddDressModalState extends State<AddDressModal> {
       final response = await ApiService().get(requestUrl, context);
 
       if (response.data is Map<String, dynamic>) {
-        List<dynamic> fetchedMeasurements =
-            response.data["DressTypeMeasurement"] ?? [];
-        List<dynamic> fetchedPatterns =
-            response.data["DressTypeDressPattern"] ?? [];
-        print('fetchedMeasurements,,,,,,,,,,,,,, $fetchedMeasurements');
-        print('fetchedPatterns,,,,,,,,,,,,,, $fetchedPatterns');
+        List<dynamic> fetchedMeasurements = response.data["DressTypeMeasurement"] ?? [];
+        List<dynamic> fetchedPatterns = response.data["DressTypeDressPattern"] ?? [];
+        
+        print('📏 Fetched Measurements: $fetchedMeasurements');
+        print('🎨 Fetched Patterns: $fetchedPatterns');
 
         setState(() {
+          // Clear previous selections
           selectedMeasurements.clear();
-          for (var measurement in measurements) {
+          selectedPatterns.clear();
+          measurementTypeIds.clear();
+          patternTypeIds.clear();
+          
+          // Initialize all measurements as unselected
+          for (var measurement in allMeasurementsList) {
             String id = measurement["_id"].toString();
             selectedMeasurements[id] = false;
           }
 
-          selectedPatterns.clear();
-          for (var pattern in patternsList) {
+          // Initialize all patterns as unselected
+          for (var pattern in allPatternsList) {
             String id = pattern["_id"].toString();
             selectedPatterns[id] = false;
           }
 
+          // Mark existing measurements as selected
           for (var fetchedMeasurement in fetchedMeasurements) {
             String name = fetchedMeasurement["name"];
-            var matchingMeasurement = measurements.firstWhere(
+            var matchingMeasurement = allMeasurementsList.firstWhere(
               (m) => m["name"] == name,
               orElse: () => {},
             );
-            String id = matchingMeasurement["_id"].toString();
-            selectedMeasurements[id] = true;
-            // Store the dressTypeMeasurementId
-            measurementTypeIds[id] = fetchedMeasurement["dressTypeMeasurementId"];
+            if (matchingMeasurement.isNotEmpty) {
+              String id = matchingMeasurement["_id"].toString();
+              selectedMeasurements[id] = true;
+              measurementTypeIds[id] = fetchedMeasurement["dressTypeMeasurementId"];
+            }
           }
 
+          // Mark existing patterns as selected
           for (var fetchedPattern in fetchedPatterns) {
             String dressPatternId = fetchedPattern["dressPatternId"].toString();
-            var matchingPattern = patternsList.firstWhere(
+            var matchingPattern = allPatternsList.firstWhere(
               (p) => p["dressPatternId"].toString() == dressPatternId,
               orElse: () => {},
             );
-            String id = matchingPattern["_id"].toString();
-            selectedPatterns[id] = true;
-            // Store the dressTypePatternId
-            patternTypeIds[id] = fetchedPattern["dressTypePatternId"];
+            if (matchingPattern.isNotEmpty) {
+              String id = matchingPattern["_id"].toString();
+              selectedPatterns[id] = true;
+              patternTypeIds[id] = fetchedPattern["dressTypePatternId"];
+            }
           }
+          
+          // Store existing assignments for display
+          existingMeasurements = fetchedMeasurements.cast<Map<String, dynamic>>();
+          existingPatterns = fetchedPatterns.cast<Map<String, dynamic>>();
         });
       }
     } catch (e) {
-      print("Failed to load dress measurements: $e");
+      print("❌ Failed to load dress measurements: $e");
     }
   }
 
@@ -169,7 +200,7 @@ class _AddDressModalState extends State<AddDressModal> {
       List<int?> selectedDressTypePatternId = [];
       List<int?> selectedDressTypeMeasurementId = [];
 
-      for (var pattern in patternsList) {
+      for (var pattern in allPatternsList) {
         print('tttttttt::::: $pattern');
         String patternId = pattern["_id"].toString();
         if (selectedPatterns[patternId] == true) {
@@ -182,7 +213,7 @@ class _AddDressModalState extends State<AddDressModal> {
         }
       }
 
-      for (var measure in measurements) {
+      for (var measure in allMeasurementsList) {
         print('llllllll::::::: $measure');
         String measureId = measure["_id"].toString();
         if (selectedMeasurements[measureId] == true) {
@@ -290,39 +321,25 @@ class _AddDressModalState extends State<AddDressModal> {
     final String requestUrl = "${Urls.getMeasurement}/$id";
 
     try {
-      Future.delayed(Duration.zero, () => showLoader(context));
       final response = await ApiService().get(requestUrl, context);
-      Future.delayed(Duration.zero, () => hideLoader(context));
 
       if (response.data is Map<String, dynamic> &&
           response.data.containsKey('data')) {
         setState(() {
-          measurements = List<Map<String, dynamic>>.from(
+          allMeasurementsList = List<Map<String, dynamic>>.from(
             response.data['data'].map((m) => {
                   "_id": m["_id"],
                   "measurementId": m["measurementId"],
                   "name": m["name"],
                 }),
           );
-          selectedMeasurements.clear();
-          for (var m in measurements) {
-            selectedMeasurements[m["_id"]] = false;
-          }
         });
+        print('📏 Loaded ${allMeasurementsList.length} measurements');
       } else {
-        CustomSnackbar.showSnackbar(
-          context,
-          'No measurements found',
-          duration: const Duration(seconds: 1),
-        );
+        print('⚠️ No measurements found');
       }
     } catch (e) {
-      print('Error: ${e.toString()}');
-      CustomSnackbar.showSnackbar(
-        context,
-        'Error: ${e.toString()}',
-        duration: const Duration(seconds: 2),
-      );
+      print('❌ Error loading measurements: ${e.toString()}');
     }
   }
 
@@ -330,14 +347,12 @@ class _AddDressModalState extends State<AddDressModal> {
     int? shopId = GlobalVariables.shopIdGet;
     final String requestUrl = "${Urls.getDressPattern}/$shopId";
     try {
-      Future.delayed(Duration.zero, () => showLoader(context));
       final response = await ApiService().get(requestUrl, context);
-      Future.delayed(Duration.zero, () => hideLoader(context));
 
       if (response.data is Map<String, dynamic> &&
           response.data.containsKey('data')) {
         setState(() {
-          patternsList = List<Map<String, dynamic>>.from(
+          allPatternsList = List<Map<String, dynamic>>.from(
             response.data['data'].map((p) => {
                   "_id": p["_id"],
                   "dressPatternId": p["dressPatternId"],
@@ -345,43 +360,26 @@ class _AddDressModalState extends State<AddDressModal> {
                   "category": p["category"],
                 }),
           );
-          selectedPatterns.clear();
-          for (var p in patternsList) {
-            selectedPatterns[p["_id"]] = false;
-          }
         });
+        print('🎨 Loaded ${allPatternsList.length} patterns');
       } else {
-        CustomSnackbar.showSnackbar(
-          context,
-          'No patterns found',
-          duration: const Duration(seconds: 1),
-        );
+        print('⚠️ No patterns found');
       }
     } catch (e) {
-      Future.delayed(Duration.zero, () => hideLoader(context));
-      CustomSnackbar.showSnackbar(
-        context,
-        'Error fetching patterns: $e',
-        duration: const Duration(seconds: 1),
-      );
+      print('❌ Error loading patterns: $e');
     }
   }
 
-  void toggleMeasurements() {
+  // Helper methods for checkbox handling
+  void _toggleMeasurement(String measurementId) {
     setState(() {
-      _showMeasurements = !_showMeasurements;
-      if (_showMeasurements) {
-        _showPatterns = false;
-      }
+      selectedMeasurements[measurementId] = !(selectedMeasurements[measurementId] ?? false);
     });
   }
 
-  void togglePatterns() {
+  void _togglePattern(String patternId) {
     setState(() {
-      _showPatterns = !_showPatterns;
-      if (_showPatterns) {
-        _showMeasurements = false;
-      }
+      selectedPatterns[patternId] = !(selectedPatterns[patternId] ?? false);
     });
   }
 
@@ -419,69 +417,49 @@ class _AddDressModalState extends State<AddDressModal> {
                       InputDecoration(labelText: Textstring().dressName),
                 ),
                 const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: toggleMeasurements,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Add Measurement',
-                          style: DressStyle.dressText),
-                      Icon(
-                        _showMeasurements
-                            ? Icons.arrow_drop_up
-                            : Icons.arrow_drop_down,
+                
+                // Tab Bar
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 0.0),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    indicator: BoxDecoration(
+                      color: ColorPalatte.primary,
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.grey[600],
+                    labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                    tabs: const [
+                      Tab(
+                        icon: Icon(Icons.straighten, size: 20),
+                        text: 'Measurements',
+                      ),
+                      Tab(
+                        icon: Icon(Icons.pattern, size: 20),
+                        text: 'Patterns',
                       ),
                     ],
                   ),
                 ),
-                if (_showMeasurements)
-                  Column(
-                    children: measurements.map((measurement) {
-                      return CheckboxListTile(
-                        title: Text(measurement['name']),
-                        value:
-                            selectedMeasurements[measurement['_id']] ?? false,
-                        onChanged: (bool? value) {
-                          setState(() {
-                            selectedMeasurements[measurement['_id']] =
-                                value ?? false;
-                          });
-                        },
-                        checkColor: ColorPalatte.white,
-                        activeColor: ColorPalatte.primary,
-                      );
-                    }).toList(),
-                  ),
-                GestureDetector(
-                  onTap: togglePatterns,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                
+                // Tab Content
+                Container(
+                  height: 300, // Fixed height for tab content
+                  child: TabBarView(
+                    controller: _tabController,
                     children: [
-                      const Text('Add Pattern', style: DressStyle.dressText),
-                      Icon(
-                        _showPatterns
-                            ? Icons.arrow_drop_up
-                            : Icons.arrow_drop_down,
-                      ),
+                      // Measurements Tab
+                      _buildMeasurementsTab(),
+                      // Patterns Tab
+                      _buildPatternsTab(),
                     ],
                   ),
                 ),
-                if (_showPatterns)
-                  Column(
-                    children: patternsList.map((pattern) {
-                      return CheckboxListTile(
-                        title: Text("${pattern['name']}"),
-                        value: selectedPatterns[pattern['_id']] ?? false,
-                        onChanged: (bool? value) {
-                          setState(() {
-                            selectedPatterns[pattern['_id']] = value ?? false;
-                          });
-                        },
-                        checkColor: ColorPalatte.white,
-                        activeColor: ColorPalatte.primary,
-                      );
-                    }).toList(),
-                  ),
                 const SizedBox(height: 10),
                 Align(
                   alignment: Alignment.centerRight,
@@ -506,6 +484,223 @@ class _AddDressModalState extends State<AddDressModal> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildMeasurementsTab() {
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Select Measurements for this Dress',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: ColorPalatte.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${allMeasurementsList.length} measurements available',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: allMeasurementsList.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.straighten_outlined,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No measurements available',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: allMeasurementsList.length,
+                    itemBuilder: (context, index) {
+                      final measurement = allMeasurementsList[index];
+                      final measurementId = measurement['_id'].toString();
+                      final isSelected = selectedMeasurements[measurementId] ?? false;
+                      
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8.0),
+                        decoration: BoxDecoration(
+                          color: isSelected 
+                              ? ColorPalatte.primary.withOpacity(0.1)
+                              : Colors.white,
+                          border: Border.all(
+                            color: isSelected 
+                                ? ColorPalatte.primary
+                                : Colors.grey[300]!,
+                            width: isSelected ? 2 : 1,
+                          ),
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        child: CheckboxListTile(
+                          title: Text(
+                            measurement['name'],
+                            style: TextStyle(
+                              fontWeight: isSelected 
+                                  ? FontWeight.bold 
+                                  : FontWeight.normal,
+                              color: isSelected 
+                                  ? ColorPalatte.primary
+                                  : Colors.black87,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'ID: ${measurement['measurementId']}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          value: isSelected,
+                          onChanged: (bool? value) {
+                            _toggleMeasurement(measurementId);
+                          },
+                          checkColor: Colors.white,
+                          activeColor: ColorPalatte.primary,
+                          controlAffinity: ListTileControlAffinity.trailing,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPatternsTab() {
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Select Patterns for this Dress',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: ColorPalatte.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${allPatternsList.length} patterns available',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: allPatternsList.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.pattern_outlined,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No patterns available',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: allPatternsList.length,
+                    itemBuilder: (context, index) {
+                      final pattern = allPatternsList[index];
+                      final patternId = pattern['_id'].toString();
+                      final isSelected = selectedPatterns[patternId] ?? false;
+                      
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8.0),
+                        decoration: BoxDecoration(
+                          color: isSelected 
+                              ? ColorPalatte.primary.withOpacity(0.1)
+                              : Colors.white,
+                          border: Border.all(
+                            color: isSelected 
+                                ? ColorPalatte.primary
+                                : Colors.grey[300]!,
+                            width: isSelected ? 2 : 1,
+                          ),
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        child: CheckboxListTile(
+                          title: Text(
+                            pattern['name'],
+                            style: TextStyle(
+                              fontWeight: isSelected 
+                                  ? FontWeight.bold 
+                                  : FontWeight.normal,
+                              color: isSelected 
+                                  ? ColorPalatte.primary
+                                  : Colors.black87,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'ID: ${pattern['dressPatternId']}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              if (pattern['category'] != null && pattern['category'].toString().isNotEmpty)
+                                Text(
+                                  'Category: ${pattern['category']}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          value: isSelected,
+                          onChanged: (bool? value) {
+                            _togglePattern(patternId);
+                          },
+                          checkColor: Colors.white,
+                          activeColor: ColorPalatte.primary,
+                          controlAffinity: ListTileControlAffinity.trailing,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
