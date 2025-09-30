@@ -1237,18 +1237,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                                                   ),
                                               ],
                                             ),
-                                            if (orderItems.length > 1)
-                                              IconButton(
-                                                onPressed: () {
-                                                  setState(() {
-                                                    orderItems.removeAt(index);
-                                                  });
-                                                },
-                                                icon: Icon(Icons.delete, color: Colors.red, size: 20),
-                                                tooltip: 'Remove Item',
-                                                padding: EdgeInsets.zero,
-                                                constraints: BoxConstraints(),
-                                              ),
+                                            IconButton(
+                                              onPressed: () => _showDeleteConfirmation(index),
+                                              icon: Icon(Icons.delete, color: Colors.red, size: 20),
+                                              tooltip: 'Remove Item',
+                                              padding: EdgeInsets.zero,
+                                              constraints: BoxConstraints(),
+                                            ),
                                           ],
                                         ),
                                         const SizedBox(height: 4),
@@ -1952,6 +1947,118 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         content: Text('Copied measurements and patterns from ${sourceItem.selectedDressType?['name'] ?? 'previous item'}'),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(int index) {
+    final item = orderItems[index];
+    final dressTypeName = item.selectedDressType?['name'] ?? 'Item ${index + 1}';
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange, size: 28),
+            const SizedBox(width: 12),
+            const Text('Remove Item'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Are you sure you want to remove this item?'),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    dressTypeName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: ColorPalatte.primary,
+                    ),
+                  ),
+                  if (item.measurements.isNotEmpty)
+                    Text(
+                      '${item.measurements.length} measurements',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  if (item.selectedPatterns.isNotEmpty)
+                    Text(
+                      '${item.selectedPatterns.length} patterns',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This action cannot be undone.',
+              style: TextStyle(
+                color: Colors.red[600],
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _removeItem(index);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _removeItem(int index) {
+    setState(() {
+      orderItems.removeAt(index);
+    });
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Item ${index + 1} removed successfully'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: Colors.white,
+          onPressed: () {
+            // Note: Undo functionality would require storing the removed item
+            // For now, just show a message that undo is not available
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Undo not available. Please add the item again if needed.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
