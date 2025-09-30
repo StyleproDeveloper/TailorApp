@@ -101831,7 +101831,7 @@ $1(a){var s=this.a
 s.D(new A.auy(s,this.b,a))},
 $S:248}
 A.auy.prototype={
-$0(){var s=this.b,r=s.a=this.c,q=r.h(0,"dressTypeId")
+$0(){var s=this.b,r=s.a=this.c,q=r.h(0,"id")
 s.b=q
 r=r.h(0,"name")
 if(r==null)r=""
