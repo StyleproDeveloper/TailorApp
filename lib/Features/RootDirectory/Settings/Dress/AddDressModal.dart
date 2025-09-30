@@ -239,15 +239,23 @@ class _AddDressModalState extends State<AddDressModal> {
       dynamic responseMeasurement;
       dynamic responsePattern;
       if (widget.dressDataId != null) {
+        print('🔄 Updating existing dress - calling PUT APIs...');
         responseMeasurement = await ApiService()
             .put(Urls.addMeasurement, context, data: payloadMeasurementList);
+        print('📏 Measurement response: ${responseMeasurement?.data}');
+        
         responsePattern = await ApiService()
             .put(Urls.addDressPattern, context, data: payloadPatternList);
+        print('🎨 Pattern response: ${responsePattern?.data}');
       } else {
+        print('🔄 Creating new dress - calling POST APIs...');
         responseMeasurement = await ApiService()
             .post(Urls.addMeasurement, context, data: payloadMeasurementList);
+        print('📏 Measurement response: ${responseMeasurement?.data}');
+        
         responsePattern = await ApiService()
             .post(Urls.addDressPattern, context, data: payloadPatternList);
+        print('🎨 Pattern response: ${responsePattern?.data}');
       }
 
       hideLoader(context);
@@ -258,7 +266,7 @@ class _AddDressModalState extends State<AddDressModal> {
           responsePattern.data != null) {
         CustomSnackbar.showSnackbar(
           context,
-          responseSaveDress.data['message'] ?? 'Dress saved successfully',
+          responseMeasurement.data['message'] ?? 'Dress saved successfully',
           duration: const Duration(seconds: 1),
         );
         widget.onClose();
@@ -267,10 +275,11 @@ class _AddDressModalState extends State<AddDressModal> {
       }
     } catch (e) {
       hideLoader(context);
+      print('❌ Error in saveDressPattMea: $e');
       CustomSnackbar.showSnackbar(
         context,
-        'Error: ${e.toString()}',
-        duration: const Duration(seconds: 2),
+        'Error saving dress: ${e.toString()}',
+        duration: const Duration(seconds: 3),
       );
       print('Error: ${e.toString()}');
     }
