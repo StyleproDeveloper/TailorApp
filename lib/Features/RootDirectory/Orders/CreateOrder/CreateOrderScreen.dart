@@ -863,6 +863,25 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   int? branchId = GlobalVariables.branchId;
   int? userId = GlobalVariables.userId;
 
+  // Validate required fields before proceeding
+  if (selectedCustomerId == null) {
+    CustomSnackbar.showSnackbar(
+      context,
+      'Please select a customer before saving the order',
+      duration: Duration(seconds: 3),
+    );
+    return;
+  }
+
+  if (orderItems.isEmpty) {
+    CustomSnackbar.showSnackbar(
+      context,
+      'Please add at least one item to the order',
+      duration: Duration(seconds: 3),
+    );
+    return;
+  }
+
   List<Map<String, dynamic>> items = orderItems.map((item) {
     // Extract orderItemMeasurementId from measurements (only for update)
     int? orderItemMeasurementId = widget.orderId != null ? item.orderItemMeasurementId : null;
@@ -941,7 +960,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     "Order": {
       "shop_id": shopId,
       "branchId": branchId,
-      "customerId": selectedCustomerId,
+      "customerId": selectedCustomerId!, // We've already validated this is not null
       "stitchingType": selectedOrderTypeId,
       "noOfMeasurementDresses": orderItems.length,
       "quantity": orderItems.length,
@@ -1013,10 +1032,23 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
   } catch (e) {
     print('Error: $e');
+    
+    // Parse error message for better user feedback
+    String errorMessage = 'Failed to save order';
+    if (e.toString().contains('customerId')) {
+      errorMessage = 'Customer selection is required. Please select a customer.';
+    } else if (e.toString().contains('400')) {
+      errorMessage = 'Invalid data provided. Please check all fields and try again.';
+    } else if (e.toString().contains('500')) {
+      errorMessage = 'Server error. Please try again later.';
+    } else if (e.toString().contains('network') || e.toString().contains('connection')) {
+      errorMessage = 'Network error. Please check your connection and try again.';
+    }
+    
     CustomSnackbar.showSnackbar(
       context,
-      'Failed to save order: $e',
-      duration: Duration(seconds: 2),
+      errorMessage,
+      duration: Duration(seconds: 3),
     );
   }
 }
@@ -1092,7 +1124,28 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text('Customer', style: Createorderstyle.selecteCustomer),
+                        child: Row(
+                          children: [
+                            Text('Customer', style: Createorderstyle.selecteCustomer),
+                            if (selectedCustomerId == null) ...[
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.warning,
+                                color: Colors.orange,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '(Required)',
+                                style: TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                       IconButton(
                         onPressed: _navigateToCreateCustomer,
@@ -1567,7 +1620,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       child: InputDecorator(
         decoration: InputDecoration(
           hintText: hint,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+              color: selectedCustomerId == null ? Colors.orange : Colors.grey,
+              width: selectedCustomerId == null ? 2 : 1,
+            ),
+          ),
           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           suffixIcon: Icon(Icons.arrow_drop_down, color: Colors.grey),
         ),
