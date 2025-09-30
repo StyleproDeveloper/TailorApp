@@ -98,10 +98,16 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     super.initState();
 
     // Initialize additional cost controllers
-    additionalCostControllers.add({
+    final initialCost = {
       'description': TextEditingController(),
       'amount': TextEditingController(),
-    });
+    };
+    // Add listener to the initial cost controller
+    initialCost['amount']?.addListener(_updateTotalCost);
+    additionalCostControllers.add(initialCost);
+
+    // Add listeners to cost controllers for automatic total calculation
+    _addCostListeners();
 
     // Optimize loading: Show UI immediately, load data in background
     setState(() {
@@ -110,8 +116,32 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
     // Fetch data in background without blocking UI
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _loadDataInBackground();
+await _loadDataInBackground();
     });
+  }
+
+  void _addCostListeners() {
+    // Listen to courier cost changes
+    courierController.addListener(_updateTotalCost);
+    
+    // Listen to discount changes
+    discountController.addListener(_updateTotalCost);
+    
+    // Listen to advance amount changes
+    advanceAmountController.addListener(_updateTotalCost);
+    
+    // Listen to additional cost changes
+    for (var cost in additionalCostControllers) {
+      cost['amount']?.addListener(_updateTotalCost);
+    }
+  }
+
+  void _updateTotalCost() {
+    if (mounted) {
+      setState(() {
+        calculateTotalCosts; // This will update the totalCostController
+      });
+    }
   }
 
   Future<void> _loadDataInBackground() async {
@@ -693,7 +723,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
             print("Updated dropdownDressController with selected dress type: $selectedDressTypeName");
 
-            return OrderItem(
+            final orderItem = OrderItem(
               selectedDressType: selectedDressType.isNotEmpty ? selectedDressType : null,
               selectedDressTypeId: item['dressTypeId'],
               selectedOrderType: selectedOrderType,
@@ -758,16 +788,24 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
               dropdownDressController:
                   TextEditingController(text: selectedDressTypeName),
             );
+
+            // Add listener to order item cost controller for automatic total calculation
+            orderItem.originalCost?.addListener(_updateTotalCost);
+            
+            return orderItem;
           }).toList();
 
           additionalCostControllers =
               (order['additionalCosts'] as List<dynamic>?)?.map((cost) {
-                    return {
+                    final controller = {
                       'description':
                           TextEditingController(text: cost['description'] ?? ''),
                       'amount': TextEditingController(
                           text: cost['amount']?.toString() ?? ''),
                     };
+                    // Add listener to amount controller
+                    controller['amount']?.addListener(_updateTotalCost);
+                    return controller;
                   }).toList() ??
                   [
                     {
@@ -775,6 +813,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       'amount': TextEditingController(),
                     }
                   ];
+
+          // Add listeners to existing additional cost controllers
+          for (var cost in additionalCostControllers) {
+            cost['amount']?.addListener(_updateTotalCost);
+          }
 
           isLoading = false;
         });
@@ -1597,10 +1640,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                           style: Createorderstyle.selecteCustomer),
                       _buildIconButtonCost(Icons.add_circle, () {
                         setState(() {
-                          additionalCostControllers.add({
+                          final newCost = {
                             'description': TextEditingController(),
                             'amount': TextEditingController(),
-                          });
+                          };
+                          // Add listener to the new cost controller
+                          newCost['amount']?.addListener(_updateTotalCost);
+                          additionalCostControllers.add(newCost);
                         });
                       }),
                     ],
@@ -2211,6 +2257,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       }
       // Add new item and expand it
       final newItem = OrderItem(isExpanded: true);
+      // Add listener to the new item's cost controller
+      newItem.originalCost?.addListener(_updateTotalCost);
       orderItems.add(newItem);
     });
     
@@ -2298,6 +2346,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       }
       // Create new item by copying from source
       final newItem = OrderItem().copyFrom(sourceItem);
+      // Add listener to the new item's cost controller
+      newItem.originalCost?.addListener(_updateTotalCost);
       orderItems.add(newItem);
     });
     
