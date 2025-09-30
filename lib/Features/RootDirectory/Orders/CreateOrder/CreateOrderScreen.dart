@@ -1167,11 +1167,34 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                             borderRadius: BorderRadius.circular(8),
                             onTap: () {
                               setState(() {
+                                // Collapse all other items
                                 for (var i = 0; i < orderItems.length; i++) {
-                                  orderItems[i].isExpanded = false;
+                                  if (i != index) {
+                                    orderItems[i].isExpanded = false;
+                                  }
                                 }
+                                // Toggle the current item
                                 item.isExpanded = !item.isExpanded;
                               });
+                              
+                              // Scroll to the clicked item if it's being expanded
+                              if (item.isExpanded) {
+                                Future.delayed(Duration(milliseconds: 100), () {
+                                  if (mounted && _scrollController.hasClients) {
+                                    // Calculate approximate position of the item
+                                    final itemHeight = 200.0; // Approximate height of expanded item
+                                    final targetPosition = (index * itemHeight).clamp(
+                                      0.0, 
+                                      _scrollController.position.maxScrollExtent,
+                                    );
+                                    _scrollController.animateTo(
+                                      targetPosition,
+                                      duration: Duration(milliseconds: 300),
+                                      curve: Curves.easeOut,
+                                    );
+                                  }
+                                });
+                              }
                             },
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
@@ -1186,12 +1209,33 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(
-                                              "Item ${index + 1}",
-                                              style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 16,
-                                                  color: ColorPalatte.primary),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  "Item ${index + 1}",
+                                                  style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 16,
+                                                      color: ColorPalatte.primary),
+                                                ),
+                                                if (item.selectedDressType != null)
+                                                  Text(
+                                                    item.selectedDressType!['name'] ?? 'Unknown Dress',
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey[600],
+                                                        fontWeight: FontWeight.w500),
+                                                  )
+                                                else
+                                                  Text(
+                                                    'Select Dress Type',
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey[400],
+                                                        fontStyle: FontStyle.italic),
+                                                  ),
+                                              ],
                                             ),
                                             if (orderItems.length > 1)
                                               IconButton(
@@ -1232,24 +1276,24 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                               Text('Dress Type',
                                   style: Createorderstyle.selecteCustomer),
                               SizedBox(height: 10),
-                              _buildDropdown(
-                                "Select Dress Type",
-                                item.selectedDressType,
-                                dressTypes,
-                                (selectedValue) {
-                                  setState(() {
-                                    item.selectedDressType = selectedValue;
-                                    item.selectedDressTypeId =
-                                        selectedValue?['id'];
-                                    dropdownDressController.text =
-                                        selectedValue?['name'] ?? '';
-                                    item.measurements = [];
-                                    item.selectedPatterns = [];
-                                    fetchMeasurements(
-                                        item.selectedDressTypeId, item);
-                                  });
-                                },
-                              ),
+                                _buildDropdown(
+                                  "Select Dress Type",
+                                  item.selectedDressType,
+                                  dressTypes,
+                                  (selectedValue) {
+                                    setState(() {
+                                      item.selectedDressType = selectedValue;
+                                      item.selectedDressTypeId =
+                                          selectedValue?['dressTypeId'];
+                                      item.dropdownDressController.text =
+                                          selectedValue?['name'] ?? '';
+                                      item.measurements = [];
+                                      item.selectedPatterns = [];
+                                      fetchMeasurements(
+                                          item.selectedDressTypeId, item);
+                                    });
+                                  },
+                                ),
                               if (item.selectedDressTypeId != null) ...[
                                 SizedBox(height: 10),
                                 Text('Measurements'),
@@ -1357,22 +1401,16 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       // Add new item and expand it
                       final newItem = OrderItem(isExpanded: true);
                       orderItems.add(newItem);
-                      
-                      // Auto-select the first dress type if available
-                      if (dressTypes.isNotEmpty) {
-                        newItem.selectedDressType = dressTypes[0];
-                        newItem.selectedDressTypeId = dressTypes[0]['dressTypeId'];
-                        newItem.dropdownDressController.text = dressTypes[0]['name'];
-                        
-                        // Fetch measurements and patterns for the new item
-                        fetchMeasurements(newItem.selectedDressTypeId, newItem);
-                        fetchPatterns(newItem.selectedDressTypeId).then((patterns) {
-                          if (mounted) {
-                            setState(() {
-                              newItem.selectedPatterns = patterns;
-                            });
-                          }
-                        });
+                    });
+                    
+                    // Scroll to the new item after a short delay to ensure it's rendered
+                    Future.delayed(Duration(milliseconds: 100), () {
+                      if (mounted && _scrollController.hasClients) {
+                        _scrollController.animateTo(
+                          _scrollController.position.maxScrollExtent,
+                          duration: Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
                       }
                     });
                   }),
