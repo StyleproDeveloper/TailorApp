@@ -83,20 +83,22 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   Future<void> _loadDataInBackground() async {
     try {
-      // Load essential data first (customers only)
-      await _fetchInitialCustomers();
-      
-      // Load dress types in background (non-blocking)
-      _loadDressTypesInBackground();
-      
-      // Handle orderId if exists
+      // Handle orderId if exists - load all customers first for edit mode
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args != null) {
         setState(() {
           widget.orderId = args;
         });
+        // For edit mode, load all customers to ensure we have the right customer
+        await _fetchAllCustomers(GlobalVariables.shopIdGet!);
         await fetchProductDetail();
+      } else {
+        // For create mode, load only initial customers for faster loading
+        await _fetchInitialCustomers();
       }
+      
+      // Load dress types in background (non-blocking)
+      _loadDressTypesInBackground();
     } catch (e) {
       print('Error loading data in background: $e');
     }
@@ -210,6 +212,64 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
     // Fetch all customers with pagination (for refresh scenarios)
     await _fetchAllCustomers(id);
+  }
+
+  Future<void> _fetchSpecificCustomer(int customerId) async {
+    try {
+      int? shopId = GlobalVariables.shopIdGet;
+      if (shopId == null) return;
+
+      // Search for the specific customer
+      final String requestUrl = "${Urls.customer}/$shopId?pageNumber=1&pageSize=1000&searchKeyword=";
+      final response = await ApiService().get(requestUrl, context);
+      
+      if (response.data is Map<String, dynamic> && response.data['data'] != null) {
+        List<dynamic> allCustomers = response.data['data'];
+        final foundCustomer = allCustomers.firstWhere(
+          (customer) => customer['customerId'] == customerId,
+          orElse: () => null,
+        );
+        
+        if (foundCustomer != null) {
+          setState(() {
+            selectedCustomer = foundCustomer;
+            dropdownCustomerController.text = foundCustomer['name'] ?? '';
+            // Add to customers list if not already there
+            if (!customers.any((c) => c['customerId'] == customerId)) {
+              customers.insert(0, foundCustomer);
+            }
+          });
+          print('✅ Specific customer fetched: ${foundCustomer['name']} (ID: $customerId)');
+        } else {
+          // Customer not found anywhere, create placeholder
+          setState(() {
+            selectedCustomer = {
+              'customerId': customerId,
+              'name': 'Customer ID: $customerId',
+            };
+            dropdownCustomerController.text = 'Customer ID: $customerId';
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Customer ID $customerId not found. Please select the correct customer.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Error fetching specific customer: $e');
+      // Fallback to placeholder
+      setState(() {
+        selectedCustomer = {
+          'customerId': customerId,
+          'name': 'Customer ID: $customerId',
+        };
+        dropdownCustomerController.text = 'Customer ID: $customerId';
+      });
+    }
   }
 
   Future<void> _fetchAllCustomers(int shopId, {int pageNumber = 1, int pageSize = 50}) async {
@@ -483,19 +543,30 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         setState(() {
           selectedOrderType = _mapOrderType(order['stitchingType']);
           selectedCustomerId = order['customerId'];
-          selectedCustomer = customers.firstWhere(
-            (customer) => customer['customerId'] == selectedCustomerId,
-            orElse: () => {},
-          );
-          if (selectedCustomer != null && selectedCustomer!.isNotEmpty) {
-            dropdownCustomerController.text = selectedCustomer!['name'];
-          } else {
-            selectedCustomerId = null;
-            dropdownCustomerController.text = '';
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: Text('Customer ID $selectedCustomerId not found')),
+          
+          // Try to find the customer in the loaded customers list
+          try {
+            selectedCustomer = customers.firstWhere(
+              (customer) => customer['customerId'] == selectedCustomerId,
+              orElse: () => <String, dynamic>{},
             );
+            
+            if (selectedCustomer != null && selectedCustomer!.isNotEmpty) {
+              dropdownCustomerController.text = selectedCustomer!['name'] ?? '';
+              print('✅ Customer found: ${selectedCustomer!['name']} (ID: $selectedCustomerId)');
+            } else {
+              // Customer not found in the list, try to fetch it specifically
+              print('⚠️ Customer ID $selectedCustomerId not found in customers list');
+              print('Available customers: ${customers.map((c) => '${c['name']} (${c['customerId']})').join(', ')}');
+              
+              // Try to fetch the specific customer (async call)
+              _fetchSpecificCustomer(selectedCustomerId!);
+            }
+          } catch (e) {
+            print('❌ Error finding customer: $e');
+            selectedCustomerId = null;
+            selectedCustomer = null;
+            dropdownCustomerController.text = '';
           }
 
           isUrgent = order['urgent'] ?? false;
