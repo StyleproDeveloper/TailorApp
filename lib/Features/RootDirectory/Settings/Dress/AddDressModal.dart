@@ -400,99 +400,150 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
       filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
       child: Dialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5.0)),
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.95,
+          height: MediaQuery.of(context).size.height * 0.9,
+          child: Column(
+            children: [
+              // Compact Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                decoration: BoxDecoration(
+                  color: ColorPalatte.primary.withOpacity(0.1),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12.0),
+                    topRight: Radius.circular(12.0),
+                  ),
+                ),
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                        widget.dressDataId != null
-                            ? Textstring().updateDress
-                            : Textstring().addDress,
-                        style: DressStyle.headerDress),
+                      widget.dressDataId != null
+                          ? Textstring().updateDress
+                          : Textstring().addDress,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: ColorPalatte.primary,
+                      ),
+                    ),
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.black),
+                      icon: const Icon(Icons.close, color: Colors.black, size: 20),
                       onPressed: widget.onClose,
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                TextField(
+              ),
+              
+              // Compact Dress Name Field
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: TextField(
                   controller: dressNameController,
-                  decoration:
-                      InputDecoration(labelText: Textstring().dressName),
-                ),
-                const SizedBox(height: 16),
-                
-                // Tab Bar
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 0.0),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8.0),
-                  ),
-                  child: TabBar(
-                    controller: _tabController,
-                    indicator: BoxDecoration(
-                      color: ColorPalatte.primary,
+                  decoration: InputDecoration(
+                    labelText: Textstring().dressName,
+                    border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.0),
                     ),
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.grey[600],
-                    labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                    tabs: [
-                      Tab(
-                        icon: Icon(Icons.straighten, size: 20),
-                        text: 'Measurements (${dressMeasurements.length})',
-                      ),
-                      Tab(
-                        icon: Icon(Icons.pattern, size: 20),
-                        text: 'Patterns (${dressPatterns.length})',
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // Tab Content
-                Container(
-                  height: 300, // Fixed height for tab content
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      // Measurements Tab
-                      _buildMeasurementsTab(),
-                      // Patterns Tab
-                      _buildPatternsTab(),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton(
-                    onPressed: handleSaveDress,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: ColorPalatte.primary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 10, horizontal: 20),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                      borderSide: BorderSide(color: ColorPalatte.primary),
                     ),
-                    child: Text(
-                        widget.dressDataId != null
-                            ? Textstring().updateDress
-                            : Textstring().saveDress,
-                        style: DressStyle.saveBtnDress),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    isDense: true,
                   ),
                 ),
-              ],
-            ),
+              ),
+              
+              // Compact Tab Bar
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  indicator: BoxDecoration(
+                    color: ColorPalatte.primary,
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.grey[600],
+                  labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  unselectedLabelStyle: const TextStyle(fontSize: 12),
+                  tabs: [
+                    Tab(
+                      height: 40,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.straighten, size: 16),
+                          SizedBox(width: 4),
+                          Text('Measurements (${dressMeasurements.length})'),
+                        ],
+                      ),
+                    ),
+                    Tab(
+                      height: 40,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.pattern, size: 16),
+                          SizedBox(width: 4),
+                          Text('Patterns (${dressPatterns.length})'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Expanded Tab Content
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildMeasurementsTab(),
+                    _buildPatternsTab(),
+                  ],
+                ),
+              ),
+              
+              // Compact Save Button
+              Container(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton(
+                      onPressed: handleSaveDress,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: ColorPalatte.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24.0,
+                          vertical: 10.0,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                      ),
+                      child: Text(
+                        widget.dressDataId != null
+                            ? Textstring().update
+                            : Textstring().saveDress,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -501,49 +552,31 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
 
   Widget _buildMeasurementsTab() {
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Measurements for this Dress',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: ColorPalatte.primary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${dressMeasurements.length} measurements assigned to this dress',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 16),
-          
-          // Add New Button
+          // Compact Header with Add Button
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Current Measurements',
+                'Measurements (${dressMeasurements.length})',
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[700],
+                  fontWeight: FontWeight.bold,
+                  color: ColorPalatte.primary,
                 ),
               ),
               ElevatedButton.icon(
                 onPressed: _showAddMeasurementDialog,
-                icon: Icon(Icons.add, size: 16),
-                label: Text('Add New'),
+                icon: Icon(Icons.add, size: 14),
+                label: Text('Add', style: TextStyle(fontSize: 12)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: ColorPalatte.primary,
                   foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  minimumSize: Size(0, 32),
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size(0, 28),
                 ),
               ),
             ],
@@ -558,14 +591,14 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                       children: [
                         Icon(
                           Icons.straighten_outlined,
-                          size: 64,
+                          size: 48,
                           color: Colors.grey[400],
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 8),
                         Text(
-                          'No measurements assigned to this dress',
+                          'No measurements assigned',
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 14,
                             color: Colors.grey[600],
                           ),
                         ),
@@ -580,7 +613,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                       final isSelected = selectedMeasurements[measurementId] ?? false;
                       
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 8.0),
+                        margin: const EdgeInsets.only(bottom: 4.0),
                         decoration: BoxDecoration(
                           color: isSelected 
                               ? ColorPalatte.primary.withOpacity(0.1)
@@ -591,34 +624,35 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                                 : Colors.grey[300]!,
                             width: isSelected ? 2 : 1,
                           ),
-                          borderRadius: BorderRadius.circular(8.0),
+                          borderRadius: BorderRadius.circular(6.0),
                         ),
-                        child: CheckboxListTile(
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                           title: Text(
                             measurement['name'],
                             style: TextStyle(
-                              fontWeight: isSelected 
-                                  ? FontWeight.bold 
-                                  : FontWeight.normal,
-                              color: isSelected 
-                                  ? ColorPalatte.primary
-                                  : Colors.black87,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected ? ColorPalatte.primary : Colors.black87,
+                              fontSize: 13,
                             ),
                           ),
                           subtitle: Text(
                             'ID: ${measurement['measurementId']}',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.grey[600],
                             ),
                           ),
-                          value: isSelected,
-                          onChanged: (bool? value) {
-                            _toggleMeasurement(measurementId);
-                          },
-                          checkColor: Colors.white,
-                          activeColor: ColorPalatte.primary,
-                          controlAffinity: ListTileControlAffinity.trailing,
+                          trailing: Checkbox(
+                            value: isSelected,
+                            onChanged: (bool? value) {
+                              _toggleMeasurement(measurementId);
+                            },
+                            checkColor: Colors.white,
+                            activeColor: ColorPalatte.primary,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       );
                     },
@@ -631,49 +665,31 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
 
   Widget _buildPatternsTab() {
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Patterns for this Dress',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: ColorPalatte.primary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${dressPatterns.length} patterns assigned to this dress',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 16),
-          
-          // Add New Button
+          // Compact Header with Add Button
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Current Patterns',
+                'Patterns (${dressPatterns.length})',
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[700],
+                  fontWeight: FontWeight.bold,
+                  color: ColorPalatte.primary,
                 ),
               ),
               ElevatedButton.icon(
                 onPressed: _showAddPatternDialog,
-                icon: Icon(Icons.add, size: 16),
-                label: Text('Add New'),
+                icon: Icon(Icons.add, size: 14),
+                label: Text('Add', style: TextStyle(fontSize: 12)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: ColorPalatte.primary,
                   foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  minimumSize: Size(0, 32),
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size(0, 28),
                 ),
               ),
             ],
@@ -688,14 +704,14 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                       children: [
                         Icon(
                           Icons.pattern_outlined,
-                          size: 64,
+                          size: 48,
                           color: Colors.grey[400],
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 8),
                         Text(
-                          'No patterns assigned to this dress',
+                          'No patterns assigned',
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 14,
                             color: Colors.grey[600],
                           ),
                         ),
@@ -710,7 +726,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                       final isSelected = selectedPatterns[patternId] ?? false;
                       
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 8.0),
+                        margin: const EdgeInsets.only(bottom: 4.0),
                         decoration: BoxDecoration(
                           color: isSelected 
                               ? ColorPalatte.primary.withOpacity(0.1)
@@ -721,47 +737,35 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                                 : Colors.grey[300]!,
                             width: isSelected ? 2 : 1,
                           ),
-                          borderRadius: BorderRadius.circular(8.0),
+                          borderRadius: BorderRadius.circular(6.0),
                         ),
-                        child: CheckboxListTile(
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                           title: Text(
                             pattern['name'],
                             style: TextStyle(
-                              fontWeight: isSelected 
-                                  ? FontWeight.bold 
-                                  : FontWeight.normal,
-                              color: isSelected 
-                                  ? ColorPalatte.primary
-                                  : Colors.black87,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected ? ColorPalatte.primary : Colors.black87,
+                              fontSize: 13,
                             ),
                           ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'ID: ${pattern['dressPatternId']}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              if (pattern['category'] != null && pattern['category'].toString().isNotEmpty)
-                                Text(
-                                  'Category: ${pattern['category']}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                            ],
+                          subtitle: Text(
+                            'ID: ${pattern['dressPatternId']}${pattern['category'] != null && pattern['category'].toString().isNotEmpty ? ' • ${pattern['category']}' : ''}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                            ),
                           ),
-                          value: isSelected,
-                          onChanged: (bool? value) {
-                            _togglePattern(patternId);
-                          },
-                          checkColor: Colors.white,
-                          activeColor: ColorPalatte.primary,
-                          controlAffinity: ListTileControlAffinity.trailing,
+                          trailing: Checkbox(
+                            value: isSelected,
+                            onChanged: (bool? value) {
+                              _togglePattern(patternId);
+                            },
+                            checkColor: Colors.white,
+                            activeColor: ColorPalatte.primary,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       );
                     },
@@ -777,16 +781,16 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Add Measurement'),
+          title: Text('Add Measurement', style: TextStyle(fontSize: 16)),
           content: Container(
-            width: 300,
+            width: 400,
+            height: 300,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Select a measurement to add to this dress:'),
-                const SizedBox(height: 16),
-                Container(
-                  height: 200,
+                Text('Select a measurement to add:', style: TextStyle(fontSize: 14)),
+                const SizedBox(height: 8),
+                Expanded(
                   child: ListView.builder(
                     itemCount: allMeasurementsList.length,
                     itemBuilder: (context, index) {
@@ -797,11 +801,12 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                       );
                       
                       return ListTile(
-                        title: Text(measurement['name']),
-                        subtitle: Text('ID: ${measurement['measurementId']}'),
+                        dense: true,
+                        title: Text(measurement['name'], style: TextStyle(fontSize: 13)),
+                        subtitle: Text('ID: ${measurement['measurementId']}', style: TextStyle(fontSize: 11)),
                         trailing: isAlreadyAdded 
-                          ? Icon(Icons.check, color: Colors.green)
-                          : Icon(Icons.add),
+                          ? Icon(Icons.check, color: Colors.green, size: 18)
+                          : Icon(Icons.add, size: 18),
                         onTap: isAlreadyAdded ? null : () {
                           _addMeasurementToDress(measurement);
                           Navigator.of(context).pop();
@@ -817,7 +822,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'),
+              child: Text('Cancel', style: TextStyle(fontSize: 12)),
             ),
           ],
         );
@@ -830,16 +835,16 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Add Pattern'),
+          title: Text('Add Pattern', style: TextStyle(fontSize: 16)),
           content: Container(
-            width: 300,
+            width: 400,
+            height: 300,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Select a pattern to add to this dress:'),
-                const SizedBox(height: 16),
-                Container(
-                  height: 200,
+                Text('Select a pattern to add:', style: TextStyle(fontSize: 14)),
+                const SizedBox(height: 8),
+                Expanded(
                   child: ListView.builder(
                     itemCount: allPatternsList.length,
                     itemBuilder: (context, index) {
@@ -850,11 +855,12 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                       );
                       
                       return ListTile(
-                        title: Text(pattern['name']),
-                        subtitle: Text('ID: ${pattern['dressPatternId']}'),
+                        dense: true,
+                        title: Text(pattern['name'], style: TextStyle(fontSize: 13)),
+                        subtitle: Text('ID: ${pattern['dressPatternId']}${pattern['category'] != null && pattern['category'].toString().isNotEmpty ? ' • ${pattern['category']}' : ''}', style: TextStyle(fontSize: 11)),
                         trailing: isAlreadyAdded 
-                          ? Icon(Icons.check, color: Colors.green)
-                          : Icon(Icons.add),
+                          ? Icon(Icons.check, color: Colors.green, size: 18)
+                          : Icon(Icons.add, size: 18),
                         onTap: isAlreadyAdded ? null : () {
                           _addPatternToDress(pattern);
                           Navigator.of(context).pop();
@@ -870,7 +876,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'),
+              child: Text('Cancel', style: TextStyle(fontSize: 12)),
             ),
           ],
         );
