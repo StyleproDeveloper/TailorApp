@@ -229,7 +229,8 @@ void initState() {
         print('🔍 Debug: Response status code: ${response.statusCode}');
         print('🔍 Debug: Response data: ${response.data}');
         
-        if (response.data != null && response.statusCode == 200) {
+        if (response.data != null && (response.statusCode == 200 || response.statusCode == 201)) {
+          print('🎉 SUCCESS CONDITION MET - Status: ${response.statusCode}');
           String message = customerId != null 
               ? 'Customer updated successfully'
               : 'Customer created successfully';
