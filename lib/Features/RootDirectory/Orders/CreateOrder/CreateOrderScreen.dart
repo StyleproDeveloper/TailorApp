@@ -796,6 +796,17 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         'Customer "${newCustomer['name']}" created and selected successfully!',
         duration: Duration(seconds: 3),
       );
+      
+      // Refresh dress types for the newly selected customer
+      fetchDressTypeData(
+        pageNumber: 1,
+        pageSize: pageSize,
+        existingDressTypes: [],
+      ).then((newDressTypes) {
+        setState(() {
+          dressTypes = newDressTypes;
+        });
+      });
     } else {
       print('❌ No customer data received or invalid format');
     }
