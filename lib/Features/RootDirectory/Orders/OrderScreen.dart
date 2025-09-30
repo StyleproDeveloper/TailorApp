@@ -71,39 +71,27 @@ class _OrderScreenState extends State<OrderScreen>
   }
 
   void _filterOrdersByTab() {
-    final now = DateTime.now();
-    final nextWeek = now.add(const Duration(days: 7));
-
     setState(() {
       switch (currentTabIndex) {
-        case 0: // Active - Future delivery dates
+        case 0: // All Orders
+          filteredOrders = orders;
+          break;
+        case 1: // Received
           filteredOrders = orders.where((order) {
-            final deliveryDate = _getDeliveryDate(order);
-            return deliveryDate != null && 
-                   deliveryDate.isAfter(now) && 
-                   order['status']?.toString().toLowerCase() != 'completed';
+            final status = order['status']?.toString().toLowerCase();
+            return status == 'received';
           }).toList();
           break;
-        case 1: // Past Due - Past delivery dates and not completed
+        case 2: // In Progress
           filteredOrders = orders.where((order) {
-            final deliveryDate = _getDeliveryDate(order);
-            return deliveryDate != null && 
-                   deliveryDate.isBefore(now) && 
-                   order['status']?.toString().toLowerCase() != 'completed';
+            final status = order['status']?.toString().toLowerCase();
+            return status == 'in_progress' || status == 'in progress';
           }).toList();
           break;
-        case 2: // Upcoming - Next 7 days
+        case 3: // Completed
           filteredOrders = orders.where((order) {
-            final deliveryDate = _getDeliveryDate(order);
-            return deliveryDate != null && 
-                   deliveryDate.isAfter(now) && 
-                   deliveryDate.isBefore(nextWeek) &&
-                   order['status']?.toString().toLowerCase() != 'completed';
-          }).toList();
-          break;
-        case 3: // Completed - Status is completed
-          filteredOrders = orders.where((order) {
-            return order['status']?.toString().toLowerCase() == 'completed';
+            final status = order['status']?.toString().toLowerCase();
+            return status == 'completed' || status == 'delivered';
           }).toList();
           break;
         default:
@@ -234,9 +222,9 @@ class _OrderScreenState extends State<OrderScreen>
               labelColor: Colors.blue,
               unselectedLabelColor: Colors.grey,
               tabs: const [
-                Tab(text: 'Active'),
-                Tab(text: 'Past Due'),
-                Tab(text: 'Upcoming'),
+                Tab(text: 'All'),
+                Tab(text: 'Received'),
+                Tab(text: 'In Progress'),
                 Tab(text: 'Completed'),
               ],
             ),
@@ -244,9 +232,9 @@ class _OrderScreenState extends State<OrderScreen>
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildOrderListForTab(0), // Active
-                  _buildOrderListForTab(1), // Past Due
-                  _buildOrderListForTab(2), // Upcoming
+                  _buildOrderListForTab(0), // All
+                  _buildOrderListForTab(1), // Received
+                  _buildOrderListForTab(2), // In Progress
                   _buildOrderListForTab(3), // Completed
                 ],
               ),
@@ -297,13 +285,13 @@ class _OrderScreenState extends State<OrderScreen>
       String emptyMessage;
       switch (tabIndex) {
         case 0:
-          emptyMessage = "No active orders";
+          emptyMessage = "No orders available";
           break;
         case 1:
-          emptyMessage = "No past due orders";
+          emptyMessage = "No received orders";
           break;
         case 2:
-          emptyMessage = "No upcoming orders";
+          emptyMessage = "No orders in progress";
           break;
         case 3:
           emptyMessage = "No completed orders";
@@ -356,38 +344,26 @@ class _OrderScreenState extends State<OrderScreen>
   }
 
   void _filterOrdersForSpecificTab(int tabIndex) {
-    final now = DateTime.now();
-    final nextWeek = now.add(const Duration(days: 7));
-
     switch (tabIndex) {
-      case 0: // Active - Future delivery dates
+      case 0: // All Orders
+        filteredOrders = orders;
+        break;
+      case 1: // Received
         filteredOrders = orders.where((order) {
-          final deliveryDate = _getDeliveryDate(order);
-          return deliveryDate != null && 
-                 deliveryDate.isAfter(now) && 
-                 order['status']?.toString().toLowerCase() != 'completed';
+          final status = order['status']?.toString().toLowerCase();
+          return status == 'received';
         }).toList();
         break;
-      case 1: // Past Due - Past delivery dates and not completed
+      case 2: // In Progress
         filteredOrders = orders.where((order) {
-          final deliveryDate = _getDeliveryDate(order);
-          return deliveryDate != null && 
-                 deliveryDate.isBefore(now) && 
-                 order['status']?.toString().toLowerCase() != 'completed';
+          final status = order['status']?.toString().toLowerCase();
+          return status == 'in_progress' || status == 'in progress';
         }).toList();
         break;
-      case 2: // Upcoming - Next 7 days
+      case 3: // Completed
         filteredOrders = orders.where((order) {
-          final deliveryDate = _getDeliveryDate(order);
-          return deliveryDate != null && 
-                 deliveryDate.isAfter(now) && 
-                 deliveryDate.isBefore(nextWeek) &&
-                 order['status']?.toString().toLowerCase() != 'completed';
-        }).toList();
-        break;
-      case 3: // Completed - Status is completed
-        filteredOrders = orders.where((order) {
-          return order['status']?.toString().toLowerCase() == 'completed';
+          final status = order['status']?.toString().toLowerCase();
+          return status == 'completed' || status == 'delivered';
         }).toList();
         break;
       default:
