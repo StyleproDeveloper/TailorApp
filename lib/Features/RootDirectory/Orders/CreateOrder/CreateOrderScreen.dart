@@ -1393,28 +1393,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                     );
                   }),
                   SizedBox(height: 15),
-                  _buildButton("+ Add Another Item", onPressed: () {
-                    setState(() {
-                      // Collapse all existing items
-                      for (var item in orderItems) {
-                        item.isExpanded = false;
-                      }
-                      // Add new item and expand it
-                      final newItem = OrderItem(isExpanded: true);
-                      orderItems.add(newItem);
-                    });
-                    
-                    // Scroll to the new item after a short delay to ensure it's rendered
-                    Future.delayed(Duration(milliseconds: 100), () {
-                      if (mounted && _scrollController.hasClients) {
-                        _scrollController.animateTo(
-                          _scrollController.position.maxScrollExtent,
-                          duration: Duration(milliseconds: 300),
-                          curve: Curves.easeOut,
-                        );
-                      }
-                    });
-                  }),
+                  _buildAddItemButton(),
                   const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1784,6 +1763,199 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     );
   }
 
+  Widget _buildAddItemButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () => _showAddItemOptions(),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: ColorPalatte.primary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        icon: const Icon(Icons.add),
+        label: const Text("Add Another Item"),
+      ),
+    );
+  }
+
+  void _showAddItemOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Add New Item',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: ColorPalatte.primary,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: Icon(Icons.add_circle_outline, color: ColorPalatte.primary),
+              title: const Text('Create New Item'),
+              subtitle: const Text('Start with a blank item'),
+              onTap: () {
+                Navigator.pop(context);
+                _addNewItem();
+              },
+            ),
+            if (orderItems.length > 1) ...[
+              const Divider(),
+              ListTile(
+                leading: Icon(Icons.copy, color: ColorPalatte.primary),
+                title: const Text('Copy from Previous Item'),
+                subtitle: const Text('Copy measurements and patterns from existing item'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCopyFromDialog();
+                },
+              ),
+            ],
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addNewItem() {
+    setState(() {
+      // Collapse all existing items
+      for (var item in orderItems) {
+        item.isExpanded = false;
+      }
+      // Add new item and expand it
+      final newItem = OrderItem(isExpanded: true);
+      orderItems.add(newItem);
+    });
+    
+    // Scroll to the new item after a short delay to ensure it's rendered
+    Future.delayed(Duration(milliseconds: 100), () {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  void _showCopyFromDialog() {
+    // Filter out the last item (which is likely empty) and items without dress type
+    final copyableItems = orderItems.where((item) => 
+      item.selectedDressTypeId != null && 
+      item.selectedDressType != null &&
+      item.measurements.isNotEmpty
+    ).toList();
+
+    if (copyableItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No items available to copy from. Please add measurements to an item first.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Copy from Previous Item',
+          style: TextStyle(color: ColorPalatte.primary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: copyableItems.asMap().entries.map((entry) {
+            final index = entry.key;
+            final item = entry.value;
+            final dressTypeName = item.selectedDressType?['name'] ?? 'Unknown Dress';
+            final measurementCount = item.measurements.length;
+            final patternCount = item.selectedPatterns.length;
+            
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: ColorPalatte.primary.withOpacity(0.1),
+                child: Text(
+                  '${index + 1}',
+                  style: TextStyle(
+                    color: ColorPalatte.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              title: Text(dressTypeName),
+              subtitle: Text('$measurementCount measurements, $patternCount patterns'),
+              onTap: () {
+                Navigator.pop(context);
+                _copyFromItem(item);
+              },
+            );
+          }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _copyFromItem(OrderItem sourceItem) {
+    setState(() {
+      // Collapse all existing items
+      for (var item in orderItems) {
+        item.isExpanded = false;
+      }
+      // Create new item by copying from source
+      final newItem = OrderItem().copyFrom(sourceItem);
+      orderItems.add(newItem);
+    });
+    
+    // Scroll to the new item after a short delay to ensure it's rendered
+    Future.delayed(Duration(milliseconds: 100), () {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Copied measurements and patterns from ${sourceItem.selectedDressType?['name'] ?? 'previous item'}'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Widget _buildButton(String text, {VoidCallback? onPressed}) {
     return SizedBox(
       width: double.infinity,
@@ -1924,6 +2096,36 @@ class OrderItem {
         deliveryDate = deliveryDate ??
             TextEditingController(
                 text: DateFormat('yyyy-MM-dd').format(DateTime.now().add(Duration(days: 1))));
+
+  // Method to create a copy of this OrderItem
+  OrderItem copyFrom(OrderItem source) {
+    // Copy measurements with new controllers
+    List<Map<String, dynamic>> copiedMeasurements = source.measurements.map((measurement) {
+      return {
+        'name': measurement['name'],
+        'dressTypeMeasurementId': measurement['dressTypeMeasurementId'],
+        'value': TextEditingController(text: measurement['value']?.text ?? ''),
+      };
+    }).toList();
+
+    // Copy patterns (no need for new controllers as they're just data)
+    List<Map<String, dynamic>> copiedPatterns = List.from(source.selectedPatterns);
+
+    // Copy other properties with new controllers
+    return OrderItem(
+      selectedDressType: source.selectedDressType,
+      selectedDressTypeId: source.selectedDressTypeId,
+      selectedOrderType: source.selectedOrderType,
+      showPatternGrid: source.showPatternGrid,
+      measurements: copiedMeasurements,
+      selectedPatterns: copiedPatterns,
+      isExpanded: true, // New item should be expanded
+      deliveryDate: TextEditingController(text: source.deliveryDate?.text ?? ''),
+      originalCost: TextEditingController(text: source.originalCost?.text ?? ''),
+      specialInstructions: TextEditingController(text: source.specialInstructions?.text ?? ''),
+      dropdownDressController: TextEditingController(text: source.dropdownDressController.text),
+    );
+  }
 }
 
 class _CustomerDialog<T> extends StatefulWidget {
