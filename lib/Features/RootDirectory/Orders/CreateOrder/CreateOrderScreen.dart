@@ -1284,7 +1284,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                                     setState(() {
                                       item.selectedDressType = selectedValue;
                                       item.selectedDressTypeId =
-                                          selectedValue?['dressTypeId'];
+                                          selectedValue?['id'];
                                       item.dropdownDressController.text =
                                           selectedValue?['name'] ?? '';
                                       item.measurements = [];
