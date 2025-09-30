@@ -31,11 +31,10 @@ class _DressScreenState extends State<DressScreen> {
   @override
   void initState() {
     super.initState();
-    fetchDressData();
+    _scrollController.addListener(_scrollListener);
+    searchKeywordController.addListener(_onSearchChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       fetchDressData();
-      _scrollController.addListener(_scrollListener);
-      searchKeywordController.addListener(_onSearchChanged);
     });
   }
 
@@ -48,24 +47,15 @@ class _DressScreenState extends State<DressScreen> {
   }
 
   void _onSearchChanged() {
-    if (searchKeywordController.text.isNotEmpty) {
-      if (_debounce?.isActive ?? false) _debounce?.cancel();
-      _debounce = Timer(const Duration(milliseconds: 500), () {
-        setState(() {
-          dresses.clear();
-          pageNumber = 1;
-          hasMoreData = true;
-        });
-        fetchDressData();
-      });
-    } else if (searchKeywordController.text.isEmpty) {
+    if (_debounce?.isActive ?? false) _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
       setState(() {
-        dresses.clear();
         pageNumber = 1;
         hasMoreData = true;
+        // Don't clear dresses immediately to prevent blank screen
       });
       fetchDressData();
-    }
+    });
   }
 
   Future<void> fetchDressData() async {
@@ -98,6 +88,10 @@ class _DressScreenState extends State<DressScreen> {
           response.data.containsKey('data')) {
         List<dynamic> newDresses = response.data['data'];
         setState(() {
+          // Clear dresses only on first page (search or initial load)
+          if (pageNumber == 1) {
+            dresses.clear();
+          }
           dresses.addAll(List<Map<String, dynamic>>.from(newDresses));
           if (newDresses.length < pageSize) {
             hasMoreData = false;
@@ -106,11 +100,17 @@ class _DressScreenState extends State<DressScreen> {
           }
         });
       } else {
-        CustomSnackbar.showSnackbar(
-          context,
-          "No dress data found",
-          duration: const Duration(seconds: 2),
-        );
+        // Only show message if it's the first page and no data
+        if (pageNumber == 1) {
+          setState(() {
+            dresses.clear();
+          });
+          CustomSnackbar.showSnackbar(
+            context,
+            "No dress data found",
+            duration: const Duration(seconds: 2),
+          );
+        }
       }
     } catch (e) {
       if (pageNumber == 1) {
@@ -126,6 +126,14 @@ class _DressScreenState extends State<DressScreen> {
         isLoading = false;
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    searchKeywordController.dispose();
+    _debounce?.cancel();
+    super.dispose();
   }
 
   void _resetAndFetch() {
