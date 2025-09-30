@@ -42,7 +42,7 @@ const measurementSchema = Joi.object({
   upper_front: Joi.number().allow(null),
   mid_front: Joi.number().allow(null),
   lower_front: Joi.number().allow(null),
-});
+}).unknown(true); // Allow additional fields to prevent validation errors
 
 // Pattern Schema
 const patternSchema = Joi.array()
