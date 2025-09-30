@@ -30,9 +30,9 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
   List<Map<String, dynamic>> allMeasurementsList = [];
   List<Map<String, dynamic>> allPatternsList = [];
   
-  // Existing assignments for this dress
-  List<Map<String, dynamic>> existingMeasurements = [];
-  List<Map<String, dynamic>> existingPatterns = [];
+  // Dress-specific measurements and patterns (what's assigned to this dress)
+  List<Map<String, dynamic>> dressMeasurements = [];
+  List<Map<String, dynamic>> dressPatterns = [];
   
   // Selected items (what user has checked)
   Map<String, bool> selectedMeasurements = {};
@@ -89,25 +89,15 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
         print('🎨 Fetched Patterns: $fetchedPatterns');
 
         setState(() {
-          // Clear previous selections
+          // Clear previous data
+          dressMeasurements.clear();
+          dressPatterns.clear();
           selectedMeasurements.clear();
           selectedPatterns.clear();
           measurementTypeIds.clear();
           patternTypeIds.clear();
           
-          // Initialize all measurements as unselected
-          for (var measurement in allMeasurementsList) {
-            String id = measurement["_id"].toString();
-            selectedMeasurements[id] = false;
-          }
-
-          // Initialize all patterns as unselected
-          for (var pattern in allPatternsList) {
-            String id = pattern["_id"].toString();
-            selectedPatterns[id] = false;
-          }
-
-          // Mark existing measurements as selected
+          // Process dress-specific measurements
           for (var fetchedMeasurement in fetchedMeasurements) {
             String name = fetchedMeasurement["name"];
             var matchingMeasurement = allMeasurementsList.firstWhere(
@@ -115,13 +105,20 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
               orElse: () => {},
             );
             if (matchingMeasurement.isNotEmpty) {
+              // Add to dress-specific measurements list
+              dressMeasurements.add({
+                ...matchingMeasurement,
+                "dressTypeMeasurementId": fetchedMeasurement["dressTypeMeasurementId"],
+              });
+              
+              // Mark as selected
               String id = matchingMeasurement["_id"].toString();
               selectedMeasurements[id] = true;
               measurementTypeIds[id] = fetchedMeasurement["dressTypeMeasurementId"];
             }
           }
 
-          // Mark existing patterns as selected
+          // Process dress-specific patterns
           for (var fetchedPattern in fetchedPatterns) {
             String dressPatternId = fetchedPattern["dressPatternId"].toString();
             var matchingPattern = allPatternsList.firstWhere(
@@ -129,15 +126,21 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
               orElse: () => {},
             );
             if (matchingPattern.isNotEmpty) {
+              // Add to dress-specific patterns list
+              dressPatterns.add({
+                ...matchingPattern,
+                "dressTypePatternId": fetchedPattern["dressTypePatternId"],
+              });
+              
+              // Mark as selected
               String id = matchingPattern["_id"].toString();
               selectedPatterns[id] = true;
               patternTypeIds[id] = fetchedPattern["dressTypePatternId"];
             }
           }
           
-          // Store existing assignments for display
-          existingMeasurements = fetchedMeasurements.cast<Map<String, dynamic>>();
-          existingPatterns = fetchedPatterns.cast<Map<String, dynamic>>();
+          print('📏 Dress Measurements: ${dressMeasurements.length}');
+          print('🎨 Dress Patterns: ${dressPatterns.length}');
         });
       }
     } catch (e) {
@@ -434,14 +437,14 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                     labelColor: Colors.white,
                     unselectedLabelColor: Colors.grey[600],
                     labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                    tabs: const [
+                    tabs: [
                       Tab(
                         icon: Icon(Icons.straighten, size: 20),
-                        text: 'Measurements',
+                        text: 'Measurements (${dressMeasurements.length})',
                       ),
                       Tab(
                         icon: Icon(Icons.pattern, size: 20),
-                        text: 'Patterns',
+                        text: 'Patterns (${dressPatterns.length})',
                       ),
                     ],
                   ),
@@ -495,7 +498,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Select Measurements for this Dress',
+            'Measurements for this Dress',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -504,15 +507,43 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
           ),
           const SizedBox(height: 8),
           Text(
-            '${allMeasurementsList.length} measurements available',
+            '${dressMeasurements.length} measurements assigned to this dress',
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey[600],
             ),
           ),
           const SizedBox(height: 16),
+          
+          // Add New Button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Current Measurements',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _showAddMeasurementDialog,
+                icon: Icon(Icons.add, size: 16),
+                label: Text('Add New'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ColorPalatte.primary,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  minimumSize: Size(0, 32),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          
           Expanded(
-            child: allMeasurementsList.isEmpty
+            child: dressMeasurements.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -524,7 +555,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'No measurements available',
+                          'No measurements assigned to this dress',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey[600],
@@ -534,9 +565,9 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                     ),
                   )
                 : ListView.builder(
-                    itemCount: allMeasurementsList.length,
+                    itemCount: dressMeasurements.length,
                     itemBuilder: (context, index) {
-                      final measurement = allMeasurementsList[index];
+                      final measurement = dressMeasurements[index];
                       final measurementId = measurement['_id'].toString();
                       final isSelected = selectedMeasurements[measurementId] ?? false;
                       
@@ -597,7 +628,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Select Patterns for this Dress',
+            'Patterns for this Dress',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -606,15 +637,43 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
           ),
           const SizedBox(height: 8),
           Text(
-            '${allPatternsList.length} patterns available',
+            '${dressPatterns.length} patterns assigned to this dress',
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey[600],
             ),
           ),
           const SizedBox(height: 16),
+          
+          // Add New Button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Current Patterns',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _showAddPatternDialog,
+                icon: Icon(Icons.add, size: 16),
+                label: Text('Add New'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ColorPalatte.primary,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  minimumSize: Size(0, 32),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          
           Expanded(
-            child: allPatternsList.isEmpty
+            child: dressPatterns.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -626,7 +685,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'No patterns available',
+                          'No patterns assigned to this dress',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey[600],
@@ -636,9 +695,9 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                     ),
                   )
                 : ListView.builder(
-                    itemCount: allPatternsList.length,
+                    itemCount: dressPatterns.length,
                     itemBuilder: (context, index) {
-                      final pattern = allPatternsList[index];
+                      final pattern = dressPatterns[index];
                       final patternId = pattern['_id'].toString();
                       final isSelected = selectedPatterns[patternId] ?? false;
                       
@@ -703,5 +762,137 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
         ],
       ),
     );
+  }
+
+  void _showAddMeasurementDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Add Measurement'),
+          content: Container(
+            width: 300,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Select a measurement to add to this dress:'),
+                const SizedBox(height: 16),
+                Container(
+                  height: 200,
+                  child: ListView.builder(
+                    itemCount: allMeasurementsList.length,
+                    itemBuilder: (context, index) {
+                      final measurement = allMeasurementsList[index];
+                      final measurementId = measurement['_id'].toString();
+                      final isAlreadyAdded = dressMeasurements.any(
+                        (m) => m['_id'].toString() == measurementId
+                      );
+                      
+                      return ListTile(
+                        title: Text(measurement['name']),
+                        subtitle: Text('ID: ${measurement['measurementId']}'),
+                        trailing: isAlreadyAdded 
+                          ? Icon(Icons.check, color: Colors.green)
+                          : Icon(Icons.add),
+                        onTap: isAlreadyAdded ? null : () {
+                          _addMeasurementToDress(measurement);
+                          Navigator.of(context).pop();
+                        },
+                        enabled: !isAlreadyAdded,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showAddPatternDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Add Pattern'),
+          content: Container(
+            width: 300,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Select a pattern to add to this dress:'),
+                const SizedBox(height: 16),
+                Container(
+                  height: 200,
+                  child: ListView.builder(
+                    itemCount: allPatternsList.length,
+                    itemBuilder: (context, index) {
+                      final pattern = allPatternsList[index];
+                      final patternId = pattern['_id'].toString();
+                      final isAlreadyAdded = dressPatterns.any(
+                        (p) => p['_id'].toString() == patternId
+                      );
+                      
+                      return ListTile(
+                        title: Text(pattern['name']),
+                        subtitle: Text('ID: ${pattern['dressPatternId']}'),
+                        trailing: isAlreadyAdded 
+                          ? Icon(Icons.check, color: Colors.green)
+                          : Icon(Icons.add),
+                        onTap: isAlreadyAdded ? null : () {
+                          _addPatternToDress(pattern);
+                          Navigator.of(context).pop();
+                        },
+                        enabled: !isAlreadyAdded,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _addMeasurementToDress(Map<String, dynamic> measurement) {
+    setState(() {
+      dressMeasurements.add({
+        ...measurement,
+        "dressTypeMeasurementId": null, // Will be set when saved
+      });
+      
+      String id = measurement["_id"].toString();
+      selectedMeasurements[id] = true;
+      measurementTypeIds[id] = null;
+    });
+  }
+
+  void _addPatternToDress(Map<String, dynamic> pattern) {
+    setState(() {
+      dressPatterns.add({
+        ...pattern,
+        "dressTypePatternId": null, // Will be set when saved
+      });
+      
+      String id = pattern["_id"].toString();
+      selectedPatterns[id] = true;
+      patternTypeIds[id] = null;
+    });
   }
 }
