@@ -4,11 +4,13 @@ import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 class CustomDatePicker extends StatefulWidget {
   final String label;
   final TextEditingController controller;
+  final bool allowFutureOnly;
 
   const CustomDatePicker({
     super.key,
     required this.label,
     required this.controller,
+    this.allowFutureOnly = false,
   });
 
   @override
@@ -22,15 +24,15 @@ class _CustomDatePickerState extends State<CustomDatePicker> {
     
     DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(1900),
-      lastDate: today, // Prevent future dates
+      initialDate: widget.allowFutureOnly ? today.add(Duration(days: 1)) : DateTime.now(),
+      firstDate: widget.allowFutureOnly ? today : DateTime(1900),
+      lastDate: widget.allowFutureOnly ? DateTime(2100) : today,
     );
 
     if (pickedDate != null) {
       setState(() {
         widget.controller.text =
-            "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
+            "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
       });
     }
   }

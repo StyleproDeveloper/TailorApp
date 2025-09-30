@@ -1365,6 +1365,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                                     child: CustomDatePicker(
                                       label: Textstring().deliveryDate,
                                       controller: item.deliveryDate!,
+                                      allowFutureOnly: true,
                                     ),
                                   ),
                                   const SizedBox(width: 10),
@@ -1922,7 +1923,7 @@ class OrderItem {
             TextEditingController(text: "Select Dress Type"),
         deliveryDate = deliveryDate ??
             TextEditingController(
-                text: DateFormat('yyyy-MM-dd').format(DateTime.now()));
+                text: DateFormat('yyyy-MM-dd').format(DateTime.now().add(Duration(days: 1))));
 }
 
 class _CustomerDialog<T> extends StatefulWidget {
