@@ -1,6 +1,6 @@
 class Urls {
   // Production backend URL - Vercel deployment
-  static const String baseUrl = 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
+  static const String baseUrl = 'https://backend-stylepros-projects.vercel.app';
   
   // Development backend URL (for local development)
   // static const String baseUrl = 'http://localhost:5500';
