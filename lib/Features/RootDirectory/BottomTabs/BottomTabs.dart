@@ -3,6 +3,7 @@ import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 import 'package:tailorapp/Core/Constants/Images.dart';
 import 'package:tailorapp/Features/RootDirectory/BottomTabs/BottomStyle.dart';
 import 'package:tailorapp/Features/RootDirectory/Orders/OrderScreen.dart';
+import 'package:tailorapp/Features/RootDirectory/Reports/ReportsScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/Settings/SettingScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/customer/CustomerScreen.dart';
 
@@ -20,7 +21,7 @@ class _HomescreenState extends State<Homescreen> {
     OrderScreen(),
     Customerscreen(),
     Center(child: Text('Gallery Screen', style: TextStyle(fontSize: 18))),
-    Center(child: Text('Reports Screen', style: TextStyle(fontSize: 18))),
+    ReportsScreen(),
     SettingsScreen(),
   ];
 
