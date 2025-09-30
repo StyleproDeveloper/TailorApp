@@ -152,9 +152,10 @@ await _loadDataInBackground();
         setState(() {
           widget.orderId = args;
         });
-        // For edit mode, load all customers and dress types first
+        // For edit mode, load all customers first, then process order
         await _fetchAllCustomers(GlobalVariables.shopIdGet!);
-        await _loadDressTypesInBackground(); // Load dress types before processing order
+        // Load dress types in background (non-blocking) to avoid blocking order processing
+        _loadDressTypesInBackground();
         await fetchProductDetail();
       } else {
         // For create mode, load only initial customers for faster loading
@@ -177,6 +178,12 @@ await _loadDataInBackground();
       );
     } catch (e) {
       print('Error loading dress types: $e');
+      // Don't let dress type loading failure break the app
+      if (mounted) {
+        setState(() {
+          dressTypes = []; // Initialize empty list to prevent null errors
+        });
+      }
     }
   }
 
@@ -402,11 +409,12 @@ await _loadDataInBackground();
         });
       }
     } catch (e) {
-      Future.microtask(() => CustomSnackbar.showSnackbar(
-            context,
-            'Failed to load customers',
-            duration: Duration(seconds: 2),
-          ));
+      print('Error fetching all customers: $e');
+      if (mounted) {
+        setState(() {
+          customers = [];
+        });
+      }
     }
   }
 
