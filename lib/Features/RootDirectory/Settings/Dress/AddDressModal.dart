@@ -26,7 +26,12 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
   late TextEditingController dressNameController;
   late TabController _tabController;
   
-  // Master lists (all available options)
+  // Master lists (all available options) - with caching
+  static List<Map<String, dynamic>> _cachedMeasurementsList = [];
+  static List<Map<String, dynamic>> _cachedPatternsList = [];
+  static DateTime? _lastCacheTime;
+  static const Duration _cacheExpiry = Duration(minutes: 5);
+  
   List<Map<String, dynamic>> allMeasurementsList = [];
   List<Map<String, dynamic>> allPatternsList = [];
   
@@ -41,6 +46,10 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
   // Store IDs for updates
   Map<String, int?> measurementTypeIds = {}; // Store dressTypeMeasurementId for each measurement
   Map<String, int?> patternTypeIds = {}; // Store dressTypePatternId for each pattern
+  
+  // Loading states
+  bool isLoadingMasterData = true;
+  bool isLoadingDressData = false;
 
   @override
   void initState() {
@@ -53,14 +62,32 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
   }
 
   Future<void> _loadData() async {
-    // Load master lists first
-    await getDressMeasurement();
-    await getDressPattern();
+    // Check cache first
+    if (_isCacheValid()) {
+      setState(() {
+        allMeasurementsList = List.from(_cachedMeasurementsList);
+        allPatternsList = List.from(_cachedPatternsList);
+        isLoadingMasterData = false;
+      });
+    } else {
+      // Load master lists in parallel for better performance
+      await Future.wait([
+        getDressMeasurement(),
+        getDressPattern(),
+      ]);
+    }
     
     // Then load existing assignments for this dress
     if (widget.dressDataId != null) {
       await fetchDressPattMea(widget.dressDataId);
     }
+  }
+
+  bool _isCacheValid() {
+    if (_lastCacheTime == null) return false;
+    return DateTime.now().difference(_lastCacheTime!) < _cacheExpiry &&
+           _cachedMeasurementsList.isNotEmpty &&
+           _cachedPatternsList.isNotEmpty;
   }
 
   @override
@@ -77,6 +104,10 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
       return;
     }
 
+    setState(() {
+      isLoadingDressData = true;
+    });
+
     final String requestUrl = "${Urls.orderDressTypeMea}/$shopId/$dressTypeId";
     try {
       final response = await ApiService().get(requestUrl, context);
@@ -87,7 +118,11 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
         
         print('📏 Fetched Measurements: ${fetchedMeasurements.length}');
         print('🎨 Fetched Patterns: ${fetchedPatterns.length}');
-        print('🎨 First pattern sample: ${fetchedPatterns.isNotEmpty ? fetchedPatterns[0] : "No patterns"}');
+
+        // Create lookup maps for better performance
+        Map<String, Map<String, dynamic>> measurementLookup = {
+          for (var m in allMeasurementsList) m["name"]: m
+        };
 
         setState(() {
           // Clear previous data
@@ -98,16 +133,11 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
           measurementTypeIds.clear();
           patternTypeIds.clear();
           
-          // Process dress-specific measurements
+          // Process dress-specific measurements with optimized lookup
           for (var fetchedMeasurement in fetchedMeasurements) {
-            // For measurements, the data is directly in the fetched measurement
-            // but we need to match it with the master list to get the full details
             String name = fetchedMeasurement["name"];
-            var matchingMeasurement = allMeasurementsList.firstWhere(
-              (m) => m["name"] == name,
-              orElse: () => {},
-            );
-            if (matchingMeasurement.isNotEmpty) {
+            var matchingMeasurement = measurementLookup[name];
+            if (matchingMeasurement != null) {
               // Add to dress-specific measurements list
               dressMeasurements.add({
                 ...matchingMeasurement,
@@ -123,9 +153,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
 
           // Process dress-specific patterns
           for (var fetchedPattern in fetchedPatterns) {
-            // The pattern details are in PatternDetails field
             var patternDetails = fetchedPattern["PatternDetails"];
-            print('🔍 Processing pattern: dressPatternId=${fetchedPattern["dressPatternId"]}, hasPatternDetails=${patternDetails != null}');
             
             if (patternDetails != null) {
               // Add to dress-specific patterns list using PatternDetails
@@ -141,17 +169,18 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
               String id = patternDetails["_id"].toString();
               selectedPatterns[id] = true;
               patternTypeIds[id] = fetchedPattern["_id"];
-              print('✅ Added pattern: ${patternDetails["name"]}');
-            } else {
-              print('❌ Pattern details missing for dressPatternId: ${fetchedPattern["dressPatternId"]}');
             }
           }
           
+          isLoadingDressData = false;
           print('📏 Dress Measurements: ${dressMeasurements.length}');
           print('🎨 Dress Patterns: ${dressPatterns.length}');
         });
       }
     } catch (e) {
+      setState(() {
+        isLoadingDressData = false;
+      });
       print("❌ Failed to load dress measurements: $e");
     }
   }
@@ -336,15 +365,22 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
 
       if (response.data is Map<String, dynamic> &&
           response.data.containsKey('data')) {
+        final measurements = List<Map<String, dynamic>>.from(
+          response.data['data'].map((m) => {
+                "_id": m["_id"],
+                "measurementId": m["measurementId"],
+                "name": m["name"],
+              }),
+        );
+        
         setState(() {
-          allMeasurementsList = List<Map<String, dynamic>>.from(
-            response.data['data'].map((m) => {
-                  "_id": m["_id"],
-                  "measurementId": m["measurementId"],
-                  "name": m["name"],
-                }),
-          );
+          allMeasurementsList = measurements;
         });
+        
+        // Update cache
+        _cachedMeasurementsList = List.from(measurements);
+        _lastCacheTime = DateTime.now();
+        
         print('📏 Loaded ${allMeasurementsList.length} measurements');
       } else {
         print('⚠️ No measurements found');
@@ -362,21 +398,35 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
 
       if (response.data is Map<String, dynamic> &&
           response.data.containsKey('data')) {
+        final patterns = List<Map<String, dynamic>>.from(
+          response.data['data'].map((p) => {
+                "_id": p["_id"],
+                "dressPatternId": p["dressPatternId"],
+                "name": p["name"],
+                "category": p["category"],
+              }),
+        );
+        
         setState(() {
-          allPatternsList = List<Map<String, dynamic>>.from(
-            response.data['data'].map((p) => {
-                  "_id": p["_id"],
-                  "dressPatternId": p["dressPatternId"],
-                  "name": p["name"],
-                  "category": p["category"],
-                }),
-          );
+          allPatternsList = patterns;
+          isLoadingMasterData = false;
         });
+        
+        // Update cache
+        _cachedPatternsList = List.from(patterns);
+        _lastCacheTime = DateTime.now();
+        
         print('🎨 Loaded ${allPatternsList.length} patterns');
       } else {
+        setState(() {
+          isLoadingMasterData = false;
+        });
         print('⚠️ No patterns found');
       }
     } catch (e) {
+      setState(() {
+        isLoadingMasterData = false;
+      });
       print('❌ Error loading patterns: $e');
     }
   }
@@ -503,16 +553,33 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                 ),
               ),
               
-              // Expanded Tab Content
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildMeasurementsTab(),
-                    _buildPatternsTab(),
-                  ],
-                ),
-              ),
+                  // Expanded Tab Content
+                  Expanded(
+                    child: isLoadingMasterData
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                CircularProgressIndicator(color: ColorPalatte.primary),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Loading measurements and patterns...',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : TabBarView(
+                            controller: _tabController,
+                            children: [
+                              _buildMeasurementsTab(),
+                              _buildPatternsTab(),
+                            ],
+                          ),
+                  ),
               
               // Compact Save Button
               Container(
@@ -583,29 +650,46 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
           ),
           const SizedBox(height: 8),
           
-          Expanded(
-            child: dressMeasurements.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.straighten_outlined,
-                          size: 48,
-                          color: Colors.grey[400],
+              Expanded(
+                child: isLoadingDressData
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(color: ColorPalatte.primary),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Loading dress measurements...',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'No measurements assigned',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
+                      )
+                    : dressMeasurements.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.straighten_outlined,
+                                  size: 48,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'No measurements assigned',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
                     itemCount: dressMeasurements.length,
                     itemBuilder: (context, index) {
                       final measurement = dressMeasurements[index];
@@ -696,29 +780,46 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
           ),
           const SizedBox(height: 8),
           
-          Expanded(
-            child: dressPatterns.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.pattern_outlined,
-                          size: 48,
-                          color: Colors.grey[400],
+              Expanded(
+                child: isLoadingDressData
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(color: ColorPalatte.primary),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Loading dress patterns...',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'No patterns assigned',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
+                      )
+                    : dressPatterns.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.pattern_outlined,
+                                  size: 48,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'No patterns assigned',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
                     itemCount: dressPatterns.length,
                     itemBuilder: (context, index) {
                       final pattern = dressPatterns[index];
