@@ -238,13 +238,8 @@ void initState() {
           print('✅ Customer operation successful - Customer ID: $customerId');
           print('✅ Message: $message');
           
-          CustomSnackbar.showSnackbar(
-            context, 
-            message,
-            duration: Duration(seconds: 2)
-          );
-          
           // Navigate back for new customer creation when called from create order page
+          print('🔍 Debug: customerId = $customerId, shouldNavigateBack = ${widget.shouldNavigateBack}');
           if (customerId == null && widget.shouldNavigateBack) {
             print('🔄 Navigating back for new customer creation from create order page');
             print('📊 Full API Response: ${response.data}');
@@ -277,13 +272,28 @@ void initState() {
             };
             print('📤 Returning customer data: $customerData');
             
-            // Automatically navigate back to CreateOrderScreen with the new customer data
-            Navigator.pop(context, customerData);
+            // Add a small delay to ensure UI is ready, then navigate back
+            Future.delayed(Duration(milliseconds: 100), () {
+              if (mounted) {
+                Navigator.pop(context, customerData);
+              }
+            });
+            return; // Exit early to prevent showing snackbar
           } else if (customerId == null) {
             print('✅ Customer created successfully, staying on page');
             // For direct customer creation (not from create order), stay on page
+            CustomSnackbar.showSnackbar(
+              context, 
+              message,
+              duration: Duration(seconds: 2)
+            );
           } else {
             print('✅ Staying on page for customer update');
+            CustomSnackbar.showSnackbar(
+              context, 
+              message,
+              duration: Duration(seconds: 2)
+            );
           }
         } else {
           CustomSnackbar.showSnackbar(

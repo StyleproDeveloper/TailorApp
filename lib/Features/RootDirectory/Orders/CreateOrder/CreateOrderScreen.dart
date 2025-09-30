@@ -776,6 +776,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     
     print('📥 Received result from customer creation: $result');
     print('📥 Result type: ${result.runtimeType}');
+    print('📥 Result is null: ${result == null}');
     
     if (result != null && result is Map<String, dynamic>) {
       // New customer was created, add it to the current list and select it
