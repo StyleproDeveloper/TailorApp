@@ -2,6 +2,7 @@ const express = require('express');
 const {
   createCustomer,
   getCustomer,
+  searchAllCustomers,
   getCustomerById,
   updateCustomer,
   deleteCustomer,
@@ -134,6 +135,42 @@ router.post('/', validateRequest(customerValidationSchema), createCustomer);
  *                     $ref: '#/components/schemas/Customer'
  */
 router.get('/:shop_id', getCustomer);
+
+/**
+ * @swagger
+ * /customer/{shop_id}/search:
+ *   get:
+ *     summary: Search all customers without pagination
+ *     tags: [Customers]
+ *     parameters:
+ *       - in: path
+ *         name: shop_id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: searchKeyword
+ *         schema:
+ *           type: string
+ *         description: Search keyword for name, mobile, email, etc.
+ *     responses:
+ *       200:
+ *         description: List of matching customers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Customer'
+ *                 total:
+ *                   type: integer
+ */
+router.get('/:shop_id/search', searchAllCustomers);
 
 /**
  * @swagger
