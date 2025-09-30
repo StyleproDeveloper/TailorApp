@@ -85,8 +85,9 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
         List<dynamic> fetchedMeasurements = response.data["DressTypeMeasurement"] ?? [];
         List<dynamic> fetchedPatterns = response.data["DressTypeDressPattern"] ?? [];
         
-        print('📏 Fetched Measurements: $fetchedMeasurements');
-        print('🎨 Fetched Patterns: $fetchedPatterns');
+        print('📏 Fetched Measurements: ${fetchedMeasurements.length}');
+        print('🎨 Fetched Patterns: ${fetchedPatterns.length}');
+        print('🎨 First pattern sample: ${fetchedPatterns.isNotEmpty ? fetchedPatterns[0] : "No patterns"}');
 
         setState(() {
           // Clear previous data
@@ -99,6 +100,8 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
           
           // Process dress-specific measurements
           for (var fetchedMeasurement in fetchedMeasurements) {
+            // For measurements, the data is directly in the fetched measurement
+            // but we need to match it with the master list to get the full details
             String name = fetchedMeasurement["name"];
             var matchingMeasurement = allMeasurementsList.firstWhere(
               (m) => m["name"] == name,
@@ -120,22 +123,27 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
 
           // Process dress-specific patterns
           for (var fetchedPattern in fetchedPatterns) {
-            String dressPatternId = fetchedPattern["dressPatternId"].toString();
-            var matchingPattern = allPatternsList.firstWhere(
-              (p) => p["dressPatternId"].toString() == dressPatternId,
-              orElse: () => {},
-            );
-            if (matchingPattern.isNotEmpty) {
-              // Add to dress-specific patterns list
+            // The pattern details are in PatternDetails field
+            var patternDetails = fetchedPattern["PatternDetails"];
+            print('🔍 Processing pattern: dressPatternId=${fetchedPattern["dressPatternId"]}, hasPatternDetails=${patternDetails != null}');
+            
+            if (patternDetails != null) {
+              // Add to dress-specific patterns list using PatternDetails
               dressPatterns.add({
-                ...matchingPattern,
-                "dressTypePatternId": fetchedPattern["dressTypePatternId"],
+                "_id": patternDetails["_id"],
+                "dressPatternId": patternDetails["dressPatternId"],
+                "name": patternDetails["name"],
+                "category": patternDetails["category"],
+                "dressTypePatternId": fetchedPattern["_id"], // Use the relation ID
               });
               
               // Mark as selected
-              String id = matchingPattern["_id"].toString();
+              String id = patternDetails["_id"].toString();
               selectedPatterns[id] = true;
-              patternTypeIds[id] = fetchedPattern["dressTypePatternId"];
+              patternTypeIds[id] = fetchedPattern["_id"];
+              print('✅ Added pattern: ${patternDetails["name"]}');
+            } else {
+              print('❌ Pattern details missing for dressPatternId: ${fetchedPattern["dressPatternId"]}');
             }
           }
           
