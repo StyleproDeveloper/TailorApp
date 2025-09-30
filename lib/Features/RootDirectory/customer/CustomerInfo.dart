@@ -226,6 +226,9 @@ void initState() {
 
         hideLoader(context);
 
+        print('🔍 Debug: Response status code: ${response.statusCode}');
+        print('🔍 Debug: Response data: ${response.data}');
+        
         if (response.data != null && response.statusCode == 200) {
           String message = customerId != null 
               ? 'Customer updated successfully'
@@ -306,12 +309,20 @@ void initState() {
         hideLoader(context);
         print('Error in handleNewCustomer: ${e.toString()}');
         
+        // Check if it's a duplicate mobile number error
+        String errorMessage = 'Failed to create customer. Please try again.';
+        if (e.toString().contains('E11000') && e.toString().contains('mobile')) {
+          errorMessage = 'A customer with this mobile number already exists. Please use a different mobile number.';
+        } else if (e.toString().contains('500')) {
+          errorMessage = 'Server error occurred. Please try again.';
+        }
+        
         CustomSnackbar.showSnackbar(
           context,
           customerId != null 
               ? 'Failed to update customer. Please try again.'
-              : 'Failed to create customer. Please try again.',
-          duration: Duration(seconds: 2),
+              : errorMessage,
+          duration: Duration(seconds: 3),
         );
       }
     }
