@@ -985,9 +985,24 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         duration: Duration(seconds: 2),
       );
       if(widget.orderId == null){
-        Navigator.pop(context, true);
+        // For new orders, navigate to order detail page
+        final orderId = responseData['orderId'] ?? responseData['id'];
+        if (orderId != null) {
+          Navigator.pushReplacementNamed(
+            context, 
+            AppRoutes.orderDetailsScreen,
+            arguments: orderId,
+          );
+        } else {
+          Navigator.pop(context, true);
+        }
       } else {
-        Navigator.pushReplacementNamed(context, AppRoutes.homeUi);
+        // For updated orders, navigate to order detail page
+        Navigator.pushReplacementNamed(
+          context, 
+          AppRoutes.orderDetailsScreen,
+          arguments: widget.orderId,
+        );
       }
     } else {
       CustomSnackbar.showSnackbar(
@@ -1168,11 +1183,29 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          "Item ${index + 1}",
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              "Item ${index + 1}",
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                  color: ColorPalatte.primary),
+                                            ),
+                                            if (orderItems.length > 1)
+                                              IconButton(
+                                                onPressed: () {
+                                                  setState(() {
+                                                    orderItems.removeAt(index);
+                                                  });
+                                                },
+                                                icon: Icon(Icons.delete, color: Colors.red, size: 20),
+                                                tooltip: 'Remove Item',
+                                                padding: EdgeInsets.zero,
+                                                constraints: BoxConstraints(),
+                                              ),
+                                          ],
                                         ),
                                         const SizedBox(height: 4),
                                       ],
@@ -1317,10 +1350,30 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                   SizedBox(height: 15),
                   _buildButton("+ Add Another Item", onPressed: () {
                     setState(() {
+                      // Collapse all existing items
                       for (var item in orderItems) {
                         item.isExpanded = false;
                       }
-                      orderItems.add(OrderItem(isExpanded: true));
+                      // Add new item and expand it
+                      final newItem = OrderItem(isExpanded: true);
+                      orderItems.add(newItem);
+                      
+                      // Auto-select the first dress type if available
+                      if (dressTypes.isNotEmpty) {
+                        newItem.selectedDressType = dressTypes[0];
+                        newItem.selectedDressTypeId = dressTypes[0]['dressTypeId'];
+                        newItem.dropdownDressController.text = dressTypes[0]['name'];
+                        
+                        // Fetch measurements and patterns for the new item
+                        fetchMeasurements(newItem.selectedDressTypeId, newItem);
+                        fetchPatterns(newItem.selectedDressTypeId).then((patterns) {
+                          if (mounted) {
+                            setState(() {
+                              newItem.selectedPatterns = patterns;
+                            });
+                          }
+                        });
+                      }
                     });
                   }),
                   const SizedBox(height: 12),
