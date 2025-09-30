@@ -55,6 +55,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   bool hasMoreData = true;
   Timer? _debounce;
   bool _isDisposed = false;
+  
+  // Cache for customers to avoid repeated API calls
+  static Map<String, List<Map<String, dynamic>>> _customerCache = {};
+  static DateTime? _lastCacheTime;
 
   @override
   void initState() {
@@ -66,32 +70,49 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       'amount': TextEditingController(),
     });
 
-    // Fetch data and handle orderId
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // First, fetch only initial customers (10) and dress types for faster loading
-      await Future.wait([
-        _fetchInitialCustomers(),
-        fetchDressTypeData(
-          pageNumber: 1,
-          pageSize: 20,
-          existingDressTypes: [],
-          initialFetch: true,
-        ),
-      ]);
+    // Optimize loading: Show UI immediately, load data in background
+    setState(() {
+      isLoading = false; // Show UI immediately
+    });
 
-      // Then, fetch product details if orderId exists
+    // Fetch data in background without blocking UI
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadDataInBackground();
+    });
+  }
+
+  Future<void> _loadDataInBackground() async {
+    try {
+      // Load essential data first (customers only)
+      await _fetchInitialCustomers();
+      
+      // Load dress types in background (non-blocking)
+      _loadDressTypesInBackground();
+      
+      // Handle orderId if exists
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args != null) {
         setState(() {
           widget.orderId = args;
         });
         await fetchProductDetail();
-      } else {
-        setState(() {
-          isLoading = false;
-        });
       }
-    });
+    } catch (e) {
+      print('Error loading data in background: $e');
+    }
+  }
+
+  void _loadDressTypesInBackground() async {
+    try {
+      await fetchDressTypeData(
+        pageNumber: 1,
+        pageSize: 20,
+        existingDressTypes: [],
+        initialFetch: true,
+      );
+    } catch (e) {
+      print('Error loading dress types: $e');
+    }
   }
 
   @override
@@ -123,33 +144,56 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   Future<void> _fetchInitialCustomers() async {
     int? id = GlobalVariables.shopIdGet;
     if (id == null) {
-      Future.microtask(() => CustomSnackbar.showSnackbar(
-            context,
-            "Shop ID is missing",
-            duration: Duration(seconds: 2),
-          ));
+      print("Shop ID is missing");
       return;
     }
 
-    // Fetch only first 10 customers for fast initial load
+    String cacheKey = "customers_$id";
+    
+    // Check cache first (valid for 5 minutes)
+    if (_customerCache.containsKey(cacheKey) && 
+        _lastCacheTime != null && 
+        DateTime.now().difference(_lastCacheTime!).inMinutes < 5) {
+      if (mounted) {
+        setState(() {
+          customers = _customerCache[cacheKey] ?? [];
+        });
+      }
+      return;
+    }
+
+    // Fetch only first 5 customers for ultra-fast initial load
     try {
-      final String requestUrl = "${Urls.customer}/$id?pageNumber=1&pageSize=10";
+      final String requestUrl = "${Urls.customer}/$id?pageNumber=1&pageSize=5";
       final response = await ApiService().get(requestUrl, context);
       
       if (response.data is Map<String, dynamic>) {
         List<dynamic> customerData = response.data['data'];
-        setState(() {
-          customers = customerData.cast<Map<String, dynamic>>();
-        });
+        List<Map<String, dynamic>> customerList = customerData.cast<Map<String, dynamic>>();
+        
+        // Update cache
+        _customerCache[cacheKey] = customerList;
+        _lastCacheTime = DateTime.now();
+        
+        if (mounted) {
+          setState(() {
+            customers = customerList;
+          });
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            customers = [];
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching initial customers: $e');
+      if (mounted) {
         setState(() {
           customers = [];
         });
       }
-    } catch (e) {
-      setState(() {
-        customers = [];
-      });
     }
   }
 
@@ -238,7 +282,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           };
         }).toList();
 
-        if (initialFetch) {
+        if (mounted && initialFetch) {
           setState(() {
             dressTypes = newDressTypes;
           });
@@ -248,7 +292,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           ...existingDressTypes,
           ...newDressTypes
         ];
-        if (newDressTypes.length == pageSize) {
+        // Only fetch more if we have a full page and it's not the initial fetch
+        if (newDressTypes.length == pageSize && !initialFetch) {
           return await fetchDressTypeData(
             pageNumber: pageNumber + 1,
             pageSize: pageSize,
@@ -1895,46 +1940,53 @@ class _CustomerDialogState<T> extends State<_CustomerDialog<T>> {
     await _searchCustomersFromAPI(_searchQuery);
   }
 
-  Future<void> _searchCustomersFromAPI(String searchKeyword) async {
-    if (_isLoading) return;
-    
-    setState(() {
-      _isLoading = true;
-    });
+    Future<void> _searchCustomersFromAPI(String searchKeyword) async {
+      if (_isLoading || !mounted) return;
 
-    int? shopId = GlobalVariables.shopIdGet;
-    if (shopId == null) {
       setState(() {
-        _isLoading = false;
+        _isLoading = true;
       });
-      return;
-    }
 
-    try {
-      final String requestUrl = "${Urls.customer}/$shopId/search?searchKeyword=$searchKeyword";
-      final response = await ApiService().get(requestUrl, context);
-      
-      if (response.data is Map<String, dynamic> && response.data['success'] == true) {
-        List<dynamic> customerData = response.data['data'];
-        List<Map<String, dynamic>> searchResults = customerData.cast<Map<String, dynamic>>();
-        
-        setState(() {
-          _filteredCustomers = searchResults;
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _filteredCustomers = [];
-          _isLoading = false;
-        });
+      int? shopId = GlobalVariables.shopIdGet;
+      if (shopId == null) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
       }
-    } catch (e) {
-      setState(() {
-        _filteredCustomers = [];
-        _isLoading = false;
-      });
+
+      try {
+        final String requestUrl = "${Urls.customer}/$shopId/search?searchKeyword=$searchKeyword";
+        final response = await ApiService().get(requestUrl, context);
+
+        if (mounted) {
+          if (response.data is Map<String, dynamic> && response.data['success'] == true) {
+            List<dynamic> customerData = response.data['data'];
+            List<Map<String, dynamic>> searchResults = customerData.cast<Map<String, dynamic>>();
+
+            setState(() {
+              _filteredCustomers = searchResults;
+              _isLoading = false;
+            });
+          } else {
+            setState(() {
+              _filteredCustomers = [];
+              _isLoading = false;
+            });
+          }
+        }
+      } catch (e) {
+        print('Error searching customers: $e');
+        if (mounted) {
+          setState(() {
+            _filteredCustomers = [];
+            _isLoading = false;
+          });
+        }
+      }
     }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1982,11 +2034,11 @@ class _CustomerDialogState<T> extends State<_CustomerDialog<T>> {
                   _searchQuery = value;
                 });
                 
-                // Debounce the search to avoid too many API calls
-                _debounce?.cancel();
-                _debounce = Timer(const Duration(milliseconds: 500), () {
-                  _filterCustomers();
-                });
+      // Debounce the search to avoid too many API calls (reduced from 500ms to 300ms)
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 300), () {
+        _filterCustomers();
+      });
               },
             ),
             const SizedBox(height: 10),
