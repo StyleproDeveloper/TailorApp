@@ -276,6 +276,8 @@ void initState() {
               'remark': remark.text.trim(),
             };
             print('📤 Returning customer data: $customerData');
+            
+            // Automatically navigate back to CreateOrderScreen with the new customer data
             Navigator.pop(context, customerData);
           } else if (customerId == null) {
             print('✅ Customer created successfully, staying on page');
