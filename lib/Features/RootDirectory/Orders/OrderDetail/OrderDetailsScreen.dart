@@ -22,6 +22,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   Map<String, dynamic>? order;
   bool isLoading = true;
   dynamic orderId;
+  Map<int, String> dressTypeNames = {}; // Cache for dress type names
 
   @override
   void initState() {
@@ -48,6 +49,33 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         .join(' ');
   }
 
+  Future<void> _fetchDressTypeNames() async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null) return;
+
+    try {
+      final String requestUrl = "${Urls.addDress}/$shopId?pageNumber=1&pageSize=100";
+      final response = await ApiService().get(requestUrl, context);
+      
+      if (response.data is Map<String, dynamic> && response.data['data'] != null) {
+        List<dynamic> dressTypes = response.data['data'];
+        Map<int, String> names = {};
+        
+        for (var dressType in dressTypes) {
+          names[dressType['dressTypeId']] = dressType['name'];
+        }
+        
+        if (mounted) {
+          setState(() {
+            dressTypeNames = names;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching dress type names: $e');
+    }
+  }
+
   void fetchProductDetail() async {
     showLoader(context);
     int? shopId = GlobalVariables.shopIdGet;
@@ -71,6 +99,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             order = orders[0] as Map<String, dynamic>;
             isLoading = false;
           });
+          // Fetch dress type names after order is loaded
+          _fetchDressTypeNames();
         } else {
           setState(() {
             isLoading = false;
@@ -278,9 +308,11 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 ].contains(e.key))
             .map((e) => MapEntry(_beautifyKey(e.key), e.value.toString()));
 
+        final dressTypeId = item['dressTypeId'];
+        final dressTypeName = dressTypeNames[dressTypeId] ?? 'Dress Type $dressTypeId';
+        
         return _buildItemCard(
-          title:
-              'Item #${index + 1} - Dress Type ${item['dressTypeId'] ?? 'Unknown'}',
+          title: 'Item #${index + 1} - $dressTypeName',
           type: type,
           measurements: Map.fromEntries(measurementFields),
           cost: itemCost,
