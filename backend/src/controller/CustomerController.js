@@ -1,6 +1,7 @@
 const {
   createCustomerService,
   getAllCustomerService,
+  searchAllCustomersService,
   getCustomerByIdService,
   updateCustomerService,
   deleteCustomerService,
@@ -27,6 +28,20 @@ const getCustomer = async (req, res) => {
     if (!shop_id) return res.status(400).json({ error: 'Shop ID is required' });
     const customer = await getAllCustomerService(shop_id, req?.query);
     res.status(200).json(customer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const searchAllCustomers = async (req, res) => {
+  try {
+    const { shop_id } = req.params;
+    const { searchKeyword } = req.query;
+    
+    if (!shop_id) return res.status(400).json({ error: 'Shop ID is required' });
+    
+    const result = await searchAllCustomersService(shop_id, searchKeyword);
+    res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -82,6 +97,7 @@ const deleteCustomer = async (req, res) => {
 module.exports = {
   createCustomer,
   getCustomer,
+  searchAllCustomers,
   getCustomerById,
   updateCustomer,
   deleteCustomer,

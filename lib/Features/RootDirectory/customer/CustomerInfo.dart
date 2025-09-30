@@ -271,6 +271,9 @@ void initState() {
               'address': address.text.trim(),
               'dateOfBirth': dob.text.trim(),
               'gender': selectedGender,
+              'secondaryMobile': secondaryMobile.text.trim(),
+              'addressLine1': address.text.trim(),
+              'remark': remark.text.trim(),
             };
             print('📤 Returning customer data: $customerData');
             Navigator.pop(context, customerData);

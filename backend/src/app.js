@@ -55,6 +55,18 @@ app.use(mongoSanitize());
 // );
 
 // app.use(helmet());
+
+// Health check route
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    status: 200,
+    message: 'Tailor App Backend API is running!',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
 // Routes
 app.use('/shops', shopRoutes);
 app.use('/customer', customerRoutes);

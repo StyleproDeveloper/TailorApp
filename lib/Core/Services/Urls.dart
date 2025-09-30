@@ -1,12 +1,13 @@
 class Urls {
-  // Production backend URL (update this with your Railway/Render URL)
-  static const String baseUrl = 'https://your-backend-url.railway.app';
+  // Production backend URL - Vercel deployment
+  static const String baseUrl = 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
   
   // Development backend URL (for local development)
   // static const String baseUrl = 'http://localhost:5500';
   
-  // Fallback to production backend if needed
-  // static const String baseUrl = 'http://54.174.213.173';
+  // Alternative Vercel URLs (if main URL has issues)
+  // static const String baseUrl = 'https://backend-oh2r1ys5u-stylepros-projects.vercel.app';
+  // static const String baseUrl = 'https://backend-ohnwrg4uj-stylepros-projects.vercel.app';
   
   static const String shopName = '/shops';
   static const String customer = '/customer';

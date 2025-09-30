@@ -1871,20 +1871,57 @@ class _CustomerDialogState<T> extends State<_CustomerDialog<T>> {
     }
   }
 
-  void _filterCustomers() {
-    setState(() {
-      if (_searchQuery.isEmpty) {
+  void _filterCustomers() async {
+    if (_searchQuery.isEmpty) {
+      setState(() {
         _filteredCustomers = List.from(_allCustomers);
-      } else {
-        _filteredCustomers = _allCustomers.where((customer) {
-          final name = customer['name']?.toString().toLowerCase() ?? '';
-          final mobile = customer['mobile']?.toString() ?? '';
-          final searchLower = _searchQuery.toLowerCase();
-          
-          return name.contains(searchLower) || mobile.contains(_searchQuery);
-        }).toList();
-      }
+      });
+      return;
+    }
+
+    // Use the new search endpoint for real-time search
+    await _searchCustomersFromAPI(_searchQuery);
+  }
+
+  Future<void> _searchCustomersFromAPI(String searchKeyword) async {
+    if (_isLoading) return;
+    
+    setState(() {
+      _isLoading = true;
     });
+
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null) {
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      final String requestUrl = "${Urls.customer}/$shopId/search?searchKeyword=$searchKeyword";
+      final response = await ApiService().get(requestUrl, context);
+      
+      if (response.data is Map<String, dynamic> && response.data['success'] == true) {
+        List<dynamic> customerData = response.data['data'];
+        List<Map<String, dynamic>> searchResults = customerData.cast<Map<String, dynamic>>();
+        
+        setState(() {
+          _filteredCustomers = searchResults;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _filteredCustomers = [];
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _filteredCustomers = [];
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -1932,7 +1969,12 @@ class _CustomerDialogState<T> extends State<_CustomerDialog<T>> {
                 setState(() {
                   _searchQuery = value;
                 });
-                _filterCustomers();
+                
+                // Debounce the search to avoid too many API calls
+                _debounce?.cancel();
+                _debounce = Timer(const Duration(milliseconds: 500), () {
+                  _filterCustomers();
+                });
               },
             ),
             const SizedBox(height: 10),

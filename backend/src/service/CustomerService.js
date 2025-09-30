@@ -78,6 +78,50 @@ const getAllCustomerService = async (shop_id, queryParams) => {
   }
 };
 
+//searchAllCustomers - Search all customers without pagination for dropdown/search
+const searchAllCustomersService = async (shop_id, searchKeyword = '') => {
+  try {
+    if (!shop_id) throw new Error('Shop ID is required');
+
+    const shopExists = await isShopExists(shop_id);
+    if (!shopExists) throw new Error(`Shop with ID ${shop_id} does not exist`);
+    
+    const CustomerModel = getCustomerModel(shop_id);
+    
+    let query = {};
+    
+    // If search keyword is provided, search across multiple fields
+    if (searchKeyword && searchKeyword.trim() !== '') {
+      const searchRegex = { $regex: searchKeyword, $options: 'i' };
+      query = {
+        $or: [
+          { name: searchRegex },
+          { mobile: searchRegex },
+          { secondaryMobile: searchRegex },
+          { email: searchRegex },
+          { addressLine1: searchRegex },
+          { remark: searchRegex },
+          { gst: searchRegex },
+          { owner: searchRegex },
+        ]
+      };
+    }
+    
+    // Get all matching customers, sorted by name
+    const customers = await CustomerModel.find(query)
+      .sort({ name: 1 })
+      .limit(1000); // Limit to prevent performance issues
+    
+    return {
+      success: true,
+      data: customers,
+      total: customers.length
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
 //get Customer by id
 const getCustomerByIdService = async (shop_id, customerId) => {
   try {
@@ -171,6 +215,7 @@ const deleteCustomerService = async (shop_id, customerId) => {
 module.exports = {
   createCustomerService,
   getAllCustomerService,
+  searchAllCustomersService,
   getCustomerByIdService,
   updateCustomerService,
   deleteCustomerService,
