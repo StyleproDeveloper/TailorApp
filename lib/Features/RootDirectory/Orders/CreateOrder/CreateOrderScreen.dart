@@ -56,6 +56,39 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   Timer? _debounce;
   bool _isDisposed = false;
   
+  // Order status management
+  String currentOrderStatus = "received";
+  final List<Map<String, dynamic>> orderStatuses = [
+    {
+      'key': 'received',
+      'label': 'Received',
+      'description': 'Order received and confirmed',
+      'icon': Icons.inbox,
+      'color': Colors.blue,
+    },
+    {
+      'key': 'in_progress',
+      'label': 'In Progress',
+      'description': 'Work has started on the order',
+      'icon': Icons.work,
+      'color': Colors.orange,
+    },
+    {
+      'key': 'completed',
+      'label': 'Completed',
+      'description': 'Order is ready for delivery',
+      'icon': Icons.check_circle,
+      'color': Colors.green,
+    },
+    {
+      'key': 'delivered',
+      'label': 'Delivered',
+      'description': 'Order has been delivered to customer',
+      'icon': Icons.local_shipping,
+      'color': Colors.purple,
+    },
+  ];
+  
   // Cache for customers to avoid repeated API calls
   static Map<String, List<Map<String, dynamic>>> _customerCache = {};
   static DateTime? _lastCacheTime;
@@ -543,6 +576,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         setState(() {
           selectedOrderType = _mapOrderType(order['stitchingType']);
           selectedCustomerId = order['customerId'];
+          currentOrderStatus = order['status']?.toString() ?? 'received';
           
           // Try to find the customer in the loaded customers list
           try {
@@ -1036,7 +1070,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       "noOfMeasurementDresses": orderItems.length,
       "quantity": orderItems.length,
       "urgent": isUrgent,
-      "status": "received",
+      "status": currentOrderStatus,
       "estimationCost": double.tryParse(totalCostController.text) ?? 0.0,
       "advancereceived": double.tryParse(advanceAmountController.text) ?? 0.0,
       "advanceReceivedDate": DateFormat("yyyy-MM-dd").format(DateTime.now()),
@@ -1271,6 +1305,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       );
                     }).toList(),
                   ),
+                  // Order Status Stepper (only show in edit mode)
+                  if (widget.orderId != null) ...[
+                    const SizedBox(height: 20),
+                    _buildOrderStatusStepper(),
+                  ],
                   ...orderItems.asMap().entries.map((entry) {
                     int index = entry.key;
                     OrderItem item = entry.value;
@@ -1885,6 +1924,171 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         );
       },
+    );
+  }
+
+  Widget _buildOrderStatusStepper() {
+    final currentIndex = orderStatuses.indexWhere((status) => status['key'] == currentOrderStatus);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Order Status',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: ColorPalatte.primary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Status Path/Stepper
+              Row(
+                children: orderStatuses.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final status = entry.value;
+                  final isActive = index <= currentIndex;
+                  final isCurrent = index == currentIndex;
+                  
+                  return Expanded(
+                    child: Row(
+                      children: [
+                        // Status Circle
+                        GestureDetector(
+                          onTap: () => _updateOrderStatus(status['key']),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: isActive ? status['color'] : Colors.grey.shade300,
+                              shape: BoxShape.circle,
+                              border: isCurrent ? Border.all(color: status['color'], width: 3) : null,
+                            ),
+                            child: Icon(
+                              status['icon'],
+                              color: isActive ? Colors.white : Colors.grey.shade600,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                        // Connector Line (except for last item)
+                        if (index < orderStatuses.length - 1)
+                          Expanded(
+                            child: Container(
+                              height: 2,
+                              color: isActive ? status['color'] : Colors.grey.shade300,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              // Current Status Info
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: orderStatuses[currentIndex]['color'].withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: orderStatuses[currentIndex]['color'].withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      orderStatuses[currentIndex]['icon'],
+                      color: orderStatuses[currentIndex]['color'],
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            orderStatuses[currentIndex]['label'],
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: orderStatuses[currentIndex]['color'],
+                            ),
+                          ),
+                          Text(
+                            orderStatuses[currentIndex]['description'],
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Quick Status Update Buttons
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: orderStatuses.map((status) {
+                  final isCurrent = status['key'] == currentOrderStatus;
+                  return ElevatedButton(
+                    onPressed: isCurrent ? null : () => _updateOrderStatus(status['key']),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isCurrent ? status['color'] : Colors.white,
+                      foregroundColor: isCurrent ? Colors.white : status['color'],
+                      side: BorderSide(color: status['color']),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: Text(
+                      status['label'],
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _updateOrderStatus(String newStatus) {
+    setState(() {
+      currentOrderStatus = newStatus;
+    });
+    
+    // Show confirmation
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Order status updated to: ${orderStatuses.firstWhere((s) => s['key'] == newStatus)['label']}'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
