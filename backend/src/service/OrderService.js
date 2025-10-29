@@ -190,7 +190,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     const Customer = getCustomerModel(shop_id);
 
     // Query params
-    const { orderId } = queryParams;
+    const { orderId, status } = queryParams;
 
     const searchableFields = ['customer', 'owner'];
     const numericFields = ['orderId'];
@@ -204,6 +204,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     // Base query for countDocuments
     const baseQuery = { ...options.search, ...options.booleanFilters };
     if (orderId) baseQuery['orderId'] = Number(orderId);
+    if (status) baseQuery['status'] = status;
 
     console.log('baseQuery', baseQuery);
 
