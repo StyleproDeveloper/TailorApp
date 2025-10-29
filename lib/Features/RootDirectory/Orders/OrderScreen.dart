@@ -40,12 +40,22 @@ class _OrderScreenState extends State<OrderScreen>
     fetchOrderApi();
   }
 
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _scrollController.dispose();
+    searchKeywordController.dispose();
+    _tabController.dispose();
+    super.dispose();
+  }
+
   void _onTabChanged() {
-    if (_tabController.indexIsChanging) {
+    if (_tabController.indexIsChanging && mounted) {
       setState(() {
         currentTabIndex = _tabController.index;
+        // Apply filtering to existing orders instead of clearing them
+        _applyClientSideFiltering();
       });
-      _filterOrdersByTab();
     }
   }
 
@@ -61,43 +71,60 @@ class _OrderScreenState extends State<OrderScreen>
   void _onSearchChanged() {
     if (_debounce?.isActive ?? false) _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      setState(() {
-        orders.clear();
-        pageNumber = 1;
-        hasMoreData = true;
-      });
-      fetchOrderApi();
+      if (mounted) {
+        setState(() {
+          orders.clear();
+          filteredOrders.clear();
+          pageNumber = 1;
+          hasMoreData = true;
+        });
+        fetchOrderApi();
+      }
     });
   }
 
-  void _filterOrdersByTab() {
-    setState(() {
-      switch (currentTabIndex) {
-        case 0: // All Orders
-          filteredOrders = orders;
-          break;
-        case 1: // Received
-          filteredOrders = orders.where((order) {
-            final status = order['status']?.toString().toLowerCase();
-            return status == 'received';
-          }).toList();
-          break;
-        case 2: // In Progress
-          filteredOrders = orders.where((order) {
-            final status = order['status']?.toString().toLowerCase();
-            return status == 'in_progress' || status == 'in progress';
-          }).toList();
-          break;
-        case 3: // Completed
-          filteredOrders = orders.where((order) {
-            final status = order['status']?.toString().toLowerCase();
-            return status == 'completed' || status == 'delivered';
-          }).toList();
-          break;
-        default:
-          filteredOrders = orders;
-      }
-    });
+
+  void _applyClientSideFiltering() {
+    switch (currentTabIndex) {
+      case 0: // All Orders
+        filteredOrders = orders;
+        break;
+      case 1: // Received
+        filteredOrders = orders.where((order) {
+          final status = order['status']?.toString().toLowerCase();
+          return status == 'received';
+        }).toList();
+        break;
+      case 2: // In Progress
+        filteredOrders = orders.where((order) {
+          final status = order['status']?.toString().toLowerCase();
+          return status == 'in-progress' || status == 'in_progress';
+        }).toList();
+        break;
+      case 3: // Completed
+        filteredOrders = orders.where((order) {
+          final status = order['status']?.toString().toLowerCase();
+          return status == 'completed' || status == 'delivered';
+        }).toList();
+        break;
+      default:
+        filteredOrders = orders;
+    }
+  }
+
+  String _getStatusForTab(int tabIndex) {
+    switch (tabIndex) {
+      case 0: // All Orders
+        return '';
+      case 1: // Received
+        return 'received';
+      case 2: // In Progress
+        return 'in-progress'; // Use backend format
+      case 3: // Completed
+        return 'completed';
+      default:
+        return '';
+    }
   }
 
   DateTime? _getDeliveryDate(Map<String, dynamic> order) {
@@ -130,7 +157,7 @@ class _OrderScreenState extends State<OrderScreen>
   }
 
   void fetchOrderApi() async {
-    if (isLoading || !hasMoreData) return;
+    if (isLoading || !hasMoreData || !mounted) return;
 
     setState(() {
       isLoading = true;
@@ -138,9 +165,13 @@ class _OrderScreenState extends State<OrderScreen>
 
     int? shopId = GlobalVariables.shopIdGet;
     try {
+      // Always fetch all orders without status filter (backend not deployed yet)
       String url =
           "${Urls.ordersSave}/$shopId?pageNumber=$pageNumber&pageSize=$pageSize&searchKeyword=${searchKeywordController.text}";
+      
       final response = await ApiService().get(url, context);
+
+      if (!mounted) return; // Check if widget is still mounted
 
       if (response.data != null && response.data['data'] != null) {
         List<Map<String, dynamic>> newOrders =
@@ -148,6 +179,8 @@ class _OrderScreenState extends State<OrderScreen>
 
         setState(() {
           orders.addAll(newOrders);
+          // Apply client-side filtering based on current tab
+          _applyClientSideFiltering();
           isLoading = false;
           if (newOrders.length < pageSize) {
             hasMoreData = false;
@@ -155,7 +188,6 @@ class _OrderScreenState extends State<OrderScreen>
             pageNumber++;
           }
         });
-        _filterOrdersByTab(); // Filter orders after fetching
       } else {
         setState(() {
           isLoading = false;
@@ -163,9 +195,11 @@ class _OrderScreenState extends State<OrderScreen>
         });
       }
     } catch (e) {
-      setState(() {
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -252,6 +286,7 @@ class _OrderScreenState extends State<OrderScreen>
                 Navigator.pushNamed(context, AppRoutes.createOrder).then((_) {
                   setState(() {
                     orders.clear();
+                    filteredOrders.clear();
                     pageNumber = 1;
                     hasMoreData = true;
                   });
@@ -271,15 +306,9 @@ class _OrderScreenState extends State<OrderScreen>
 
   // ----- Additional widgets ----
   Widget _buildOrderListForTab(int tabIndex) {
-    // Use filteredOrders for the current tab, or orders for initial load
-    List<Map<String, dynamic>> ordersToShow = 
-        tabIndex == currentTabIndex ? filteredOrders : orders;
-    
-    if (tabIndex != currentTabIndex) {
-      // Force filter for the specific tab
-      _filterOrdersForSpecificTab(tabIndex);
-      ordersToShow = filteredOrders;
-    }
+    // Since we're filtering at API level, all tabs show the same data
+    // but only the current tab shows pagination controls
+    List<Map<String, dynamic>> ordersToShow = filteredOrders;
 
     if (ordersToShow.isEmpty && !isLoading) {
       String emptyMessage;
@@ -343,33 +372,6 @@ class _OrderScreenState extends State<OrderScreen>
     );
   }
 
-  void _filterOrdersForSpecificTab(int tabIndex) {
-    switch (tabIndex) {
-      case 0: // All Orders
-        filteredOrders = orders;
-        break;
-      case 1: // Received
-        filteredOrders = orders.where((order) {
-          final status = order['status']?.toString().toLowerCase();
-          return status == 'received';
-        }).toList();
-        break;
-      case 2: // In Progress
-        filteredOrders = orders.where((order) {
-          final status = order['status']?.toString().toLowerCase();
-          return status == 'in_progress' || status == 'in progress';
-        }).toList();
-        break;
-      case 3: // Completed
-        filteredOrders = orders.where((order) {
-          final status = order['status']?.toString().toLowerCase();
-          return status == 'completed' || status == 'delivered';
-        }).toList();
-        break;
-      default:
-        filteredOrders = orders;
-    }
-  }
 
   Widget _buildOrderList(List<Map<String, dynamic>> orderList) {
     if (orderList.isEmpty) {
@@ -549,14 +551,5 @@ class _OrderScreenState extends State<OrderScreen>
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    searchKeywordController.dispose();
-    _tabController.dispose();
-    _debounce?.cancel();
-    super.dispose();
   }
 }

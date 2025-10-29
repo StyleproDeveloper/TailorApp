@@ -521,8 +521,8 @@ await _loadDataInBackground();
               fetchedMeasurements.map<Map<String, dynamic>>((measurement) {
             final name = measurement['name'].toString();
             final key = name.toLowerCase().replaceAll(' ', '_');
-            final controller =
-                existingMeasurements[key] ?? TextEditingController(text: '0');
+            final controller = existingMeasurements[key] ?? 
+                TextEditingController(text: '0');
             print(
                 'Measurement: $name, controller.text=${controller.text}, hashCode=${controller.hashCode}');
             return {
@@ -649,7 +649,8 @@ await _loadDataInBackground();
         setState(() {
           selectedOrderType = _mapOrderType(order['stitchingType']);
           selectedCustomerId = order['customerId'];
-          currentOrderStatus = order['status']?.toString() ?? 'received';
+          // Normalize backend status to one of our known keys
+          currentOrderStatus = _normalizeStatusKey(order['status']?.toString());
           
           // Try to find the customer in the loaded customers list
           try {
@@ -909,6 +910,28 @@ await _loadDataInBackground();
     }
   }
 
+  String _normalizeStatusKey(String? raw) {
+    final value = (raw ?? 'received').toString().trim().toLowerCase();
+    // Map common backend variations to our UI keys
+    if (value == 'in progress' || value == 'in-progress') return 'in_progress';
+    if (value == 'received' || value == 'new') return 'received';
+    if (value == 'completed' || value == 'complete') return 'completed';
+    if (value == 'delivered' || value == 'delivery') return 'delivered';
+    // Fallback to received if unknown to avoid -1 index
+    return orderStatuses.any((s) => s['key'] == value) ? value : 'received';
+  }
+
+  String _toBackendStatusKey(String value) {
+    final v = value.trim().toLowerCase();
+    if (v == 'in_progress' || v == 'in progress' || v == 'in-progress') {
+      return 'in-progress';
+    }
+    if (v == 'received') return 'received';
+    if (v == 'completed') return 'completed';
+    if (v == 'delivered') return 'delivered';
+    return 'received';
+  }
+
   double get totalAdditionalCost {
     return additionalCostControllers.fold(0.0, (sum, item) {
       final value = double.tryParse(item['amount']?.text ?? '') ?? 0.0;
@@ -1091,7 +1114,13 @@ await _loadDataInBackground();
     if (item.measurements.isNotEmpty) {
       for (var m in item.measurements) {
         String key = m['name'].toString().toLowerCase().replaceAll(' ', '_');
-        measurementMap[key] = double.tryParse(m['value'].text) ?? 0.0;
+        // Safely extract text value from TextEditingController
+        String textValue = '';
+        if (m['value'] is TextEditingController) {
+          final controller = m['value'] as TextEditingController;
+          textValue = controller.text;
+        }
+        measurementMap[key] = double.tryParse(textValue) ?? 0.0;
       }
     }
 
@@ -1128,7 +1157,7 @@ await _loadDataInBackground();
         DateTime.tryParse(item.deliveryDate?.text ?? "") ?? DateTime.now(),
       ),
       "amount": double.tryParse(item.originalCost?.text ?? "0") ?? 0.0,
-      "status": "received",
+      "status": _toBackendStatusKey(currentOrderStatus),
       "owner": userId.toString(),
     };
 
@@ -1141,6 +1170,7 @@ await _loadDataInBackground();
   }).toList();
 
   int? selectedOrderTypeId;
+  // Backend expects 1,2,3 per CommonEnumValues.StitchingTypes
   if (selectedOrderType == "Stitching") {
     selectedOrderTypeId = 1;
   } else if (selectedOrderType == "Alter") {
@@ -1158,7 +1188,7 @@ await _loadDataInBackground();
       "noOfMeasurementDresses": orderItems.length,
       "quantity": orderItems.length,
       "urgent": isUrgent,
-      "status": currentOrderStatus,
+      "status": _toBackendStatusKey(currentOrderStatus),
       "estimationCost": double.tryParse(totalCostController.text) ?? 0.0,
       "advancereceived": double.tryParse(advanceAmountController.text) ?? 0.0,
       "advanceReceivedDate": DateFormat("yyyy-MM-dd").format(DateTime.now()),
@@ -2020,6 +2050,8 @@ await _loadDataInBackground();
 
   Widget _buildOrderStatusStepper() {
     final currentIndex = orderStatuses.indexWhere((status) => status['key'] == currentOrderStatus);
+    // Ensure currentIndex is valid, default to 0 if not found
+    final safeIndex = currentIndex >= 0 ? currentIndex : 0;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2055,8 +2087,8 @@ await _loadDataInBackground();
                 children: orderStatuses.asMap().entries.map((entry) {
                   final index = entry.key;
                   final status = entry.value;
-                  final isActive = index <= currentIndex;
-                  final isCurrent = index == currentIndex;
+                  final isActive = index <= safeIndex;
+                  final isCurrent = index == safeIndex;
                   
                   return Expanded(
                     child: Row(
@@ -2097,17 +2129,17 @@ await _loadDataInBackground();
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: orderStatuses[currentIndex]['color'].withOpacity(0.1),
+                  color: orderStatuses[safeIndex]['color'].withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: orderStatuses[currentIndex]['color'].withOpacity(0.3),
+                    color: orderStatuses[safeIndex]['color'].withOpacity(0.3),
                   ),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      orderStatuses[currentIndex]['icon'],
-                      color: orderStatuses[currentIndex]['color'],
+                      orderStatuses[safeIndex]['icon'],
+                      color: orderStatuses[safeIndex]['color'],
                       size: 24,
                     ),
                     const SizedBox(width: 12),
@@ -2116,15 +2148,15 @@ await _loadDataInBackground();
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            orderStatuses[currentIndex]['label'],
+                            orderStatuses[safeIndex]['label'],
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: orderStatuses[currentIndex]['color'],
+                              color: orderStatuses[safeIndex]['color'],
                             ),
                           ),
                           Text(
-                            orderStatuses[currentIndex]['description'],
+                            orderStatuses[safeIndex]['description'],
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade600,
@@ -2168,7 +2200,7 @@ await _loadDataInBackground();
     );
   }
 
-  void _updateOrderStatus(String newStatus) {
+  void _updateOrderStatus(String newStatus) async {
     setState(() {
       currentOrderStatus = newStatus;
     });
@@ -2181,6 +2213,140 @@ await _loadDataInBackground();
         duration: const Duration(seconds: 2),
       ),
     );
+
+    // Auto-save status change to backend if editing existing order
+    if (widget.orderId != null) {
+      await _saveStatusToBackend(newStatus);
+    }
+  }
+
+  Future<void> _saveStatusToBackend(String status) async {
+    try {
+      final int? shopId = GlobalVariables.shopIdGet;
+      final int? branchId = GlobalVariables.branchId;
+      final int? userId = GlobalVariables.userId;
+      if (shopId == null || widget.orderId == null || selectedCustomerId == null) {
+        return;
+      }
+
+      // Build Items payload with required IDs for update validation
+      final List<Map<String, dynamic>> items = orderItems.map((item) {
+        // Measurement map must include orderItemMeasurementId for update
+        final Map<String, dynamic> measurementMap = {
+          if (item.orderItemMeasurementId != null)
+            "orderItemMeasurementId": item.orderItemMeasurementId,
+        };
+        for (final m in item.measurements) {
+          final String key = m['name'].toString().toLowerCase().replaceAll(' ', '_');
+          String textValue = '';
+          if (m['value'] is TextEditingController) {
+            textValue = (m['value'] as TextEditingController).text;
+          }
+          measurementMap[key] = double.tryParse(textValue) ?? 0.0;
+        }
+
+        // Pattern list must include orderItemPatternId for update
+        final List<Map<String, dynamic>> patternList = (item.selectedPatterns.isNotEmpty
+                ? item.selectedPatterns
+                : <Map<String, dynamic>>[
+                    {"category": "Unknown", "name": ["None"]}
+                  ])
+            .map((pattern) {
+          final Map<String, dynamic> patternMap = {
+            "category": pattern['category'] ?? 'Unknown',
+            "name": pattern['name'] is List ? pattern['name'] : [pattern['name'].toString()],
+          };
+          if (item.orderItemPatternId != null) {
+            patternMap["orderItemPatternId"] = item.orderItemPatternId;
+          }
+          return patternMap;
+        }).toList();
+
+        return {
+          // IDs are required by update service/validation
+          if (item.orderItemId != null) "orderItemId": item.orderItemId,
+          "dressTypeId": item.selectedDressTypeId,
+          "Measurement": measurementMap,
+          "Pattern": patternList,
+          "special_instructions": item.specialInstructions?.text ?? "",
+          "recording": "",
+          "videoLink": "",
+          "pictures": _selectedImages.map((f) => f.path).toList(),
+          "delivery_date": DateFormat("yyyy-MM-dd").format(
+            DateTime.tryParse(item.deliveryDate?.text ?? "") ?? DateTime.now(),
+          ),
+          "amount": double.tryParse(item.originalCost?.text ?? "0") ?? 0.0,
+          "status": _toBackendStatusKey(status),
+          "owner": userId?.toString() ?? '',
+        };
+      }).toList();
+
+      // Map order type text to backend integer
+      int? selectedOrderTypeId;
+      // Backend expects 1,2,3 per CommonEnumValues.StitchingTypes
+      if (selectedOrderType == "Stitching") {
+        selectedOrderTypeId = 1;
+      } else if (selectedOrderType == "Alter") {
+        selectedOrderTypeId = 2;
+      } else if (selectedOrderType == "Material") {
+        selectedOrderTypeId = 3;
+      }
+
+      final payload = {
+        "Order": {
+          "shop_id": shopId,
+          "branchId": branchId,
+          "customerId": selectedCustomerId,
+          "stitchingType": selectedOrderTypeId,
+          "noOfMeasurementDresses": orderItems.length,
+          "quantity": orderItems.length,
+          "urgent": isUrgent,
+          "status": _toBackendStatusKey(status),
+          "estimationCost": double.tryParse(totalCostController.text) ?? 0.0,
+          "advancereceived": double.tryParse(advanceAmountController.text) ?? 0.0,
+          "advanceReceivedDate": DateFormat("yyyy-MM-dd").format(DateTime.now()),
+          "gst": isGstChecked,
+          "gst_amount": isGstChecked ? (double.tryParse(gstController.text) ?? 0.0) : 0.0,
+          "Courier": isCourierChecked,
+          "courierCharge": double.tryParse(courierController.text) ?? 0.0,
+          "discount": double.tryParse(discountController.text) ?? 0.0,
+          "owner": userId?.toString() ?? '',
+        },
+        "Item": items,
+      };
+
+      final url = "${Urls.ordersSave}/$shopId/${widget.orderId}";
+      final response = await ApiService().put(url, data: payload, context);
+
+      if (response.data != null && response.data is Map<String, dynamic>) {
+        print('✅ Status updated successfully in backend: ${_toBackendStatusKey(status)}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Status saved: ${orderStatuses.firstWhere((s) => s['key'] == status)['label']}'),
+            backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      } else {
+        print('⚠️ Failed to update status in backend');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save status'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Error updating status in backend: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving status: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   Widget _buildAddItemButton() {
@@ -2637,10 +2803,17 @@ class OrderItem {
   OrderItem copyFrom(OrderItem source) {
     // Copy measurements with new controllers
     List<Map<String, dynamic>> copiedMeasurements = source.measurements.map((measurement) {
+      // Safely extract text value to avoid TextSelection.invalid issues
+      String textValue = '';
+      if (measurement['value'] is TextEditingController) {
+        final controller = measurement['value'] as TextEditingController;
+        textValue = controller.text;
+      }
+      
       return {
         'name': measurement['name'],
         'dressTypeMeasurementId': measurement['dressTypeMeasurementId'],
-        'value': TextEditingController(text: measurement['value']?.text ?? ''),
+        'value': TextEditingController(text: textValue),
       };
     }).toList();
 
