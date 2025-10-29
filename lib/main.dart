@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 import 'package:tailorapp/GlobalVariables.dart';
 import 'package:tailorapp/Routes/App_route.dart';
+import 'package:tailorapp/Features/Splash/SplashScreen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 void main() async{
@@ -24,6 +25,12 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       initialRoute: AppRoutes.splash,
       routes: AppRoutes.routes,
+      onUnknownRoute: (settings) {
+        // Handle unknown routes by redirecting to splash
+        return MaterialPageRoute(
+          builder: (context) => const Splashscreen(),
+        );
+      },
     );
   }
 }

@@ -22,6 +22,7 @@ class AppRoutes {
   static const String login = '/login';
   static const String otpVerification = '/OtpVerification';
   static const String homeUi = '/HomeUI';
+  static const String home = '/'; // Add root route
   static const String registration = './Registerscreen';
   static const String customerInfo = './CustomerInfo';
   static const String userScreen = './Userscreen';
@@ -37,6 +38,7 @@ class AppRoutes {
   static const String shopDetailsScreen = './shopDetailsScreen';
 
   static Map<String, WidgetBuilder> routes = {
+    home: (context) => const Splashscreen(), // Root route redirects to splash
     splash: (context) => const Splashscreen(),
     login: (context) => const Loginscreen(),
     otpVerification: (context) => OtpVerificationScreen(),
