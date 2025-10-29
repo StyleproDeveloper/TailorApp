@@ -214,6 +214,12 @@ router.post('/', validateRequest(createOrderPayloadSchema), createOrder);
  *         schema:
  *           type: string
  *         description: Filter by Order Item Pattern ID
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter by order status (received, in-progress, completed, delivered)
+ *         example: in-progress
  *     responses:
  *       200:
  *         description: List of orders
