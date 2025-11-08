@@ -199,4 +199,8 @@ const CustomerSchema = new Schema(
   }
 );
 
+// Add indexes for better query performance
+// customerId is already unique (auto-indexed), but adding explicit index for clarity
+CustomerSchema.index({ customerId: 1 });
+
 module.exports = mongoose.model('Customer', CustomerSchema);

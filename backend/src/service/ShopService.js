@@ -12,6 +12,7 @@ const MeasurementHistorySchema =
 const MeasurementSchema = require('../models/MeasurementModel').schema;
 const OrderItemSchema = require('../models/OrderItemModel').schema;
 const OrderSchema = require('../models/OrderModel').schema;
+const OrderItemAdditionalCostSchema = require('../models/OrderItemAdditionalCostModel').schema;
 const RoleSchema = require('../models/RoleModel').schema;
 const { getDynamicModel } = require('../utils/DynamicModel');
 const { getNextSequenceValue } = require('./sequenceService');
@@ -74,6 +75,7 @@ const createShopService = async (shopData) => {
       );
       getDynamicModel('OrderItem', OrderItemSchema, `orderItem_${shopId}`);
       getDynamicModel('Order', OrderSchema, `order_${shopId}`);
+      getDynamicModel('OrderItemAdditionalCost', OrderItemAdditionalCostSchema, `orderitemadditionalcost_${shopId}`);
       getDynamicModel('Role', RoleSchema, `role_${shopId}`, defaultRoles);
     };
 

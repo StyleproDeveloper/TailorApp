@@ -2,6 +2,7 @@ const Order = require('../models/OrderModel');
 const orderItemModel = require('../models/OrderItemModel');
 const OrderItemMeasurement = require('../models/OrderItemMeasurementModel');
 const OrderItemPattern = require('../models/OrderItemPatternModel');
+const OrderItemAdditionalCost = require('../models/OrderItemAdditionalCostModel');
 const Customer = require('../models/CustomerModel');
 const { getNextSequenceValue } = require('./sequenceService');
 const { isShopExists } = require('../utils/Helper');
@@ -49,12 +50,21 @@ const getCustomerModel = (shop_id) => {
   return mongoose.model(`customer_${shop_id}`, Customer.schema);
 };
 
+//Order Item Additional Cost Table Based on Shop
+const getOrderItemAdditionalCostModel = (shop_id) => {
+  const collectionName = `orderitemadditionalcost_${shop_id}`;
+  return (
+    mongoose.models[collectionName] ||
+    mongoose.model(collectionName, OrderItemAdditionalCost.schema, collectionName)
+  );
+};
+
 const createOrderService = async (orderData, shop_id) => {
   const session = await Order.startSession();
   session.startTransaction();
 
   try {
-    const { Order: orderDetails, Item } = orderData;
+    const { Order: orderDetails, Item, AdditionalCosts } = orderData || {};
 
     // Check if Shop Exists
     const shopExists = await isShopExists(shop_id);
@@ -65,6 +75,7 @@ const createOrderService = async (orderData, shop_id) => {
     const OrderItemModel = getOrderItemModel(shop_id);
     const OrderItemMeasurementModel = getOrderItemMeasurementModel(shop_id);
     const OrderItemPatternModel = getOrderItemPatternModel(shop_id);
+    const OrderItemAdditionalCostModel = getOrderItemAdditionalCostModel(shop_id);
 
     // Generate Order ID
     const orderId = await getNextSequenceValue('orderId');
@@ -96,9 +107,12 @@ const createOrderService = async (orderData, shop_id) => {
     const orderItems = [];
     const orderItemMeasurements = [];
     const orderItemPatterns = [];
+    const orderItemIds = []; // Track order item IDs for linking additional costs
 
     for (const item of Item) {
       const orderItemId = await getNextSequenceValue('orderItemId');
+      orderItemIds.push(orderItemId);
+      
       const orderItemMeasurementId = await getNextSequenceValue(
         'orderItemMeasurementId'
       );
@@ -109,7 +123,7 @@ const createOrderService = async (orderData, shop_id) => {
       orderItems.push({
         orderItemId,
         orderId,
-        dressTypeId: item?.dressTypeId,
+        dressTypeId: item?.dressTypeId ?? null,
         special_instructions: item?.special_instructions,
         recording: item?.recording,
         videoLink: item?.videoLink,
@@ -165,6 +179,33 @@ const createOrderService = async (orderData, shop_id) => {
       await OrderItemPatternModel.insertMany(orderItemPatterns, { session });
     }
 
+    // Save additional costs to the new table
+    if (AdditionalCosts && Array.isArray(AdditionalCosts) && AdditionalCosts.length > 0) {
+      const additionalCostsToInsert = [];
+      // Link additional costs to the first order item (or we could link to all items)
+      const firstOrderItemId = orderItemIds.length > 0 ? orderItemIds[0] : null;
+      
+      if (firstOrderItemId) {
+        for (const additionalCost of AdditionalCosts) {
+          if (additionalCost?.additionalCostName && additionalCost?.additionalCost != null) {
+            const orderItemAdditionalCostId = await getNextSequenceValue('orderItemAdditionalCostId');
+            additionalCostsToInsert.push({
+              orderItemAdditionalCostId,
+              orderItemId: firstOrderItemId,
+              orderId,
+              additionalCostName: additionalCost.additionalCostName,
+              additionalCost: additionalCost.additionalCost,
+              owner: orderDetails?.owner,
+            });
+          }
+        }
+        
+        if (additionalCostsToInsert.length > 0) {
+          await OrderItemAdditionalCostModel.insertMany(additionalCostsToInsert, { session });
+        }
+      }
+    }
+
     // Commit transaction
     await session.commitTransaction();
     session.endSession();
@@ -187,6 +228,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     const OrderItem = getOrderItemModel(shop_id);
     const OrderItemMeasurement = getOrderItemMeasurementModel(shop_id);
     const OrderItemPattern = getOrderItemPatternModel(shop_id);
+    const OrderItemAdditionalCost = getOrderItemAdditionalCostModel(shop_id);
     const Customer = getCustomerModel(shop_id);
 
     // Query params
@@ -206,11 +248,14 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     if (orderId) baseQuery['orderId'] = Number(orderId);
     if (status) baseQuery['status'] = status;
 
-    console.log('baseQuery', baseQuery);
+    // For single order queries, limit to 1 early for better performance
+    const isSingleOrderQuery = !!orderId;
 
     // Main aggregation pipeline
     const aggregatePipeline = [
       { $match: baseQuery },
+      // For single order queries, limit early to improve performance
+      ...(isSingleOrderQuery ? [{ $limit: 1 }] : []),
       {
         $lookup: {
           from: Customer.collection.name,
@@ -237,59 +282,101 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       {
         $lookup: {
           from: OrderItem.collection.name,
-          let: { orderId: '$orderId' },
+          localField: 'orderId',
+          foreignField: 'orderId',
+          as: 'items',
+        },
+      },
+      {
+        $unwind: {
+          path: '$items',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $lookup: {
+          from: OrderItemMeasurement.collection.name,
+          let: { 
+            orderId: '$orderId',
+            orderItemId: '$items.orderItemId'
+          },
           pipeline: [
             {
               $match: {
-                $expr: { $eq: ['$orderId', '$$orderId'] },
+                $expr: {
+                  $and: [
+                    { $eq: ['$orderId', '$$orderId'] },
+                    { $eq: ['$orderItemId', '$$orderItemId'] },
+                  ],
+                },
               },
             },
+            { $limit: 1 },
+          ],
+          as: 'measurementArray',
+        },
+      },
+      {
+        $addFields: {
+          'items.Measurement': { $arrayElemAt: ['$measurementArray', 0] },
+          measurementArray: '$$REMOVE',
+        },
+      },
+      {
+        $lookup: {
+          from: OrderItemPattern.collection.name,
+          let: { 
+            orderId: '$orderId',
+            orderItemId: '$items.orderItemId'
+          },
+          pipeline: [
             {
-              $lookup: {
-                from: OrderItemMeasurement.collection.name,
-                let: {
-                  orderId: '$orderId',
-                  orderItemId: '$orderItemId',
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$orderId', '$$orderId'] },
+                    { $eq: ['$orderItemId', '$$orderItemId'] },
+                  ],
                 },
-                pipeline: [
-                  {
-                    $match: {
-                      $expr: {
-                        $and: [
-                          { $eq: ['$orderId', '$$orderId'] },
-                          { $eq: ['$orderItemId', '$$orderItemId'] },
-                        ],
-                      },
-                    },
-                  },
-                ],
-                as: 'measurement',
-              },
-            },
-            {
-              $lookup: {
-                from: OrderItemPattern.collection.name,
-                let: {
-                  orderId: '$orderId',
-                  orderItemId: '$orderItemId',
-                },
-                pipeline: [
-                  {
-                    $match: {
-                      $expr: {
-                        $and: [
-                          { $eq: ['$orderId', '$$orderId'] },
-                          { $eq: ['$orderItemId', '$$orderItemId'] },
-                        ],
-                      },
-                    },
-                  },
-                ],
-                as: 'pattern',
               },
             },
           ],
-          as: 'items',
+          as: 'items.Pattern',
+        },
+      },
+      {
+        $group: {
+          _id: '$_id',
+          orderId: { $first: '$orderId' },
+          customerId: { $first: '$customerId' },
+          customer_name: { $first: '$customer_name' },
+          shop_id: { $first: '$shop_id' },
+          branchId: { $first: '$branchId' },
+          stitchingType: { $first: '$stitchingType' },
+          noOfMeasurementDresses: { $first: '$noOfMeasurementDresses' },
+          quantity: { $first: '$quantity' },
+          urgent: { $first: '$urgent' },
+          status: { $first: '$status' },
+          estimationCost: { $first: '$estimationCost' },
+          advancereceived: { $first: '$advancereceived' },
+          advanceReceivedDate: { $first: '$advanceReceivedDate' },
+          gst: { $first: '$gst' },
+          gst_amount: { $first: '$gst_amount' },
+          courier: { $first: '$courier' },
+          courierCharge: { $first: '$courierCharge' },
+          discount: { $first: '$discount' },
+          owner: { $first: '$owner' },
+          createdAt: { $first: '$createdAt' },
+          updatedAt: { $first: '$updatedAt' },
+          items: { $push: '$items' },
+        },
+      },
+      {
+        $lookup: {
+          from: OrderItemAdditionalCost.collection.name,
+          localField: 'orderId',
+          foreignField: 'orderId',
+          as: 'additionalCosts',
         },
       },
       // Apply sorting and other options
@@ -320,7 +407,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
   session.startTransaction();
 
   try {
-    const { Order: orderDetails, Item } = orderData;
+    const { Order: orderDetails, Item, AdditionalCosts } = orderData || {};
 
     // Check if shop exists
     const shopExists = await isShopExists(shop_id);
@@ -331,6 +418,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
     const OrderItemModel = getOrderItemModel(shop_id);
     const OrderItemMeasurementModel = getOrderItemMeasurementModel(shop_id);
     const OrderItemPatternModel = getOrderItemPatternModel(shop_id);
+    const OrderItemAdditionalCostModel = getOrderItemAdditionalCostModel(shop_id);
 
     // Check if order exists
     const existingOrder = await OrderModel.findOne({ orderId });
@@ -412,7 +500,8 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
 
     for (const item of Item) {
       console.log('item', item);
-      // Require IDs for update
+      
+      // Require IDs for update of regular items
       if (
         !item?.orderItemId ||
         !item?.Measurement?.orderItemMeasurementId ||
@@ -424,8 +513,6 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
       const orderItemId = item.orderItemId;
       const orderItemMeasurementId = item.Measurement.orderItemMeasurementId;
       const orderItemPatternId = item.Pattern[0].orderItemPatternId;
-
-      // const { orderItemId, orderItemMeasurementId, orderItemPatternId } = item;
 
       // Update Order Item
       await OrderItemModel.updateOne(
@@ -441,6 +528,8 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
             amount: item.amount,
             status: item.status,
             owner: item.owner,
+            isAdditionalCost: item?.isAdditionalCost ?? false,
+            additionalCostDescription: item?.additionalCostDescription ?? null,
           },
         },
         { session }
@@ -474,6 +563,37 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         },
         { session }
       );
+    }
+
+    // Handle additional costs - delete existing and recreate
+    if (AdditionalCosts !== undefined) {
+      // Delete all existing additional costs for this order
+      await OrderItemAdditionalCostModel.deleteMany({ orderId }, { session });
+      
+      // Get the first order item ID to link additional costs to
+      const firstOrderItem = await OrderItemModel.findOne({ orderId }).sort({ orderItemId: 1 });
+      const firstOrderItemId = firstOrderItem?.orderItemId;
+      
+      if (firstOrderItemId && Array.isArray(AdditionalCosts) && AdditionalCosts.length > 0) {
+        const additionalCostsToInsert = [];
+        for (const additionalCost of AdditionalCosts) {
+          if (additionalCost?.additionalCostName && additionalCost?.additionalCost != null) {
+            const orderItemAdditionalCostId = await getNextSequenceValue('orderItemAdditionalCostId');
+            additionalCostsToInsert.push({
+              orderItemAdditionalCostId,
+              orderItemId: firstOrderItemId,
+              orderId,
+              additionalCostName: additionalCost.additionalCostName,
+              additionalCost: additionalCost.additionalCost,
+              owner: orderDetails?.owner,
+            });
+          }
+        }
+        
+        if (additionalCostsToInsert.length > 0) {
+          await OrderItemAdditionalCostModel.insertMany(additionalCostsToInsert, { session });
+        }
+      }
     }
 
     await session.commitTransaction();

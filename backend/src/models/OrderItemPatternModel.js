@@ -43,4 +43,9 @@ const OrderItemPatternSchema = new Schema(
     versionKey: false,
   }
 );
+
+// Add indexes for better query performance
+OrderItemPatternSchema.index({ orderId: 1, orderItemId: 1 });
+OrderItemPatternSchema.index({ orderId: 1 });
+
 module.exports = mongoose.model('OrderItemPattern', OrderItemPatternSchema);
