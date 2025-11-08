@@ -36,7 +36,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   List<Map<String, dynamic>> dressTypes = [];
   bool isUrgent = false;
   List<OrderItem> orderItems = [OrderItem()];
-  List<Map<String, TextEditingController>> additionalCostControllers = [];
+  List<Map<String, dynamic>> additionalCostControllers = [];
   bool isCourierChecked = false;
   bool isGstChecked = false;
   final TextEditingController courierController = TextEditingController();
@@ -522,7 +522,7 @@ await _loadDataInBackground();
             final name = measurement['name'].toString();
             final key = name.toLowerCase().replaceAll(' ', '_');
             final controller = existingMeasurements[key] ?? 
-                TextEditingController(text: '0');
+                TextEditingController(text: '');
             print(
                 'Measurement: $name, controller.text=${controller.text}, hashCode=${controller.hashCode}');
             return {
@@ -756,7 +756,7 @@ await _loadDataInBackground();
                         .map((entry) {
                       print(
                           'Raw measurement value for ${entry.key}: ${entry.value}');
-                      final value = entry.value?.toString() ?? '0';
+                      final value = entry.value?.toString() ?? '';
                       final controller = TextEditingController(text: value);
                       print(
                           'Created controller for ${entry.key} with value: ${controller.text}, hashCode: ${controller.hashCode}');
@@ -804,24 +804,29 @@ await _loadDataInBackground();
             return orderItem;
           }).toList();
 
-          additionalCostControllers =
-              (order['additionalCosts'] as List<dynamic>?)?.map((cost) {
-                    final controller = {
-                      'description':
-                          TextEditingController(text: cost['description'] ?? ''),
+          // Load additional costs from order data
+          final additionalCostsData = (order['additionalCosts'] as List<dynamic>?) ?? [];
+          additionalCostControllers = additionalCostsData.map((cost) {
+                    final controller = <String, dynamic>{
+                      'description': TextEditingController(
+                          text: cost['additionalCostName']?.toString() ?? ''),
                       'amount': TextEditingController(
-                          text: cost['amount']?.toString() ?? ''),
+                          text: cost['additionalCost']?.toString() ?? ''),
                     };
                     // Add listener to amount controller
-                    controller['amount']?.addListener(_updateTotalCost);
+                    (controller['amount'] as TextEditingController)?.addListener(_updateTotalCost);
                     return controller;
-                  }).toList() ??
-                  [
-                    {
-                      'description': TextEditingController(),
-                      'amount': TextEditingController(),
-                    }
-                  ];
+                  }).toList();
+          
+          // If no additional costs exist, initialize with one empty controller
+          if (additionalCostControllers.isEmpty) {
+            additionalCostControllers = [
+              {
+                'description': TextEditingController(),
+                'amount': TextEditingController(),
+              }
+            ];
+          }
 
           // Add listeners to existing additional cost controllers
           for (var cost in additionalCostControllers) {
@@ -1169,6 +1174,18 @@ await _loadDataInBackground();
     return itemMap;
   }).toList();
 
+  // Prepare additional costs for the new table
+  List<Map<String, dynamic>> additionalCosts = additionalCostControllers
+      .where((cost) => 
+          (cost['description']?.text?.trim().isNotEmpty ?? false) &&
+          (cost['amount']?.text?.trim().isNotEmpty ?? false))
+      .map((cost) {
+    return {
+      "additionalCostName": cost['description']?.text ?? "",
+      "additionalCost": double.tryParse(cost['amount']?.text ?? "0") ?? 0.0,
+    };
+  }).toList();
+
   int? selectedOrderTypeId;
   // Backend expects 1,2,3 per CommonEnumValues.StitchingTypes
   if (selectedOrderType == "Stitching") {
@@ -1202,6 +1219,7 @@ await _loadDataInBackground();
       "owner": userId.toString(),
     },
     "Item": items,
+    "AdditionalCosts": additionalCosts,
   };
 
   print('Payload => $payload');

@@ -394,7 +394,20 @@ class _OrderScreenState extends State<OrderScreen>
     final createdAt =
         DateTime.parse(order['createdAt'] ?? DateTime.now().toString());
     final formattedDate = DateFormat('MMM dd, yyyy').format(createdAt);
-    final price = order['estimationCost']?.toString() ?? '0';
+    
+    // Calculate total from sum of all item amounts
+    final items = order['items'] as List<dynamic>? ?? [];
+    double totalAmount = 0.0;
+    for (var item in items) {
+      final amount = (item['amount'] ?? 0).toDouble();
+      totalAmount += amount;
+    }
+    // Fallback to estimationCost if items don't have amounts (for backward compatibility)
+    if (totalAmount == 0.0 && order['estimationCost'] != null) {
+      totalAmount = (order['estimationCost'] ?? 0).toDouble();
+    }
+    
+    final price = totalAmount.toStringAsFixed(0);
     final formattedPrice =
         '₹${NumberFormat('#,##0').format(double.parse(price))}';
     

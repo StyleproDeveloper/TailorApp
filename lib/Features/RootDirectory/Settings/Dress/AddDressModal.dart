@@ -133,12 +133,15 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
           measurementTypeIds.clear();
           patternTypeIds.clear();
           
-          // Process dress-specific measurements with optimized lookup
+          // Process dress-specific measurements - display ALL from backend
           for (var fetchedMeasurement in fetchedMeasurements) {
             String name = fetchedMeasurement["name"];
             var matchingMeasurement = measurementLookup[name];
+            
+            // Add measurement even if it doesn't exist in master list
+            // This ensures all measurements from backend are displayed
             if (matchingMeasurement != null) {
-              // Add to dress-specific measurements list
+              // Measurement exists in master list - use master data
               dressMeasurements.add({
                 ...matchingMeasurement,
                 "dressTypeMeasurementId": fetchedMeasurement["dressTypeMeasurementId"],
@@ -148,6 +151,22 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
               String id = matchingMeasurement["_id"].toString();
               selectedMeasurements[id] = true;
               measurementTypeIds[id] = fetchedMeasurement["dressTypeMeasurementId"];
+            } else {
+              // Measurement doesn't exist in master list but exists in backend
+              // Create a temporary entry to display it
+              String tempId = "temp_${fetchedMeasurement["dressTypeMeasurementId"]}";
+              dressMeasurements.add({
+                "_id": tempId,
+                "measurementId": 0, // Placeholder since not in master list
+                "name": name,
+                "dressTypeMeasurementId": fetchedMeasurement["dressTypeMeasurementId"],
+              });
+              
+              // Mark as selected
+              selectedMeasurements[tempId] = true;
+              measurementTypeIds[tempId] = fetchedMeasurement["dressTypeMeasurementId"];
+              
+              print('⚠️ Measurement "$name" exists in backend but not in master list');
             }
           }
 
@@ -358,7 +377,8 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
 
   Future<void> getDressMeasurement() async {
     int? id = GlobalVariables.shopIdGet;
-    final String requestUrl = "${Urls.getMeasurement}/$id";
+    // Fetch all measurements by using a large pageSize to get all records
+    final String requestUrl = "${Urls.getMeasurement}/$id?pageNumber=1&pageSize=1000";
 
     try {
       final response = await ApiService().get(requestUrl, context);

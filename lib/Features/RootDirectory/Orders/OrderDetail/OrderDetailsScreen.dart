@@ -180,6 +180,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             _buildHeader(),
             const SizedBox(height: 16),
             ..._buildOrderItems(),
+            ..._buildAdditionalCostItems(),
             const SizedBox(height: 16),
             _buildCostSummary(),
             const SizedBox(height: 16),
@@ -289,9 +290,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           ? measurementList[0] as Map<String, dynamic>
           : {};
 
-      final String itemCost = (order?['quantity'] == 1)
-          ? (order?['estimationCost']?.toString() ?? '0')
-          : (item['amount'] ?? 0).toString();
+      // Always use item amount for cost display
+      final String itemCost = (item['amount']?.toString() ?? '0');
 
       if (measurement.isNotEmpty) {
         final measurementFields = measurement.entries
@@ -325,6 +325,70 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         );
       }
     }).toList();
+  }
+
+  // Build additional cost items display
+  List<Widget> _buildAdditionalCostItems() {
+    final additionalCosts = order?['additionalCosts'] as List<dynamic>? ?? [];
+    
+    if (additionalCosts.isEmpty) {
+      return [];
+    }
+    
+    return [
+      const SizedBox(height: 16),
+      const Text(
+        'Additional Costs',
+        style: Orderdetailstyles.titleHeaders,
+      ),
+      const SizedBox(height: 8),
+      ...additionalCosts.asMap().entries.map((entry) {
+        final index = entry.key;
+        final cost = entry.value as Map<String, dynamic>;
+        final description = cost['additionalCostName']?.toString() ?? 'Additional Cost';
+        final amount = cost['additionalCost']?.toString() ?? '0';
+        
+        return Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(width: 0.5, color: Colors.grey),
+          ),
+          color: Colors.white,
+          elevation: 3,
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        description,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '₹${NumberFormat('#,##0').format(double.tryParse(amount) ?? 0)}',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    ];
   }
 
   Widget _buildItemCard({
@@ -478,13 +542,49 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   Widget _buildCostSummary() {
-    final subtotal = order?['estimationCost']?.toString() ?? '0';
+    // Calculate subtotal by summing all item amounts
+    final items = order?['items'] as List<dynamic>? ?? [];
+    double itemsTotal = 0.0;
+    for (var item in items) {
+      final amount = (item['amount'] ?? 0).toDouble();
+      itemsTotal += amount;
+    }
+    
+    // Add additional costs from order data
+    final additionalCosts = order?['additionalCosts'] as List<dynamic>? ?? [];
+    double additionalCostsTotal = 0.0;
+    for (var cost in additionalCosts) {
+      final amount = (cost['additionalCost'] ?? 0).toDouble();
+      additionalCostsTotal += amount;
+    }
+    
+    // Calculate subtotal: items + additional costs
+    double subtotalValue = itemsTotal + additionalCostsTotal;
+    
+    // If no additional costs in data but estimationCost is higher than items total,
+    // use estimationCost (which includes additional costs)
+    if (additionalCostsTotal == 0.0 && 
+        order?['estimationCost'] != null && 
+        itemsTotal > 0.0) {
+      final estimationCost = (order?['estimationCost'] ?? 0).toDouble();
+      // If estimationCost is higher than items total, the difference is likely additional costs
+      if (estimationCost > itemsTotal) {
+        subtotalValue = estimationCost;
+      } else {
+        subtotalValue = itemsTotal;
+      }
+    } else if (subtotalValue == 0.0 && order?['estimationCost'] != null) {
+      // Fallback: use estimationCost if no items have amounts
+      subtotalValue = (order?['estimationCost'] ?? 0).toDouble();
+    }
+    
+    final subtotal = subtotalValue.toStringAsFixed(0);
     final courierCharge = order?['courierCharge']?.toString() ?? '0';
     final gst = order?['gst'] == true
-        ? (double.parse(subtotal) * 0.18).toStringAsFixed(0)
+        ? (subtotalValue * 0.18).toStringAsFixed(0)
         : '0';
     final advanceReceived = order?['advancereceived']?.toString() ?? '0';
-    final total = (double.parse(subtotal) +
+    final total = (subtotalValue +
             double.parse(courierCharge) +
             double.parse(gst))
         .toStringAsFixed(0);
