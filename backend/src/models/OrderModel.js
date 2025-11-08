@@ -97,6 +97,12 @@ const OrderSchema = new Schema(
   }
 );
 
+// Add indexes for better query performance
+OrderSchema.index({ orderId: 1 });
+OrderSchema.index({ customerId: 1 });
+OrderSchema.index({ status: 1 });
+OrderSchema.index({ createdAt: -1 });
+
 module.exports = mongoose.model('order', OrderSchema);
 
 OrderSchema.pre('save', function (next) {

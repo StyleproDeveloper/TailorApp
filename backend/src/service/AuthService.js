@@ -15,8 +15,35 @@ const loginService = async (mobileNumber) => {
       throw new Error('Mobile number is required');
     }
 
-    // Find the user by mobile number
-    const user = await User.findOne({ mobile: mobileNumber });
+    // Normalize mobile number: remove spaces, dashes, and other non-digit characters except leading +
+    let normalizedMobile = mobileNumber.toString().trim();
+    
+    // Try exact match first
+    let user = await User.findOne({ mobile: normalizedMobile });
+    
+    // If not found, try with different formats
+    if (!user) {
+      // Try with + prefix
+      user = await User.findOne({ mobile: `+${normalizedMobile}` });
+    }
+    
+    if (!user) {
+      // Try without country code (last 10 digits)
+      const last10Digits = normalizedMobile.slice(-10);
+      user = await User.findOne({ mobile: last10Digits });
+    }
+    
+    if (!user) {
+      // Try with country code (if it starts with 91, try with +91)
+      if (normalizedMobile.startsWith('91') && normalizedMobile.length > 10) {
+        user = await User.findOne({ mobile: `+${normalizedMobile}` });
+      }
+    }
+
+    // Log for debugging
+    console.log('Login attempt - Received:', mobileNumber);
+    console.log('Login attempt - Normalized:', normalizedMobile);
+    console.log('Login attempt - User found:', user ? 'Yes' : 'No');
 
     // If user does not exist, throw an error
     if (!user) {
@@ -59,8 +86,29 @@ const validateOTPService = async (mobileNumber, otp) => {
     // Remove OTP after successful validation
     otpStore.delete(mobileNumber);
 
-    // Retrieve user details
-    const user = await User.findOne({ mobile: mobileNumber });
+    // Normalize mobile number
+    let normalizedMobile = mobileNumber.toString().trim();
+    
+    // Retrieve user details - try multiple formats
+    let user = await User.findOne({ mobile: normalizedMobile });
+    
+    if (!user) {
+      // Try with + prefix
+      user = await User.findOne({ mobile: `+${normalizedMobile}` });
+    }
+    
+    if (!user) {
+      // Try without country code (last 10 digits)
+      const last10Digits = normalizedMobile.slice(-10);
+      user = await User.findOne({ mobile: last10Digits });
+    }
+    
+    if (!user) {
+      // Try with country code format
+      if (normalizedMobile.startsWith('91') && normalizedMobile.length > 10) {
+        user = await User.findOne({ mobile: `+${normalizedMobile}` });
+      }
+    }
 
     if (!user) {
       throw new Error('User not found');

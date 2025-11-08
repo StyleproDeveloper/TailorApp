@@ -101,6 +101,10 @@ const OrderItemMeasurementSchema = new Schema(
   }
 );
 
+// Add indexes for better query performance
+OrderItemMeasurementSchema.index({ orderId: 1, orderItemId: 1 });
+OrderItemMeasurementSchema.index({ orderId: 1 });
+
 module.exports = mongoose.model(
   'OrderItemMeasurement',
   OrderItemMeasurementSchema
