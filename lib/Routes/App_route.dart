@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tailorapp/Features/AuthDirectory/Login/LoginScreen.dart';
 import 'package:tailorapp/Features/AuthDirectory/Otp/OtpVerification.dart';
 import 'package:tailorapp/Features/AuthDirectory/SignUp/RegisterScreen.dart';
+import 'package:tailorapp/Features/AuthDirectory/SignUp/RegistrationSuccessScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/Orders/OrderDetail/OrderDetailsScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/Settings/BillingTerms/billing_details_screen.dart';
 import 'package:tailorapp/Features/RootDirectory/Settings/Branches/BranchesScreen.dart';
@@ -36,6 +37,7 @@ class AppRoutes {
   static const String billingTermsScreen = './billingTermsScreen';
   static const String orderDetailsScreen = './orderDetailsScreen';
   static const String shopDetailsScreen = './shopDetailsScreen';
+  static const String registrationSuccess = './registrationSuccess';
 
   static Map<String, WidgetBuilder> routes = {
     home: (context) => const Splashscreen(), // Root route redirects to splash
@@ -56,5 +58,6 @@ class AppRoutes {
     billingTermsScreen: (context) => BillingDetailsScreen(),
     orderDetailsScreen: (context) => OrderDetailsScreen(),
     shopDetailsScreen: (context) => ShopDetailsScreen(),
+    registrationSuccess: (context) => const RegistrationSuccessScreen(),
   };
 }

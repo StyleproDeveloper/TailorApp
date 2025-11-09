@@ -83,9 +83,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       if (response.data) {
-        CustomSnackbar.showSnackbar(context, response.data['message'],
-            duration: Duration(seconds: 1));
-        Navigator.pushNamed(context, AppRoutes.login);
+        // Navigate to success page instead of directly to login
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.registrationSuccess,
+          (route) => false, // Remove all previous routes
+        );
       } else {
         CustomSnackbar.showSnackbar(context, response.data['message'],
             duration: Duration(seconds: 1));
