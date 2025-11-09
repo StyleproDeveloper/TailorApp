@@ -234,7 +234,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     // Query params
     const { orderId, status } = queryParams;
 
-    const searchableFields = ['customer', 'owner'];
+    const searchableFields = ['owner'];
     const numericFields = ['orderId'];
     const options = buildQueryOptions(
       queryParams,
@@ -243,13 +243,16 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       numericFields
     );
 
-    // Base query for countDocuments
+    // Base query for countDocuments (exclude customer search - will be done in aggregation)
     const baseQuery = { ...options.search, ...options.booleanFilters };
     if (orderId) baseQuery['orderId'] = Number(orderId);
     if (status) baseQuery['status'] = status;
 
     // For single order queries, limit to 1 early for better performance
     const isSingleOrderQuery = !!orderId;
+    
+    // Get search keyword for customer name/mobile search
+    const searchKeyword = queryParams?.searchKeyword || '';
 
     // Main aggregation pipeline
     const aggregatePipeline = [
@@ -274,8 +277,19 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       {
         $addFields: {
           customer_name: '$customerInfo.name',
+          customer_mobile: '$customerInfo.mobile',
         },
       },
+      // Add search filter for customer name and mobile after customer lookup
+      ...(searchKeyword ? [{
+        $match: {
+          $or: [
+            { customer_name: { $regex: searchKeyword, $options: 'i' } },
+            { customer_mobile: { $regex: searchKeyword, $options: 'i' } },
+            { owner: { $regex: searchKeyword, $options: 'i' } },
+          ],
+        },
+      }] : []),
       {
         $unset: 'customerInfo',
       },
@@ -395,19 +409,38 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       { $sort: options.sort || { createdAt: -1 } },
     ];
 
-    // Prepare pagination options
-    const paginationOptions = {
-      aggregate: aggregatePipeline,
-      page: options.page || 1,
-      limit: options.limit || 10,
-      sortBy: options.sort || { createdAt: -1 },
-      searchKeyword: options.searchKeyword,
-      searchBy: searchableFields,
-      select: null,
-    };
+    // For accurate count when searching by customer, we need to count after aggregation
+    // Create a count pipeline (same as main pipeline but with $count at the end)
+    const countPipeline = [
+      ...aggregatePipeline.slice(0, -1), // Remove the $sort stage for count
+      { $count: 'total' },
+    ];
 
-    const result = await paginate(Order, baseQuery, paginationOptions);
-    return result;
+    // Get total count using aggregation
+    const countResult = await Order.aggregate(countPipeline);
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+
+    // Apply pagination to the main pipeline
+    const page = options.page || 1;
+    const limit = options.limit || 10;
+    const skip = (page - 1) * limit;
+
+    // Add pagination stages
+    const finalPipeline = [
+      ...aggregatePipeline,
+      { $skip: skip },
+      { $limit: limit },
+    ];
+
+    // Execute aggregation
+    const data = await Order.aggregate(finalPipeline);
+
+    return {
+      total,
+      pageSize: limit,
+      pageNumber: page,
+      data,
+    };
   } catch (error) {
     console.error('Error in getAllOrdersService:', error);
     throw error;
