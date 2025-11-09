@@ -525,7 +525,17 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     ];
 
     // Execute aggregation
+    console.log('🔍 Executing aggregation pipeline...');
     const data = await Order.aggregate(finalPipeline);
+    console.log(`🔍 Aggregation returned ${data.length} orders (total: ${total})`);
+    
+    // Log first order's customer info if available for debugging
+    if (data.length > 0 && searchKeyword) {
+      const firstOrder = data[0];
+      console.log('🔍 First order customer_name:', firstOrder.customer_name);
+      console.log('🔍 First order customer_mobile:', firstOrder.customer_mobile);
+      console.log('🔍 First order owner:', firstOrder.owner);
+    }
 
     return {
       total,
