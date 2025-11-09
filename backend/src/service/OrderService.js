@@ -295,29 +295,29 @@ const getAllOrdersService = async (shop_id, queryParams) => {
 
       {
         $addFields: {
-          customer_name: '$customerInfo.name',
-          customer_mobile: '$customerInfo.mobile',
+          customer_name: { $ifNull: ['$customerInfo.name', ''] },
+          customer_mobile: { $ifNull: ['$customerInfo.mobile', ''] },
         },
       },
       // Add search filter for customer name and mobile after customer lookup
       ...(searchKeyword ? [{
         $match: {
           $or: [
-            { customer_name: { $regex: searchKeyword, $options: 'i' } },
-            { 
-              customer_mobile: { 
-                $regex: searchKeyword.replace(/[^0-9+]/g, ''), 
-                $options: 'i' 
-              } 
-            },
-            { owner: { $regex: searchKeyword, $options: 'i' } },
-            // Also search mobile without + and country code
-            ...(searchKeyword.replace(/[^0-9]/g, '').length >= 10 ? [{
-              customer_mobile: { 
-                $regex: searchKeyword.replace(/[^0-9]/g, '').slice(-10), 
-                $options: 'i' 
-              }
-            }] : []),
+            // Search by customer name
+            { customer_name: { $regex: searchKeyword.trim(), $options: 'i' } },
+            // Search by owner
+            { owner: { $regex: searchKeyword.trim(), $options: 'i' } },
+            // Search by mobile - handle various formats
+            ...(searchKeyword.replace(/[^0-9]/g, '').length > 0 ? [
+              // Exact match with + and numbers
+              { customer_mobile: { $regex: searchKeyword.replace(/[^0-9+]/g, ''), $options: 'i' } },
+              // Match last 10 digits (for numbers like 919731033833 or 9731033833)
+              ...(searchKeyword.replace(/[^0-9]/g, '').length >= 10 ? [{
+                customer_mobile: { $regex: searchKeyword.replace(/[^0-9]/g, '').slice(-10), $options: 'i' }
+              }] : []),
+              // Match without + prefix
+              { customer_mobile: { $regex: searchKeyword.replace(/[^0-9]/g, ''), $options: 'i' } },
+            ] : []),
           ],
         },
       }] : []),
