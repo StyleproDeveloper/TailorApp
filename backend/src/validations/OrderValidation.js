@@ -125,7 +125,7 @@ const orderSchema = Joi.object({
 const createOrderPayloadSchema = Joi.object({
   Order: orderSchema.required(),
   Item: Joi.array().items(itemSchema).min(1).required(),
-  AdditionalCosts: Joi.array().items(additionalCostSchema).allow(null, []).optional().default([]),
-}).unknown(false); // Explicitly validate known fields
+  AdditionalCosts: Joi.array().items(additionalCostSchema).allow(null).optional().default([]),
+});
 
 module.exports = createOrderPayloadSchema;
