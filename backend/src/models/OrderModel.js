@@ -45,9 +45,9 @@ const OrderSchema = new Schema(
     // stitchingCharge: {
     //   type: Number,
     // },
-    // deliveryDate: {
-    //   type: String,
-    // },
+    deliveryDate: {
+      type: String,
+    },
     // trialDate: {
     //   type: String,
     // },

@@ -80,6 +80,19 @@ const createOrderService = async (orderData, shop_id) => {
     // Generate Order ID
     const orderId = await getNextSequenceValue('orderId');
 
+    // Calculate earliest delivery date from all items
+    let earliestDeliveryDate = null;
+    if (Item && Item.length > 0) {
+      const deliveryDates = Item
+        .map(item => item?.delivery_date)
+        .filter(date => date && date.trim() !== '')
+        .sort(); // Sort dates as strings (yyyy-MM-dd format)
+      
+      if (deliveryDates.length > 0) {
+        earliestDeliveryDate = deliveryDates[0]; // First date after sorting
+      }
+    }
+
     // Create Order Document
     const order = new OrderModel({
       orderId,
@@ -94,6 +107,7 @@ const createOrderService = async (orderData, shop_id) => {
       estimationCost: orderDetails?.estimationCost,
       advancereceived: orderDetails?.advancereceived,
       advanceReceivedDate: orderDetails?.advanceReceivedDate,
+      deliveryDate: earliestDeliveryDate, // Set earliest delivery date from items
       gst: orderDetails?.gst,
       courier: orderDetails?.Courier,
       courierCharge: orderDetails?.courierCharge,
@@ -571,10 +585,24 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
     const existingOrder = await OrderModel.findOne({ orderId });
     if (!existingOrder) throw new Error(`Order with ID ${orderId} not found`);
 
+    // Calculate earliest delivery date from all items
+    let earliestDeliveryDate = null;
+    if (Item && Item.length > 0) {
+      const deliveryDates = Item
+        .map(item => item?.delivery_date)
+        .filter(date => date && date.trim() !== '')
+        .sort(); // Sort dates as strings (yyyy-MM-dd format)
+      
+      if (deliveryDates.length > 0) {
+        earliestDeliveryDate = deliveryDates[0]; // First date after sorting
+      }
+    }
+
     // Update the main Order document
     Object.assign(existingOrder, {
       ...orderDetails,
       courier: orderDetails?.Courier, // ensure consistency in field name
+      deliveryDate: earliestDeliveryDate, // Set earliest delivery date from items
     });
 
     await existingOrder.save({ session });
