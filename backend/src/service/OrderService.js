@@ -318,7 +318,13 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       },
       {
         $addFields: {
-          'items.Measurement': { $arrayElemAt: ['$measurementArray', 0] },
+          'items.measurement': {
+            $cond: {
+              if: { $gt: [{ $size: '$measurementArray' }, 0] },
+              then: [{ $arrayElemAt: ['$measurementArray', 0] }],
+              else: []
+            }
+          },
           measurementArray: '$$REMOVE',
         },
       },
