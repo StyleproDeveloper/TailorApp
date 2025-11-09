@@ -232,7 +232,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     const Customer = getCustomerModel(shop_id);
 
     // Query params
-    const { orderId, status } = queryParams;
+    const { orderId, status, filterType } = queryParams;
 
     const searchableFields = ['owner'];
     const numericFields = ['orderId'];
@@ -247,6 +247,25 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     const baseQuery = { ...options.search, ...options.booleanFilters };
     if (orderId) baseQuery['orderId'] = Number(orderId);
     if (status) baseQuery['status'] = status;
+
+    // Handle date filters
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    if (filterType === 'createdToday') {
+      baseQuery['createdAt'] = {
+        $gte: today,
+        $lte: todayEnd,
+      };
+    }
 
     // For single order queries, limit to 1 early for better performance
     const isSingleOrderQuery = !!orderId;
@@ -285,7 +304,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
         $match: {
           $or: [
             { customer_name: { $regex: searchKeyword, $options: 'i' } },
-            { customer_mobile: { $regex: searchKeyword, $options: 'i' } },
+            { customer_mobile: { $regex: searchKeyword.replace(/[^0-9]/g, ''), $options: 'i' } }, // Remove non-numeric chars for mobile search
             { owner: { $regex: searchKeyword, $options: 'i' } },
           ],
         },
@@ -405,6 +424,34 @@ const getAllOrdersService = async (shop_id, queryParams) => {
           as: 'additionalCosts',
         },
       },
+      // Add delivery date filter after items are grouped
+      ...(filterType === 'deliveryToday' || filterType === 'deliveryThisWeek' ? [{
+        $match: {
+          $expr: {
+            $gt: [{
+              $size: {
+                $filter: {
+                  input: '$items',
+                  as: 'item',
+                  cond: filterType === 'deliveryToday' 
+                    ? {
+                        $eq: [
+                          '$$item.delivery_date',
+                          new Date().toISOString().split('T')[0]
+                        ]
+                      }
+                    : {
+                        $and: [
+                          { $gte: ['$$item.delivery_date', weekStart.toISOString().split('T')[0]] },
+                          { $lte: ['$$item.delivery_date', weekEnd.toISOString().split('T')[0]] }
+                        ]
+                      }
+                }
+              }
+            }, 0]
+          }
+        }
+      }] : []),
       // Apply sorting and other options
       { $sort: options.sort || { createdAt: -1 } },
     ];
