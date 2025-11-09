@@ -22,6 +22,7 @@ const { paginate } = require('../utils/commonPagination');
 const { createUserService } = require('./UserService');
 const { getRoleModel } = require('./RoleService');
 const mongoose = require('mongoose');
+const logger = require('../utils/logger');
 
 const createShopService = async (shopData) => {
   try {
@@ -39,7 +40,7 @@ const createShopService = async (shopData) => {
       subscriptionType =
         SubscriptionEnumMapping[subscriptionType] || SubscriptionEnum.TRIAL; // Default to TRIAL if invalid
     }
-    console.log('defaultRoles', defaultRoles);
+    logger.debug('Default roles initialized', { count: defaultRoles.length });
 
     const newShop = new ShopInfo({
       ...shopData,
@@ -66,13 +67,16 @@ const createShopService = async (shopData) => {
           
           if (documentsToInsert.length > 0) {
             await dressTypeModel.insertMany(documentsToInsert);
-            console.log(`✅ Copied ${documentsToInsert.length} dress types from masterdresstype to dressType_${shopId}`);
+            logger.info(`Copied dress types from masterdresstype`, {
+              shopId,
+              count: documentsToInsert.length,
+            });
           }
         } else {
-          console.log(`⚠️  No dress types found in masterdresstype collection`);
+          logger.warn('No dress types found in masterdresstype collection', { shopId });
         }
       } catch (copyError) {
-        console.error(`⚠️  Error copying dress types from masterdresstype: ${copyError.message}`);
+        logger.error('Error copying dress types from masterdresstype', copyError);
         // Continue even if copy fails - collection is still created
       }
       
@@ -122,7 +126,7 @@ const createShopService = async (shopData) => {
       const ownerRole = await RoleModel.findOne({ name: 'Owner' });
       
       if (!ownerRole) {
-        console.warn(`Owner role not found for shop ${shopId}. User creation skipped.`);
+        logger.warn('Owner role not found for shop. User creation skipped.', { shopId });
         return savedShop;
       }
 
@@ -143,10 +147,13 @@ const createShopService = async (shopData) => {
 
       // Create the user
       await createUserService(userData);
-      console.log(`User created successfully for shop ${shopId} with Owner role`);
+      logger.info('User created successfully for shop with Owner role', {
+        shopId,
+        userId: userData.mobile,
+      });
     } catch (userError) {
       // Log error but don't fail shop creation if user creation fails
-      console.error(`Error creating user for shop ${shopId}:`, userError.message);
+      logger.error('Error creating user for shop', userError, { shopId });
       // Continue - shop is already created
     }
 
