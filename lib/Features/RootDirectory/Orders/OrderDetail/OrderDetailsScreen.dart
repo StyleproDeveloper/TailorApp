@@ -217,12 +217,13 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   String _getDeliveryDate() {
     // First try to get delivery date from order level (earliest date from all items)
-    if (order?['deliveryDate'] != null && order?['deliveryDate'].toString().isNotEmpty) {
+    final orderDeliveryDate = order?['deliveryDate']?.toString();
+    if (orderDeliveryDate != null && orderDeliveryDate.isNotEmpty) {
       try {
-        final date = DateTime.parse(order!['deliveryDate'].toString());
+        final date = DateTime.parse(orderDeliveryDate);
         return DateFormat('MMM dd, yyyy').format(date);
       } catch (e) {
-        return order!['deliveryDate'].toString();
+        return orderDeliveryDate;
       }
     }
     
@@ -235,7 +236,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     // Get delivery dates from all items
     final deliveryDates = items
         .map((item) => item['delivery_date']?.toString())
-        .where((date) => date != null && date.isNotEmpty)
+        .where((date) => date != null && date!.isNotEmpty)
+        .map((date) => date!)
         .toList();
     
     if (deliveryDates.isEmpty) {
