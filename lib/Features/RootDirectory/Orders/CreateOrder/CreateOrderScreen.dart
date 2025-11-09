@@ -3237,8 +3237,12 @@ class _DressTypeDialogState<T> extends State<_DressTypeDialog<T>> {
       return;
     }
 
-    final String requestUrl =
-        "${Urls.addDress}/$id?pageNumber=$_pageNumber&pageSize=$_pageSize";
+    // Include searchKeyword in the request URL if provided
+    String requestUrl = "${Urls.addDress}/$id?pageNumber=$_pageNumber&pageSize=$_pageSize";
+    if (_searchQuery.isNotEmpty) {
+      requestUrl += "&searchKeyword=${Uri.encodeComponent(_searchQuery)}";
+    }
+
     try {
       final response = await ApiService().get(requestUrl, context);
       if (response.data is Map<String, dynamic>) {
@@ -3252,9 +3256,12 @@ class _DressTypeDialogState<T> extends State<_DressTypeDialog<T>> {
 
         if (mounted) {
           setState(() {
-            _dressTypes = initialFetch
-                ? newDressTypes
-                : [..._dressTypes, ...newDressTypes];
+            // If searching, replace the list; otherwise append for pagination
+            if (_searchQuery.isNotEmpty || initialFetch) {
+              _dressTypes = newDressTypes;
+            } else {
+              _dressTypes = [..._dressTypes, ...newDressTypes];
+            }
             _hasMoreData = newDressTypes.length == _pageSize;
             _isLoading = false;
           });
@@ -3289,10 +3296,8 @@ class _DressTypeDialogState<T> extends State<_DressTypeDialog<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredItems = _dressTypes.where((item) {
-      final name = item['name'].toString().toLowerCase();
-      return name.contains(_searchQuery.toLowerCase());
-    }).toList();
+    // No need for client-side filtering - backend handles search
+    final filteredItems = _dressTypes;
 
     return Dialog(
       shape: RoundedRectangleBorder(
@@ -3326,6 +3331,15 @@ class _DressTypeDialogState<T> extends State<_DressTypeDialog<T>> {
               onChanged: (value) {
                 setState(() {
                   _searchQuery = value;
+                  // Reset pagination when search changes
+                  _pageNumber = 1;
+                  _dressTypes = [];
+                  _hasMoreData = true;
+                });
+                // Debounce search to avoid too many API calls
+                if (_debounce?.isActive ?? false) _debounce?.cancel();
+                _debounce = Timer(const Duration(milliseconds: 500), () {
+                  _fetchDressTypes(initialFetch: true);
                 });
               },
             ),
