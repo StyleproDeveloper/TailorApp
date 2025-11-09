@@ -21,6 +21,7 @@ const { buildQueryOptions } = require('../utils/buildQuery');
 const { paginate } = require('../utils/commonPagination');
 const { createUserService } = require('./UserService');
 const { getRoleModel } = require('./RoleService');
+const mongoose = require('mongoose');
 
 const createShopService = async (shopData) => {
   try {
@@ -48,7 +49,33 @@ const createShopService = async (shopData) => {
 
     // Dynamically initialize  collections based on shopId
     const initializeCollections = async () => {
-      await getDynamicModel('DressType', DressTypeSchema, `dressType_${shopId}`);
+      // Create dressType collection and copy from masterdresstype
+      const dressTypeModel = await getDynamicModel('DressType', DressTypeSchema, `dressType_${shopId}`);
+      
+      // Copy records from masterdresstype to the new dressType collection
+      try {
+        const db = mongoose.connection.db;
+        const masterDressTypes = await db.collection('masterdresstype').find({}).toArray();
+        
+        if (masterDressTypes && masterDressTypes.length > 0) {
+          // Remove _id field to let MongoDB generate new ones
+          const documentsToInsert = masterDressTypes.map(doc => {
+            const { _id, ...rest } = doc;
+            return rest;
+          });
+          
+          if (documentsToInsert.length > 0) {
+            await dressTypeModel.insertMany(documentsToInsert);
+            console.log(`✅ Copied ${documentsToInsert.length} dress types from masterdresstype to dressType_${shopId}`);
+          }
+        } else {
+          console.log(`⚠️  No dress types found in masterdresstype collection`);
+        }
+      } catch (copyError) {
+        console.error(`⚠️  Error copying dress types from masterdresstype: ${copyError.message}`);
+        // Continue even if copy fails - collection is still created
+      }
+      
       await getDynamicModel('Customer', CustomerSchema, `customer_${shopId}`);
       await getDynamicModel(
         'Dresspattern',
