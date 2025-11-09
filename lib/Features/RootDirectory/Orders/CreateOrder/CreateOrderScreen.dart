@@ -2059,7 +2059,7 @@ await _loadDataInBackground();
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
-          keyboardType: TextInputType.numberWithDecimal,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
           ],
