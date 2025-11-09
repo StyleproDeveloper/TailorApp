@@ -300,22 +300,22 @@ const getAllOrdersService = async (shop_id, queryParams) => {
         },
       },
       // Add search filter for customer name and mobile after customer lookup
-      ...(searchKeyword ? [{
+      ...(searchKeyword && searchKeyword.trim() ? [{
         $match: {
           $or: [
-            // Search by customer name
+            // Search by customer name (case-insensitive, partial match)
             { customer_name: { $regex: searchKeyword.trim(), $options: 'i' } },
-            // Search by owner
+            // Search by owner (case-insensitive, partial match)
             { owner: { $regex: searchKeyword.trim(), $options: 'i' } },
             // Search by mobile - handle various formats
             ...(searchKeyword.replace(/[^0-9]/g, '').length > 0 ? [
-              // Exact match with + and numbers
+              // Match the search term as-is (with + if present)
               { customer_mobile: { $regex: searchKeyword.replace(/[^0-9+]/g, ''), $options: 'i' } },
-              // Match last 10 digits (for numbers like 919731033833 or 9731033833)
+              // Match last 10 digits (handles 919731033833 -> 9731033833)
               ...(searchKeyword.replace(/[^0-9]/g, '').length >= 10 ? [{
                 customer_mobile: { $regex: searchKeyword.replace(/[^0-9]/g, '').slice(-10), $options: 'i' }
               }] : []),
-              // Match without + prefix
+              // Match any part of the mobile number (for partial searches)
               { customer_mobile: { $regex: searchKeyword.replace(/[^0-9]/g, ''), $options: 'i' } },
             ] : []),
           ],
