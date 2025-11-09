@@ -27,6 +27,7 @@ class _OrderScreenState extends State<OrderScreen>
   int pageNumber = 1;
   final int pageSize = 10;
   int currentTabIndex = 0;
+  String? selectedFilter; // 'deliveryToday', 'deliveryThisWeek', 'createdToday'
 
   @override
   void initState() {
@@ -81,6 +82,88 @@ class _OrderScreenState extends State<OrderScreen>
         fetchOrderApi();
       }
     });
+  }
+
+  void _showFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Filter Orders'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Delivery Today'),
+                leading: Radio<String?>(
+                  value: 'deliveryToday',
+                  groupValue: selectedFilter,
+                  onChanged: (String? value) {
+                    setState(() {
+                      selectedFilter = value;
+                    });
+                    Navigator.pop(context);
+                    _applyFilter();
+                  },
+                ),
+              ),
+              ListTile(
+                title: const Text('Delivery This Week'),
+                leading: Radio<String?>(
+                  value: 'deliveryThisWeek',
+                  groupValue: selectedFilter,
+                  onChanged: (String? value) {
+                    setState(() {
+                      selectedFilter = value;
+                    });
+                    Navigator.pop(context);
+                    _applyFilter();
+                  },
+                ),
+              ),
+              ListTile(
+                title: const Text('Created Today'),
+                leading: Radio<String?>(
+                  value: 'createdToday',
+                  groupValue: selectedFilter,
+                  onChanged: (String? value) {
+                    setState(() {
+                      selectedFilter = value;
+                    });
+                    Navigator.pop(context);
+                    _applyFilter();
+                  },
+                ),
+              ),
+              ListTile(
+                title: const Text('Clear Filter'),
+                leading: Radio<String?>(
+                  value: null,
+                  groupValue: selectedFilter,
+                  onChanged: (String? value) {
+                    setState(() {
+                      selectedFilter = null;
+                    });
+                    Navigator.pop(context);
+                    _applyFilter();
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _applyFilter() {
+    setState(() {
+      orders.clear();
+      filteredOrders.clear();
+      pageNumber = 1;
+      hasMoreData = true;
+    });
+    fetchOrderApi();
   }
 
 
@@ -167,7 +250,12 @@ class _OrderScreenState extends State<OrderScreen>
     try {
       // Always fetch all orders without status filter (backend not deployed yet)
       String url =
-          "${Urls.ordersSave}/$shopId?pageNumber=$pageNumber&pageSize=$pageSize&searchKeyword=${searchKeywordController.text}";
+          "${Urls.ordersSave}/$shopId?pageNumber=$pageNumber&pageSize=$pageSize&searchKeyword=${Uri.encodeComponent(searchKeywordController.text)}";
+      
+      // Add filter parameter if selected
+      if (selectedFilter != null) {
+        url += "&filterType=$selectedFilter";
+      }
       
       final response = await ApiService().get(url, context);
 
@@ -242,9 +330,29 @@ class _OrderScreenState extends State<OrderScreen>
                     height: 45,
                     width: 45,
                     child: IconButton(
-                      icon: const Icon(Icons.filter_list,
-                          color: Colors.white, size: 25),
-                      onPressed: () {},
+                      icon: Stack(
+                        children: [
+                          const Icon(Icons.filter_list,
+                              color: Colors.white, size: 25),
+                          if (selectedFilter != null)
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 8,
+                                  minHeight: 8,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      onPressed: _showFilterDialog,
                     ),
                   ),
                 ],
