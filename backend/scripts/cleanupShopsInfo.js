@@ -9,8 +9,8 @@ if (!MONGO_URL) {
 }
 
 // ShopInfo model schema (simplified for this script)
-const ShopInfoSchema = new mongoose.Schema({}, { strict: false, collection: 'shops' });
-const ShopInfo = mongoose.model('ShopInfo', ShopInfoSchema);
+const ShopInfoSchema = new mongoose.Schema({}, { strict: false, collection: 'shopinfos' });
+const ShopInfo = mongoose.model('ShopInfo', ShopInfoSchema, 'shopinfos');
 
 async function cleanupShopsInfo() {
   try {
