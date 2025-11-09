@@ -19,6 +19,8 @@ const { getNextSequenceValue } = require('./sequenceService');
 const { SubscriptionEnumMapping } = require('../utils/CommonEnumValues');
 const { buildQueryOptions } = require('../utils/buildQuery');
 const { paginate } = require('../utils/commonPagination');
+const { createUserService } = require('./UserService');
+const { getRoleModel } = require('./RoleService');
 
 const createShopService = async (shopData) => {
   try {
@@ -81,7 +83,46 @@ const createShopService = async (shopData) => {
 
     await initializeCollections();
 
-    return newShop.save();
+    const savedShop = await newShop.save();
+
+    // After shop is created, create a user with Owner role
+    try {
+      // Get the Role model for this shop
+      const RoleModel = getRoleModel(shopId);
+      
+      // Find the Owner role (first role created is Owner)
+      const ownerRole = await RoleModel.findOne({ name: 'Owner' });
+      
+      if (!ownerRole) {
+        console.warn(`Owner role not found for shop ${shopId}. User creation skipped.`);
+        return savedShop;
+      }
+
+      // Prepare user data from shop data
+      const userData = {
+        shopId: shopId,
+        branchId: shopData.branch_id || null,
+        mobile: shopData.mobile,
+        name: shopData.yourName,
+        roleId: ownerRole.roleId,
+        secondaryMobile: shopData.secondaryMobile || null,
+        email: shopData.email || null,
+        addressLine1: shopData.addressLine1 || null,
+        street: shopData.street || null,
+        city: shopData.city || null,
+        postalCode: shopData.postalCode || null,
+      };
+
+      // Create the user
+      await createUserService(userData);
+      console.log(`User created successfully for shop ${shopId} with Owner role`);
+    } catch (userError) {
+      // Log error but don't fail shop creation if user creation fails
+      console.error(`Error creating user for shop ${shopId}:`, userError.message);
+      // Continue - shop is already created
+    }
+
+    return savedShop;
   } catch (error) {
     throw error;
   }
