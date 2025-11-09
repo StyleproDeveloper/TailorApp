@@ -77,8 +77,9 @@ const createOrderService = async (orderData, shop_id) => {
     const OrderItemPatternModel = getOrderItemPatternModel(shop_id);
     const OrderItemAdditionalCostModel = getOrderItemAdditionalCostModel(shop_id);
 
-    // Generate Order ID
-    const orderId = await getNextSequenceValue('orderId');
+    // Generate Order ID - shop-specific (and branch-specific if branchId exists)
+    const branchId = orderDetails?.branchId || null;
+    const orderId = await getNextSequenceValue('orderId', shop_id, branchId);
 
     // Calculate earliest delivery date from all items
     let earliestDeliveryDate = null;
