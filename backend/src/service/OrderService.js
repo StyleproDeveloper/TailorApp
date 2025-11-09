@@ -304,8 +304,20 @@ const getAllOrdersService = async (shop_id, queryParams) => {
         $match: {
           $or: [
             { customer_name: { $regex: searchKeyword, $options: 'i' } },
-            { customer_mobile: { $regex: searchKeyword.replace(/[^0-9]/g, ''), $options: 'i' } }, // Remove non-numeric chars for mobile search
+            { 
+              customer_mobile: { 
+                $regex: searchKeyword.replace(/[^0-9+]/g, ''), 
+                $options: 'i' 
+              } 
+            },
             { owner: { $regex: searchKeyword, $options: 'i' } },
+            // Also search mobile without + and country code
+            ...(searchKeyword.replace(/[^0-9]/g, '').length >= 10 ? [{
+              customer_mobile: { 
+                $regex: searchKeyword.replace(/[^0-9]/g, '').slice(-10), 
+                $options: 'i' 
+              }
+            }] : []),
           ],
         },
       }] : []),
