@@ -216,6 +216,17 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   String _getDeliveryDate() {
+    // First try to get delivery date from order level (earliest date from all items)
+    if (order?['deliveryDate'] != null && order?['deliveryDate'].toString().isNotEmpty) {
+      try {
+        final date = DateTime.parse(order!['deliveryDate'].toString());
+        return DateFormat('MMM dd, yyyy').format(date);
+      } catch (e) {
+        return order!['deliveryDate'].toString();
+      }
+    }
+    
+    // Fallback: Get earliest delivery date from items if order level date is not set
     final items = order?['items'] as List<dynamic>? ?? [];
     if (items.isEmpty) {
       return 'Not Set';
@@ -225,24 +236,15 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     final deliveryDates = items
         .map((item) => item['delivery_date']?.toString())
         .where((date) => date != null && date.isNotEmpty)
-        .toSet()
         .toList();
     
     if (deliveryDates.isEmpty) {
       return 'Not Set';
     }
     
-    // If all items have the same delivery date, show it once
-    if (deliveryDates.length == 1) {
-      try {
-        final date = DateTime.parse(deliveryDates[0]);
-        return DateFormat('MMM dd, yyyy').format(date);
-      } catch (e) {
-        return deliveryDates[0];
-      }
-    }
+    // Sort dates and get the earliest one
+    deliveryDates.sort();
     
-    // If items have different delivery dates, show the first one
     try {
       final date = DateTime.parse(deliveryDates[0]);
       return DateFormat('MMM dd, yyyy').format(date);
