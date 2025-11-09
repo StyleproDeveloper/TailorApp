@@ -28,8 +28,16 @@ const getDynamicModel = async (
     // Return the existing model if already created
     model = mongoose.connection.models[collectionName];
   } else {
-    // Dynamically create the model
-    model = mongoose.connection.model(modelName, schema, collectionName);
+    try {
+      // Dynamically create the model
+      model = mongoose.connection.model(modelName, schema, collectionName);
+    } catch (modelError) {
+      // Check if it's a collection limit error
+      if (modelError.message && modelError.message.includes('cannot create a new collection')) {
+        throw new Error(`Cannot create collection ${collectionName}: ${modelError.message}`);
+      }
+      throw modelError;
+    }
   }
 
   // Check if the collection is empty and insert default records if provided
