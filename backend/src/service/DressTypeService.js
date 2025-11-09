@@ -41,6 +41,10 @@ const gteAllDressTypeService = async (shop_id, queryParams) => {
     const DressTypeModel = getDressTYpeModel(shop_id);
     const searchbleFields = [ 'name', 'owner'];
     const numericFields = ['dressTypeId', 'shop_id'];
+    
+    console.log('🔍 DressType search - queryParams:', queryParams);
+    console.log('🔍 DressType search - searchKeyword:', queryParams?.searchKeyword);
+    
     // Get the query options
     const options = buildQueryOptions(
       queryParams,
@@ -51,9 +55,16 @@ const gteAllDressTypeService = async (shop_id, queryParams) => {
 
     // Merge boolean filters into the main query
     const query = { ...options?.search, ...options?.booleanFilters };
+    
+    console.log('🔍 DressType search - query:', JSON.stringify(query, null, 2));
+    console.log('🔍 DressType search - options:', JSON.stringify({ page: options.page, limit: options.limit }, null, 2));
 
-    return await paginate(DressTypeModel, query, options);
+    const result = await paginate(DressTypeModel, query, options);
+    console.log(`🔍 DressType search - found ${result.data.length} results (total: ${result.total})`);
+    
+    return result;
   } catch (error) {
+    console.error('🔍 DressType search error:', error);
     throw error;
   }
 };
