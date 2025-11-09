@@ -9,6 +9,7 @@ const { isShopExists } = require('../utils/Helper');
 const { default: mongoose } = require('mongoose');
 const { buildQueryOptions } = require('../utils/buildQuery');
 const { paginate } = require('../utils/commonPagination');
+const logger = require('../utils/logger');
 
 //Order Table Based on Shop
 const getOrderModel = (shop_id) => {
@@ -251,7 +252,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
 
     // Extract searchKeyword BEFORE buildQueryOptions to prevent it from being used in base query
     const searchKeyword = queryParams?.searchKeyword || '';
-    console.log('🔍 Search keyword received:', searchKeyword);
+    logger.debug('Search keyword received', { searchKeyword });
     
     // Remove searchKeyword from queryParams for buildQueryOptions to avoid owner search conflict
     const queryParamsWithoutSearch = { ...queryParams };
@@ -336,10 +337,9 @@ const getAllOrdersService = async (shop_id, queryParams) => {
           $or: searchConditions,
         },
       };
-      console.log('🔍 Search conditions:', JSON.stringify(searchConditions, null, 2));
-      console.log('🔍 Search match stage:', JSON.stringify(searchMatchStage, null, 2));
+      logger.debug('Search conditions', { searchConditions, searchMatchStage });
     } else {
-      console.log('🔍 No search keyword provided');
+      logger.debug('No search keyword provided');
     }
 
     // Main aggregation pipeline
@@ -540,16 +540,21 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     ];
 
     // Execute aggregation
-    console.log('🔍 Executing aggregation pipeline...');
+    logger.debug('Executing aggregation pipeline');
     const data = await Order.aggregate(finalPipeline);
-    console.log(`🔍 Aggregation returned ${data.length} orders (total: ${total})`);
+    logger.debug('Aggregation completed', {
+      returned: data.length,
+      total,
+    });
     
     // Log first order's customer info if available for debugging
     if (data.length > 0 && searchKeyword) {
       const firstOrder = data[0];
-      console.log('🔍 First order customer_name:', firstOrder.customer_name);
-      console.log('🔍 First order customer_mobile:', firstOrder.customer_mobile);
-      console.log('🔍 First order owner:', firstOrder.owner);
+      logger.debug('Sample order data', {
+        customer_name: firstOrder.customer_name,
+        customer_mobile: firstOrder.customer_mobile,
+        owner: firstOrder.owner,
+      });
     }
 
     return {
@@ -559,7 +564,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       data,
     };
   } catch (error) {
-    console.error('Error in getAllOrdersService:', error);
+    logger.error('Error in getAllOrdersService', error);
     throw error;
   }
 };

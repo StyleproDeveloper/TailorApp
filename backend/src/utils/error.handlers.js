@@ -1,6 +1,8 @@
+const logger = require('./logger');
+
 const notFound = (req, res, next) => {
   const error = new Error(`Not Found: ${req.originalUrl}`);
-  res.status(404);
+  error.statusCode = 404;
   next(error);
 };
 
@@ -10,22 +12,69 @@ const errorHandler = (err, req, res, next) => {
   // If it's a CustomError, use its statusCode
   if (err instanceof CustomError && err.statusCode) {
     statusCode = err.statusCode;
+  } else if (err.statusCode) {
+    statusCode = err.statusCode;
   }
 
-  res.status(statusCode).json({
+  // Log error for monitoring
+  if (statusCode >= 500) {
+    logger.error('Server Error', {
+      message: err.message,
+      stack: err.stack,
+      path: req.originalUrl,
+      method: req.method,
+      statusCode,
+    });
+  } else {
+    logger.warn('Client Error', {
+      message: err.message,
+      path: req.originalUrl,
+      method: req.method,
+      statusCode,
+    });
+  }
+
+  // Handle specific error types
+  if (err.name === 'ValidationError') {
+    statusCode = 400;
+  } else if (err.name === 'CastError') {
+    statusCode = 400;
+    err.message = 'Invalid ID format';
+  } else if (err.name === 'MongoServerError' && err.code === 11000) {
+    statusCode = 409;
+    err.message = 'Duplicate entry. This record already exists.';
+  }
+
+  // Prepare error response
+  const errorResponse = {
     success: false,
     status: statusCode,
     message: err.message || 'Internal Server Error',
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
-  });
+  };
+
+  // Only include stack trace in development
+  if (process.env.NODE_ENV !== 'production') {
+    errorResponse.stack = err.stack;
+    errorResponse.details = err.details || null;
+  }
+
+  res.status(statusCode).json(errorResponse);
 };
 
 class CustomError extends Error {
-  constructor(message, statusCode = 500) {
+  constructor(message, statusCode = 500, details = null) {
     super(message);
     this.statusCode = statusCode;
+    this.details = details;
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
-module.exports = { errorHandler, notFound, CustomError };
+// Async error wrapper for route handlers
+const asyncHandler = (fn) => {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+};
+
+module.exports = { errorHandler, notFound, CustomError, asyncHandler };

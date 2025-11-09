@@ -5,43 +5,49 @@ const {
   updateShopService,
   deleteShopService,
 } = require('../service/ShopService');
+const { asyncHandler, CustomError } = require('../utils/error.handlers');
 
-const createShop = async (req, res) => {
+const createShop = asyncHandler(async (req, res) => {
   try {
     const shop = await createShopService(req.body);
-    res.status(201).json({ message: 'Shop created successfully', shop });
+    res.status(201).json({
+      success: true,
+      message: 'Shop created successfully',
+      data: shop,
+    });
   } catch (error) {
     // Check for MongoDB collection limit error
     if (error.message && error.message.includes('cannot create a new collection')) {
-      return res.status(500).json({ 
-        error: 'Database collection limit reached. Cannot create new shop. Please contact support or upgrade your MongoDB plan.',
-        details: error.message
-      });
+      throw new CustomError(
+        'Database collection limit reached. Cannot create new shop. Please contact support or upgrade your MongoDB plan.',
+        500,
+        { details: error.message }
+      );
     }
-    res.status(500).json({ error: error.message });
+    throw error;
   }
-};
+});
 
-const getShops = async (req, res) => {
-  try {
-    const shops = await getShopsService(req?.query);
-    res.status(200).json(shops);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+const getShops = asyncHandler(async (req, res) => {
+  const shops = await getShopsService(req?.query);
+  res.status(200).json({
+    success: true,
+    ...shops,
+  });
+});
+
+const getShopById = asyncHandler(async (req, res) => {
+  const shop = await getShopByIdService(req.params.id);
+  if (!shop) {
+    throw new CustomError('Shop not found', 404);
   }
-};
+  res.status(200).json({
+    success: true,
+    data: shop,
+  });
+});
 
-const getShopById = async (req, res) => {
-  try {
-    const shop = await getShopByIdService(req.params.id);
-    if (!shop) return res.status(404).json({ error: 'Shop not found' });
-    res.status(200).json(shop);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-const updateShop = async (req, res) => {
+const updateShop = asyncHandler(async (req, res) => {
   try {
     const payload = { ...req.body };
 
@@ -84,13 +90,16 @@ const updateShop = async (req, res) => {
       payload.setupComplete = Boolean(payload.setupComplete);
     }
 
-    const shop = await updateShopService(req.params.id, payload);
-    if (!shop) return res.status(404).json({ error: 'Shop not found' });
-    res.status(200).json({ message: 'Shop updated successfully', shop });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  const shop = await updateShopService(req.params.id, payload);
+  if (!shop) {
+    throw new CustomError('Shop not found', 404);
   }
-};
+  res.status(200).json({
+    success: true,
+    message: 'Shop updated successfully',
+    data: shop,
+  });
+});
 
 const deleteShop = async (req, res) => {
   try {

@@ -1,6 +1,8 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 const { notFound, errorHandler } = require('./utils/error.handlers');
 const shopRoutes = require('./routes/ShopRoutes');
@@ -19,7 +21,8 @@ const BillingTermRoutes = require('./routes/BillingTermRoutes');
 const OrderRoutes = require('./routes/OrderRoutes');
 const UserBarnchRoutes = require('./routes/UserBranchRoutes');
 const swaggerConfig = require('./config/swagger');
-require('dotenv').config();
+const envConfig = require('./config/env.config');
+const logger = require('./utils/logger');
 
 const app = express();
 app.use(
@@ -34,18 +37,57 @@ app.use(
   swaggerConfig.swaggerUi.setup(swaggerConfig.specs)
 );
 
-// Middleware
-app.use(
-  cors({
-    origin: '*', // Replace '*' with frontend domain in production
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    allowedHeaders: 'Content-Type, Authorization',
-  })
-);
-// app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
-app.use(bodyParser.json());
-app.use(express.json());
+// Security Middleware
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for API (can be enabled if needed)
+  crossOriginEmbedderPolicy: false,
+}));
+
+// CORS Configuration
+const corsOptions = {
+  origin: envConfig.NODE_ENV === 'production' 
+    ? envConfig.FRONTEND_URL.split(',').map(url => url.trim()) // Support multiple origins
+    : ['http://localhost:8144', 'http://localhost:3000', 'http://127.0.0.1:8144'], // Development origins
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+  allowedHeaders: 'Content-Type, Authorization, X-Requested-With',
+  credentials: true,
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+
+// Rate Limiting
+const limiter = rateLimit({
+  windowMs: envConfig.RATE_LIMIT_WINDOW_MS,
+  max: envConfig.RATE_LIMIT_MAX_REQUESTS,
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/', limiter); // Apply to all /api/ routes
+app.use(limiter); // Apply globally as fallback
+
+// Body Parsing
+app.use(bodyParser.json({ limit: '10mb' })); // Limit payload size
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Security: Sanitize MongoDB queries
 app.use(mongoSanitize());
+
+// Request Logging (in development)
+if (envConfig.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    logger.debug(`${req.method} ${req.path}`, {
+      query: req.query,
+      body: req.method !== 'GET' ? req.body : undefined,
+    });
+    next();
+  });
+}
 
 // Serve Swagger documentation
 // app.use(

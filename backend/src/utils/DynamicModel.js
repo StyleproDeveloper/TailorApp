@@ -42,16 +42,17 @@ const getDynamicModel = async (
 
   // Check if the collection is empty and insert default records if provided
   if (defaultRecords && defaultRecords?.length > 0) {
-    console.log(
-      `Checking for default records in collection: ${collectionName}`,
-      defaultRecords
-    );
     const recordCount = await model.countDocuments();
     if (recordCount === 0) {
       await model.insertMany(defaultRecords);
-      console.log(
-        `Default records inserted into collection: ${collectionName}`
-      );
+      // Log only in development
+      if (process.env.NODE_ENV !== 'production') {
+        const logger = require('./logger');
+        logger.debug(`Default records inserted into collection`, {
+          collection: collectionName,
+          count: defaultRecords.length,
+        });
+      }
     }
   }
 
