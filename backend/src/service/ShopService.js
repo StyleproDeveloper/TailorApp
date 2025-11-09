@@ -47,38 +47,39 @@ const createShopService = async (shopData) => {
     });
 
     // Dynamically initialize  collections based on shopId
-    const initializeCollections = () => {
-      getDynamicModel('DressType', DressTypeSchema, `dressType_${shopId}`);
-      getDynamicModel('Customer', CustomerSchema, `customer_${shopId}`);
-      getDynamicModel(
+    const initializeCollections = async () => {
+      await getDynamicModel('DressType', DressTypeSchema, `dressType_${shopId}`);
+      await getDynamicModel('Customer', CustomerSchema, `customer_${shopId}`);
+      await getDynamicModel(
         'Dresspattern',
         DressPatternSchema,
         `dresspattern_${shopId}`
       );
-      getDynamicModel(
+      await getDynamicModel(
         'DressTypeDressPattern',
         DressTypeDresspatternSchema,
         `dressTypeDressPattern_${shopId}`
       );
-      getDynamicModel(
+      await getDynamicModel(
         'DressTypeMeasurement',
         DressTypeMeasurementSchema,
         `dressTypeMeasurement_${shopId}`
       );
-      getDynamicModel(
+      await getDynamicModel(
         'MeasurementHistory',
         MeasurementHistorySchema,
         `measurementHistory_${shopId}`
       );
-      getDynamicModel(
+      await getDynamicModel(
         'Measurements',
         MeasurementSchema,
         `measurement_${shopId}`
       );
-      getDynamicModel('OrderItem', OrderItemSchema, `orderItem_${shopId}`);
-      getDynamicModel('Order', OrderSchema, `order_${shopId}`);
-      getDynamicModel('OrderItemAdditionalCost', OrderItemAdditionalCostSchema, `orderitemadditionalcost_${shopId}`);
-      getDynamicModel('Role', RoleSchema, `role_${shopId}`, defaultRoles);
+      await getDynamicModel('OrderItem', OrderItemSchema, `orderItem_${shopId}`);
+      await getDynamicModel('Order', OrderSchema, `order_${shopId}`);
+      await getDynamicModel('OrderItemAdditionalCost', OrderItemAdditionalCostSchema, `orderitemadditionalcost_${shopId}`);
+      // Await Role creation to ensure roles are saved before user creation
+      await getDynamicModel('Role', RoleSchema, `role_${shopId}`, defaultRoles);
     };
 
     await initializeCollections();
