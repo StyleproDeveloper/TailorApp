@@ -94,6 +94,20 @@ class _OrderScreenState extends State<OrderScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
+                title: const Text('All'),
+                leading: Radio<String?>(
+                  value: null,
+                  groupValue: selectedFilter,
+                  onChanged: (String? value) {
+                    setState(() {
+                      selectedFilter = null;
+                    });
+                    Navigator.pop(context);
+                    _applyFilter();
+                  },
+                ),
+              ),
+              ListTile(
                 title: const Text('Delivery Today'),
                 leading: Radio<String?>(
                   value: 'deliveryToday',
@@ -129,20 +143,6 @@ class _OrderScreenState extends State<OrderScreen>
                   onChanged: (String? value) {
                     setState(() {
                       selectedFilter = value;
-                    });
-                    Navigator.pop(context);
-                    _applyFilter();
-                  },
-                ),
-              ),
-              ListTile(
-                title: const Text('Clear Filter'),
-                leading: Radio<String?>(
-                  value: null,
-                  groupValue: selectedFilter,
-                  onChanged: (String? value) {
-                    setState(() {
-                      selectedFilter = null;
                     });
                     Navigator.pop(context);
                     _applyFilter();
