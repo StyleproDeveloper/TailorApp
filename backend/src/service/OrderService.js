@@ -272,6 +272,53 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     
     // Get search keyword for customer name/mobile search
     const searchKeyword = queryParams?.searchKeyword || '';
+    console.log('🔍 Search keyword received:', searchKeyword);
+
+    // Build search match conditions if search keyword exists
+    let searchMatchStage = null;
+    if (searchKeyword && searchKeyword.trim()) {
+      const trimmedKeyword = searchKeyword.trim();
+      const numericOnly = trimmedKeyword.replace(/[^0-9]/g, '');
+      const last10Digits = numericOnly.length >= 10 ? numericOnly.slice(-10) : '';
+      
+      // Build search conditions array
+      const searchConditions = [
+        // Search by customer name (case-insensitive, partial match)
+        { customer_name: { $regex: trimmedKeyword, $options: 'i' } },
+        // Search by owner (case-insensitive, partial match)
+        { owner: { $regex: trimmedKeyword, $options: 'i' } },
+      ];
+      
+      // Add mobile search conditions if there are numbers in the search term
+      if (numericOnly.length > 0) {
+        // Match exact mobile number (with or without + prefix)
+        const mobileWithPlus = trimmedKeyword.replace(/[^0-9+]/g, '');
+        if (mobileWithPlus.length > 0) {
+          searchConditions.push({
+            customer_mobile: { $regex: mobileWithPlus, $options: 'i' }
+          });
+        }
+        
+        // Match last 10 digits if search term has 10+ digits (handles country code)
+        if (last10Digits.length === 10) {
+          searchConditions.push({
+            customer_mobile: { $regex: last10Digits, $options: 'i' }
+          });
+        }
+        
+        // Match any numeric part of mobile (for partial searches)
+        searchConditions.push({
+          customer_mobile: { $regex: numericOnly, $options: 'i' }
+        });
+      }
+      
+      searchMatchStage = {
+        $match: {
+          $or: searchConditions,
+        },
+      };
+      console.log('🔍 Search conditions:', JSON.stringify(searchConditions, null, 2));
+    }
 
     // Main aggregation pipeline
     const aggregatePipeline = [
@@ -292,7 +339,6 @@ const getAllOrdersService = async (shop_id, queryParams) => {
           preserveNullAndEmptyArrays: true,
         },
       },
-
       {
         $addFields: {
           customer_name: { $ifNull: ['$customerInfo.name', ''] },
@@ -300,27 +346,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
         },
       },
       // Add search filter for customer name and mobile after customer lookup
-      ...(searchKeyword && searchKeyword.trim() ? [{
-        $match: {
-          $or: [
-            // Search by customer name (case-insensitive, partial match)
-            { customer_name: { $regex: searchKeyword.trim(), $options: 'i' } },
-            // Search by owner (case-insensitive, partial match)
-            { owner: { $regex: searchKeyword.trim(), $options: 'i' } },
-            // Search by mobile - handle various formats
-            ...(searchKeyword.replace(/[^0-9]/g, '').length > 0 ? [
-              // Match the search term as-is (with + if present)
-              { customer_mobile: { $regex: searchKeyword.replace(/[^0-9+]/g, ''), $options: 'i' } },
-              // Match last 10 digits (handles 919731033833 -> 9731033833)
-              ...(searchKeyword.replace(/[^0-9]/g, '').length >= 10 ? [{
-                customer_mobile: { $regex: searchKeyword.replace(/[^0-9]/g, '').slice(-10), $options: 'i' }
-              }] : []),
-              // Match any part of the mobile number (for partial searches)
-              { customer_mobile: { $regex: searchKeyword.replace(/[^0-9]/g, ''), $options: 'i' } },
-            ] : []),
-          ],
-        },
-      }] : []),
+      ...(searchMatchStage ? [searchMatchStage] : []),
       {
         $unset: 'customerInfo',
       },
