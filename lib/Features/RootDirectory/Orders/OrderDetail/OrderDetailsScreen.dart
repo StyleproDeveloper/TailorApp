@@ -215,6 +215,42 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     );
   }
 
+  String _getDeliveryDate() {
+    final items = order?['items'] as List<dynamic>? ?? [];
+    if (items.isEmpty) {
+      return 'Not Set';
+    }
+    
+    // Get delivery dates from all items
+    final deliveryDates = items
+        .map((item) => item['delivery_date']?.toString())
+        .where((date) => date != null && date.isNotEmpty)
+        .toSet()
+        .toList();
+    
+    if (deliveryDates.isEmpty) {
+      return 'Not Set';
+    }
+    
+    // If all items have the same delivery date, show it once
+    if (deliveryDates.length == 1) {
+      try {
+        final date = DateTime.parse(deliveryDates[0]);
+        return DateFormat('MMM dd, yyyy').format(date);
+      } catch (e) {
+        return deliveryDates[0];
+      }
+    }
+    
+    // If items have different delivery dates, show the first one
+    try {
+      final date = DateTime.parse(deliveryDates[0]);
+      return DateFormat('MMM dd, yyyy').format(date);
+    } catch (e) {
+      return deliveryDates[0];
+    }
+  }
+
   Widget _buildHeader() {
     final createdAt =
         DateTime.parse(order?['createdAt'] ?? DateTime.now().toString());
@@ -261,7 +297,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Delivery Date: $advanceReceivedDate',
+          'Delivery Date: ${_getDeliveryDate()}',
           style: Orderdetailstyles.subTitles,
         ),
       ],
