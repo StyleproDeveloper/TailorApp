@@ -116,6 +116,7 @@ const deleteRoleService = async (shop_id, roleId) => {
 };
 
 module.exports = {
+  getRoleModel,
   createRoleService,
   getAllRoleService,
   getRoleByIdService,
