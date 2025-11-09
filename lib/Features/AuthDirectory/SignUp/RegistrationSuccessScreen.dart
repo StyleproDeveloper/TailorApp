@@ -20,7 +20,7 @@ class RegistrationSuccessScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: ColorPalatte.white,
-      appBar: Commonheader(title: const Text('Registration Success')),
+      appBar: Commonheader(title: 'Registration Success'),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
