@@ -102,7 +102,7 @@ const createShopService = async (shopData) => {
       // Prepare user data from shop data
       const userData = {
         shopId: shopId,
-        branchId: shopData.branch_id || null,
+        branchId: shopData.branch_id || 1, // Default to 1 if not provided
         mobile: shopData.mobile,
         name: shopData.yourName,
         roleId: ownerRole.roleId,
