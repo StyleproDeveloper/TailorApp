@@ -234,10 +234,18 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     // Query params
     const { orderId, status, filterType } = queryParams;
 
+    // Extract searchKeyword BEFORE buildQueryOptions to prevent it from being used in base query
+    const searchKeyword = queryParams?.searchKeyword || '';
+    console.log('🔍 Search keyword received:', searchKeyword);
+    
+    // Remove searchKeyword from queryParams for buildQueryOptions to avoid owner search conflict
+    const queryParamsWithoutSearch = { ...queryParams };
+    delete queryParamsWithoutSearch.searchKeyword;
+    
     const searchableFields = ['owner'];
     const numericFields = ['orderId'];
     const options = buildQueryOptions(
-      queryParams,
+      queryParamsWithoutSearch, // Use queryParams without searchKeyword
       'createdAt',
       searchableFields,
       numericFields
@@ -269,10 +277,6 @@ const getAllOrdersService = async (shop_id, queryParams) => {
 
     // For single order queries, limit to 1 early for better performance
     const isSingleOrderQuery = !!orderId;
-    
-    // Get search keyword for customer name/mobile search
-    const searchKeyword = queryParams?.searchKeyword || '';
-    console.log('🔍 Search keyword received:', searchKeyword);
 
     // Build search match conditions if search keyword exists
     let searchMatchStage = null;
@@ -318,6 +322,9 @@ const getAllOrdersService = async (shop_id, queryParams) => {
         },
       };
       console.log('🔍 Search conditions:', JSON.stringify(searchConditions, null, 2));
+      console.log('🔍 Search match stage:', JSON.stringify(searchMatchStage, null, 2));
+    } else {
+      console.log('🔍 No search keyword provided');
     }
 
     // Main aggregation pipeline
