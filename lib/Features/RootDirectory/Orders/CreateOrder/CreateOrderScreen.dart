@@ -789,7 +789,7 @@ await _loadDataInBackground();
               specialInstructions: TextEditingController(
                   text: item['special_instructions'] ?? ''),
               deliveryDate: TextEditingController(
-                text: item['deliveryDate'] ??
+                text: item['delivery_date'] ?? item['deliveryDate'] ??
                     DateFormat('yyyy-MM-dd').format(DateTime.now()),
               ),
               originalCost:
@@ -1158,9 +1158,9 @@ await _loadDataInBackground();
       "recording": "",
       "videoLink": "", // Not implemented yet
       "pictures": _selectedImages.map((file) => file.path).toList(),
-      "delivery_date": DateFormat("yyyy-MM-dd").format(
-        DateTime.tryParse(item.deliveryDate?.text ?? "") ?? DateTime.now(),
-      ),
+      "delivery_date": item.deliveryDate?.text?.trim().isNotEmpty == true
+          ? item.deliveryDate!.text.trim()
+          : DateFormat("yyyy-MM-dd").format(DateTime.now()),
       "amount": double.tryParse(item.originalCost?.text ?? "0") ?? 0.0,
       "status": _toBackendStatusKey(currentOrderStatus),
       "owner": userId.toString(),
@@ -2290,9 +2290,9 @@ await _loadDataInBackground();
           "recording": "",
           "videoLink": "",
           "pictures": _selectedImages.map((f) => f.path).toList(),
-          "delivery_date": DateFormat("yyyy-MM-dd").format(
-            DateTime.tryParse(item.deliveryDate?.text ?? "") ?? DateTime.now(),
-          ),
+          "delivery_date": item.deliveryDate?.text?.trim().isNotEmpty == true
+              ? item.deliveryDate!.text.trim()
+              : DateFormat("yyyy-MM-dd").format(DateTime.now()),
           "amount": double.tryParse(item.originalCost?.text ?? "0") ?? 0.0,
           "status": _toBackendStatusKey(status),
           "owner": userId?.toString() ?? '',
