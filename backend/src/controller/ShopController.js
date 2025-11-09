@@ -11,6 +11,13 @@ const createShop = async (req, res) => {
     const shop = await createShopService(req.body);
     res.status(201).json({ message: 'Shop created successfully', shop });
   } catch (error) {
+    // Check for MongoDB collection limit error
+    if (error.message && error.message.includes('cannot create a new collection')) {
+      return res.status(500).json({ 
+        error: 'Database collection limit reached. Cannot create new shop. Please contact support or upgrade your MongoDB plan.',
+        details: error.message
+      });
+    }
     res.status(500).json({ error: error.message });
   }
 };
