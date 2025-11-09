@@ -142,7 +142,7 @@ const createOrderService = async (orderData, shop_id) => {
         recording: item?.recording,
         videoLink: item?.videoLink,
         Pictures: item?.Pictures,
-        deliveryDate: item?.deliveryDate,
+        delivery_date: item?.delivery_date, // Use delivery_date (with underscore) to match frontend
         amount: item?.amount,
         status: item?.status,
         owner: item?.owner,
@@ -699,7 +699,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
             recording: item.recording,
             videoLink: item.videoLink,
             Pictures: item.Pictures,
-            deliveryDate: item.deliveryDate,
+            delivery_date: item.delivery_date, // Use delivery_date (with underscore) to match frontend
             amount: item.amount,
             status: item.status,
             owner: item.owner,
