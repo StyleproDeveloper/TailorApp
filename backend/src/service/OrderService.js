@@ -341,7 +341,13 @@ const getAllOrdersService = async (shop_id, queryParams) => {
               },
             },
           ],
-          as: 'items.Pattern',
+          as: 'patternArray',
+        },
+      },
+      {
+        $addFields: {
+          'items.Pattern': '$patternArray',
+          patternArray: '$$REMOVE',
         },
       },
       {
