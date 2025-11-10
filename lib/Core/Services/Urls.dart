@@ -1,9 +1,24 @@
+import 'dart:html' as html;
+
 class Urls {
-  // Production backend URL - Vercel deployment
-  // static const String baseUrl = 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
-  
-  // Development backend URL (for local development)
-  static const String baseUrl = 'http://localhost:5500';
+  // Backend URL - automatically detects environment
+  static String get baseUrl {
+    // Check if running in browser
+    try {
+      final hostname = html.window.location.hostname;
+      
+      // If running on localhost or 127.0.0.1, use local backend
+      if (hostname == 'localhost' || hostname == '127.0.0.1') {
+        return 'http://localhost:5500';
+      }
+      
+      // Otherwise, use production backend (Vercel)
+      return 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
+    } catch (e) {
+      // Fallback: if window is not available, default to production
+      return 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
+    }
+  }
   
   // Alternative Vercel URLs (if main URL has issues)
   // static const String baseUrl = 'https://backend-oh2r1ys5u-stylepros-projects.vercel.app';
