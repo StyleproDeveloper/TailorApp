@@ -7,13 +7,19 @@ echo "🚀 Starting Flutter build for Vercel..."
 if ! command -v flutter &> /dev/null; then
   echo "📦 Flutter not found. Installing Flutter..."
   
-  # Download and install Flutter
-  FLUTTER_VERSION="3.24.0"
+  # Download and install Flutter (use latest stable with Dart 3.6.0+)
+  FLUTTER_VERSION="stable"
   FLUTTER_HOME="$HOME/flutter"
   
   if [ ! -d "$FLUTTER_HOME" ]; then
-    echo "Downloading Flutter $FLUTTER_VERSION..."
-    git clone --branch stable https://github.com/flutter/flutter.git -b $FLUTTER_VERSION $FLUTTER_HOME
+    echo "Downloading Flutter stable (latest)..."
+    git clone --branch stable https://github.com/flutter/flutter.git $FLUTTER_HOME
+  else
+    # Update Flutter to latest stable
+    cd $FLUTTER_HOME
+    git checkout stable
+    git pull
+    cd -
   fi
   
   export PATH="$FLUTTER_HOME/bin:$PATH"
