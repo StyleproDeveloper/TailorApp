@@ -247,6 +247,13 @@ const getAllOrdersService = async (shop_id, queryParams) => {
     const OrderItemAdditionalCost = getOrderItemAdditionalCostModel(shop_id);
     const Customer = getCustomerModel(shop_id);
 
+    // Get collection names explicitly for aggregation lookups
+    const customerCollectionName = `customer_${shop_id}`;
+    const orderItemCollectionName = `orderItem_${shop_id}`;
+    const orderItemMeasurementCollectionName = `orderitemmeasurement_${shop_id}`;
+    const orderItemPatternCollectionName = `orderitempattern_${shop_id}`;
+    const orderItemAdditionalCostCollectionName = `orderitemadditionalcost_${shop_id}`;
+
     // Query params
     const { orderId, status, filterType } = queryParams;
 
@@ -349,7 +356,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       ...(isSingleOrderQuery ? [{ $limit: 1 }] : []),
       {
         $lookup: {
-          from: Customer.collection.name,
+          from: customerCollectionName,
           localField: 'customerId',
           foreignField: 'customerId',
           as: 'customerInfo',
@@ -374,7 +381,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       },
       {
         $lookup: {
-          from: OrderItem.collection.name,
+          from: orderItemCollectionName,
           localField: 'orderId',
           foreignField: 'orderId',
           as: 'items',
@@ -388,7 +395,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       },
       {
         $lookup: {
-          from: OrderItemMeasurement.collection.name,
+          from: orderItemMeasurementCollectionName,
           let: { 
             orderId: '$orderId',
             orderItemId: '$items.orderItemId'
@@ -423,7 +430,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       },
       {
         $lookup: {
-          from: OrderItemPattern.collection.name,
+          from: orderItemPatternCollectionName,
           let: { 
             orderId: '$orderId',
             orderItemId: '$items.orderItemId'
@@ -478,7 +485,7 @@ const getAllOrdersService = async (shop_id, queryParams) => {
       },
       {
         $lookup: {
-          from: OrderItemAdditionalCost.collection.name,
+          from: orderItemAdditionalCostCollectionName,
           localField: 'orderId',
           foreignField: 'orderId',
           as: 'additionalCosts',
