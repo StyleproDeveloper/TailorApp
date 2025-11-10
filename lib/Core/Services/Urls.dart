@@ -19,17 +19,18 @@ class Urls {
       }
       
       // Otherwise, use production backend (Vercel)
-      final url = 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
+      final url = 'https://backend-pics4hvfk-stylepros-projects.vercel.app';
       print('✅ Using PRODUCTION backend: $url');
       return url;
     } catch (e) {
       // Fallback: if window is not available, default to production
       print('⚠️ Error detecting hostname, using production backend');
-      return 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
+      return 'https://backend-pics4hvfk-stylepros-projects.vercel.app';
     }
   }
   
   // Alternative Vercel URLs (if main URL has issues)
+  // static const String baseUrl = 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
   // static const String baseUrl = 'https://backend-oh2r1ys5u-stylepros-projects.vercel.app';
   // static const String baseUrl = 'https://backend-ohnwrg4uj-stylepros-projects.vercel.app';
   
