@@ -6,16 +6,25 @@ class Urls {
     // Check if running in browser
     try {
       final hostname = html.window.location.hostname;
+      final protocol = html.window.location.protocol;
+      
+      print('🌐 Detected hostname: $hostname');
+      print('🌐 Detected protocol: $protocol');
       
       // If running on localhost or 127.0.0.1, use local backend
       if (hostname == 'localhost' || hostname == '127.0.0.1') {
-        return 'http://localhost:5500';
+        final url = 'http://localhost:5500';
+        print('✅ Using LOCAL backend: $url');
+        return url;
       }
       
       // Otherwise, use production backend (Vercel)
-      return 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
+      final url = 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
+      print('✅ Using PRODUCTION backend: $url');
+      return url;
     } catch (e) {
       // Fallback: if window is not available, default to production
+      print('⚠️ Error detecting hostname, using production backend');
       return 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
     }
   }
