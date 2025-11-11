@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:dio/dio.dart' show Dio, DioException, FormData, MultipartFile, Response, Options, DioMediaType;
 import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 import 'package:tailorapp/Core/Constants/TextString.dart';
 import 'package:tailorapp/Core/Widgets/CommonHeader.dart';
@@ -48,7 +52,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   int? orderItemPatternId;
   bool isLoading = true;
   final ImagePicker _picker = ImagePicker();
-  List<File> _selectedImages = [];
   final ScrollController _scrollController = ScrollController();
   int pageNumber = 1;
   final int pageSize = 10;
@@ -736,9 +739,15 @@ await _loadDataInBackground();
               selectedDressType: selectedDressType.isNotEmpty ? selectedDressType : null,
               selectedDressTypeId: item['dressTypeId'],
               selectedOrderType: selectedOrderType,
-              orderItemId: widget.orderId != null ? item['orderItemId'] ?? 0 : null,
-              orderItemMeasurementId: widget.orderId != null ? item['orderItemMeasurementId'] ?? 0 : null,
-              orderItemPatternId: widget.orderId != null ? item['orderItemPatternId'] ?? 0 : null,
+              orderItemId: widget.orderId != null && item['orderItemId'] != null && item['orderItemId'] > 0 
+                  ? item['orderItemId'] 
+                  : null,
+              orderItemMeasurementId: widget.orderId != null && item['orderItemMeasurementId'] != null && item['orderItemMeasurementId'] > 0
+                  ? item['orderItemMeasurementId']
+                  : null,
+              orderItemPatternId: widget.orderId != null && item['orderItemPatternId'] != null && item['orderItemPatternId'] > 0
+                  ? item['orderItemPatternId']
+                  : null,
               measurements: (item['measurement'] as List<dynamic>?)
                       ?.expand<Map<String, dynamic>>((m) {
                     return (m as Map<String, dynamic>)
@@ -797,6 +806,11 @@ await _loadDataInBackground();
               dropdownDressController:
                   TextEditingController(text: selectedDressTypeName),
             );
+            
+            // Load media for this order item if editing
+            if (widget.orderId != null && item['orderItemId'] != null) {
+              _loadOrderItemMedia(item['orderItemId'], orderItem);
+            }
 
             // Add listener to order item cost controller for automatic total calculation
             orderItem.originalCost?.addListener(_updateTotalCost);
@@ -974,26 +988,68 @@ await _loadDataInBackground();
     return total;
   }
 
-  Future<void> _pickFromCamera() async {
-    final XFile? pickedFile =
-        await _picker.pickImage(source: ImageSource.camera);
-    if (pickedFile != null) {
-      setState(() {
-        _selectedImages.add(File(pickedFile.path));
-      });
+  Future<void> _pickFromCamera(OrderItem item) async {
+    try {
+      print('📷 Picking image from camera for item');
+      final XFile? pickedFile =
+          await _picker.pickImage(source: ImageSource.camera);
+      if (pickedFile != null) {
+        print('📷 Image picked: ${pickedFile.name}, path: ${pickedFile.path}');
+        setState(() {
+          if (kIsWeb) {
+            // On web, store XFile directly
+            item.images.add(pickedFile);
+            print('✅ Added XFile to item.images. Total images: ${item.images.length}');
+          } else {
+            // On mobile, convert to File
+            item.images.add(File(pickedFile.path));
+            print('✅ Added File to item.images. Total images: ${item.images.length}');
+          }
+        });
+      } else {
+        print('⚠️ No image picked from camera');
+      }
+    } catch (e) {
+      print('❌ Error picking image from camera: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error opening camera: $e')),
+        );
+      }
     }
   }
 
-  Future<void> _pickFromGallery() async {
-    final List<XFile>? pickedFiles = await _picker.pickMultiImage();
-    if (pickedFiles != null) {
-      setState(() {
-        _selectedImages.addAll(pickedFiles.map((file) => File(file.path)));
-      });
+  Future<void> _pickFromGallery(OrderItem item) async {
+    try {
+      print('🖼️ Picking images from gallery for item');
+      final List<XFile>? pickedFiles = await _picker.pickMultiImage();
+      if (pickedFiles != null && pickedFiles.isNotEmpty) {
+        print('🖼️ Picked ${pickedFiles.length} image(s) from gallery');
+        setState(() {
+          if (kIsWeb) {
+            // On web, store XFile directly
+            item.images.addAll(pickedFiles);
+            print('✅ Added ${pickedFiles.length} XFile(s) to item.images. Total images: ${item.images.length}');
+          } else {
+            // On mobile, convert to File
+            item.images.addAll(pickedFiles.map((file) => File(file.path)));
+            print('✅ Added ${pickedFiles.length} File(s) to item.images. Total images: ${item.images.length}');
+          }
+        });
+      } else {
+        print('⚠️ No images picked from gallery');
+      }
+    } catch (e) {
+      print('❌ Error picking images from gallery: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error opening gallery: $e')),
+        );
+      }
     }
   }
 
-  void _showImagePickerOptions() {
+  void _showImagePickerOptions(OrderItem item) {
     showModalBottomSheet(
       context: context,
       shape: RoundedRectangleBorder(
@@ -1006,17 +1062,17 @@ await _loadDataInBackground();
               ListTile(
                 leading: Icon(Icons.camera_alt),
                 title: Text("Open Camera"),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  _pickFromCamera();
+                  await _pickFromCamera(item);
                 },
               ),
               ListTile(
                 leading: Icon(Icons.photo_library),
                 title: Text("Select from Gallery"),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  _pickFromGallery();
+                  await _pickFromGallery(item);
                 },
               ),
             ],
@@ -1026,9 +1082,199 @@ await _loadDataInBackground();
     );
   }
 
-  void _recordAudio() {
-    print("🎙 Start Recording Audio...");
+  void _recordAudio(OrderItem item) {
+    print("🎙 Start Recording Audio for item...");
     // TODO: Implement audio recording logic
+    // For now, show a message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Audio recording feature coming soon')),
+      );
+    }
+  }
+
+  // Build media grid to display images
+  Widget _buildMediaGrid(OrderItem item) {
+    List<Widget> mediaWidgets = [];
+
+    // Add uploaded media (from server)
+    for (var media in item.uploadedMedia) {
+      if (media['mediaType'] == 'image') {
+        mediaWidgets.add(_buildMediaThumbnail(
+          media['mediaUrl'],
+          isUploaded: true,
+          onDelete: () {
+            // TODO: Delete from server
+            setState(() {
+              item.uploadedMedia.remove(media);
+            });
+          },
+        ));
+      }
+    }
+
+    // Add local images (not yet uploaded)
+    for (int i = 0; i < item.images.length; i++) {
+      final image = item.images[i];
+      mediaWidgets.add(_buildMediaThumbnail(
+        image,
+        isUploaded: false,
+        onDelete: () {
+          setState(() {
+            item.images.removeAt(i);
+          });
+        },
+      ));
+    }
+
+    if (mediaWidgets.isEmpty) {
+      return SizedBox.shrink();
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 1,
+      ),
+      itemCount: mediaWidgets.length,
+      itemBuilder: (context, index) => mediaWidgets[index],
+    );
+  }
+
+  // Build individual media thumbnail
+  Widget _buildMediaThumbnail(dynamic imageData, {required bool isUploaded, required VoidCallback onDelete}) {
+    return Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: isUploaded
+                ? Image.network(
+                    '${Urls.baseUrl}$imageData',
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey.shade200,
+                        child: Icon(Icons.broken_image, color: Colors.grey),
+                      );
+                    },
+                  )
+                : _buildLocalImage(imageData),
+          ),
+        ),
+        Positioned(
+          top: 4,
+          right: 4,
+          child: GestureDetector(
+            onTap: onDelete,
+            child: Container(
+              padding: EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.close, color: Colors.white, size: 16),
+            ),
+          ),
+        ),
+        if (!isUploaded)
+          Positioned(
+            bottom: 4,
+            left: 4,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'Pending',
+                style: TextStyle(color: Colors.white, fontSize: 10),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // Build local image widget (handles both web and mobile)
+  Widget _buildLocalImage(dynamic imageData) {
+    if (kIsWeb) {
+      // On web, imageData should be XFile
+      if (imageData is XFile) {
+        return _buildWebImage(imageData);
+      } else {
+        // Fallback: try to treat as XFile anyway
+        try {
+          return _buildWebImage(imageData as XFile);
+        } catch (e) {
+          return Container(
+            color: Colors.grey.shade200,
+            child: Icon(Icons.broken_image, color: Colors.grey),
+          );
+        }
+      }
+    } else {
+      // On mobile, use Image.file
+      if (imageData is File) {
+        return Image.file(
+          imageData,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              color: Colors.grey.shade200,
+              child: Icon(Icons.broken_image, color: Colors.grey),
+            );
+          },
+        );
+      } else {
+        return Container(
+          color: Colors.grey.shade200,
+          child: Icon(Icons.broken_image, color: Colors.grey),
+        );
+      }
+    }
+  }
+
+  // Build image widget for web platform
+  Widget _buildWebImage(XFile xFile) {
+    return FutureBuilder<Uint8List>(
+      future: xFile.readAsBytes(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done && snapshot.hasData) {
+          return Image.memory(
+            snapshot.data!,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.grey.shade200,
+                child: Icon(Icons.broken_image, color: Colors.grey),
+              );
+            },
+          );
+        } else if (snapshot.hasError) {
+          return Container(
+            color: Colors.grey.shade200,
+            child: Icon(Icons.broken_image, color: Colors.grey),
+          );
+        } else {
+          return Container(
+            color: Colors.grey.shade200,
+            child: Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+      },
+    );
   }
 
   Future<void> _navigateToCreateCustomer() async {
@@ -1079,7 +1325,159 @@ await _loadDataInBackground();
     }
   }
 
- void onHandleSaveOrder() async {
+  // Load media for an order item when editing
+  Future<void> _loadOrderItemMedia(int orderItemId, OrderItem item) async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null || widget.orderId == null) return;
+
+    try {
+      final String requestUrl = "${Urls.orderMedia}/$shopId/${widget.orderId}/$orderItemId";
+      final response = await ApiService().get(requestUrl, context);
+      
+      if (response.data != null && response.data['data'] != null) {
+        final mediaList = response.data['data'] as List<dynamic>;
+        if (mounted) {
+          setState(() {
+            item.uploadedMedia = mediaList.cast<Map<String, dynamic>>();
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading media for orderItemId $orderItemId: $e');
+      // Don't block order loading if media fetch fails
+    }
+  }
+
+  // Upload media files for an order item
+  Future<void> _uploadOrderItemMedia(
+    int shopId,
+    int orderId,
+    int orderItemId,
+    OrderItem item,
+  ) async {
+    try {
+      print('📤 Starting media upload for orderItemId: $orderItemId, images: ${item.images.length}');
+      
+      // Upload images
+      for (var imageData in item.images) {
+        try {
+          print('📤 Processing image: ${imageData.runtimeType}');
+          
+          Response response;
+          
+          if (kIsWeb && imageData is XFile) {
+            // On web, read bytes from XFile directly
+            print('📤 Web: Reading bytes from XFile');
+            final bytes = await imageData.readAsBytes();
+            
+            // Get filename - XFile.name might be empty, use path or generate
+            String fileName = imageData.name;
+            if (fileName.isEmpty) {
+              // Try to extract from path
+              final pathParts = imageData.path.split('/');
+              if (pathParts.isNotEmpty) {
+                fileName = pathParts.last;
+                // Remove query parameters if present
+                if (fileName.contains('?')) {
+                  fileName = fileName.split('?').first;
+                }
+              }
+            }
+            // If still empty, generate a filename
+            if (fileName.isEmpty || !fileName.contains('.')) {
+              fileName = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+            }
+            
+            print('📤 Web: Uploading ${bytes.length} bytes as $fileName');
+            print('📤 Web: Upload URL: ${Urls.orderMedia}/upload');
+            print('📤 Web: shopId=$shopId, orderId=$orderId, orderItemId=$orderItemId');
+            
+            // Create FormData manually for web
+            final formData = FormData.fromMap({
+              'shopId': shopId.toString(),
+              'orderId': orderId.toString(),
+              'orderItemId': orderItemId.toString(),
+              'mediaType': 'image',
+              'owner': GlobalVariables.userId?.toString() ?? '',
+              'file': MultipartFile.fromBytes(
+                bytes,
+                filename: fileName,
+                contentType: DioMediaType.parse('image/jpeg'), // Set mimetype explicitly
+              ),
+            });
+            
+            print('📤 Web: FormData created with ${formData.fields.length} fields');
+            print('📤 Web: FormData files: ${formData.files.length}');
+            if (formData.files.isNotEmpty) {
+              print('📤 Web: File field name: ${formData.files.first.key}');
+              print('📤 Web: File size: ${formData.files.first.value.length} bytes');
+            }
+            
+            try {
+              print('📤 Web: Calling postFormData...');
+              response = await ApiService().postFormData(
+                '${Urls.orderMedia}/upload',
+                context,
+                formData,
+              );
+              print('✅ Web: Upload response received: status=${response.statusCode}');
+              print('✅ Web: Response data: ${response.data}');
+            } catch (e, stackTrace) {
+              print('❌ Web: Upload failed with error: $e');
+              print('❌ Web: Error type: ${e.runtimeType}');
+              print('❌ Web: Stack trace: $stackTrace');
+              rethrow;
+            }
+          } else {
+            // On mobile, use File directly
+            final fileToUpload = imageData as File;
+            print('📤 Mobile: Uploading file: ${fileToUpload.path}');
+            
+            response = await ApiService().uploadMediaFile(
+              '${Urls.orderMedia}/upload',
+              context,
+              file: fileToUpload,
+              fields: {
+                'shopId': shopId.toString(),
+                'orderId': orderId.toString(),
+                'orderItemId': orderItemId.toString(),
+                'mediaType': 'image',
+                'owner': GlobalVariables.userId?.toString() ?? '',
+              },
+            );
+          }
+
+          if (response.data != null && response.data['data'] != null) {
+            final uploadedMedia = response.data['data'] as Map<String, dynamic>;
+            print('✅ Image uploaded successfully: ${uploadedMedia['mediaUrl']}');
+            setState(() {
+              item.uploadedMedia.add(uploadedMedia);
+            });
+          } else {
+            print('⚠️ Upload response missing data: ${response.data}');
+            print('⚠️ Full response: ${response.toString()}');
+          }
+        } catch (e, stackTrace) {
+          print('❌ Error uploading image: $e');
+          print('❌ Stack trace: $stackTrace');
+          // Continue with other images even if one fails
+        }
+      }
+
+      // Clear local images after successful upload
+      if (item.images.isNotEmpty) {
+        print('✅ Cleared ${item.images.length} local image(s) after upload');
+        setState(() {
+          item.images.clear();
+        });
+      }
+    } catch (e) {
+      print('❌ Error uploading media: $e');
+      // Don't block order save if media upload fails
+    }
+  }
+
+  void onHandleSaveOrder() async {
   int? shopId = GlobalVariables.shopIdGet;
   int? branchId = GlobalVariables.branchId;
   int? userId = GlobalVariables.userId;
@@ -1102,6 +1500,9 @@ await _loadDataInBackground();
     );
     return;
   }
+
+  // Show loading indicator
+  showLoader(context);
 
   List<Map<String, dynamic>> items = orderItems.map((item) {
     // Extract orderItemMeasurementId from measurements (only for update)
@@ -1157,7 +1558,7 @@ await _loadDataInBackground();
       "special_instructions": item.specialInstructions?.text ?? "",
       "recording": "",
       "videoLink": "", // Not implemented yet
-      "pictures": _selectedImages.map((file) => file.path).toList(),
+      "pictures": [], // Media is now handled separately via OrderMedia table
       "delivery_date": item.deliveryDate?.text?.trim().isNotEmpty == true
           ? item.deliveryDate!.text.trim()
           : DateFormat("yyyy-MM-dd").format(DateTime.now()),
@@ -1226,32 +1627,139 @@ await _loadDataInBackground();
 
   try {
     var response;
+    int? savedOrderId;
+    
     if (widget.orderId != null) {
+      // Update existing order
       final url = "${Urls.ordersSave}/$shopId/${widget.orderId}";
       response = await ApiService().put(url, data: payload, context);
+      savedOrderId = widget.orderId;
     } else {
+      // Create new order
       response = await ApiService().post(Urls.ordersSave, data: payload, context);
     }
 
-    if (!mounted) return;
+    if (!mounted) {
+      hideLoader(context);
+      return;
+    }
 
+    print('🔍 Response received: ${response.data}');
+    print('🔍 Response type: ${response.data.runtimeType}');
+    
     if (response.data != null && response.data is Map<String, dynamic>) {
       final responseData = response.data as Map<String, dynamic>;
-      final message = responseData['message'] ?? 'Order Updated Successfully';
+      final message = responseData['message'] ?? 'Order Saved Successfully';
+      
+      print('🔍 Response data keys: ${responseData.keys.toList()}');
+      print('🔍 savedOrderId before: $savedOrderId');
+      
+      // Get the order ID (for new orders, it's in the response)
+      if (savedOrderId == null) {
+        savedOrderId = responseData['orderId'] ?? responseData['data']?['orderId'] ?? responseData['id'];
+      }
+      
+      print('🔍 savedOrderId after: $savedOrderId');
+      print('🔍 shopId: $shopId');
+      print('🔍 orderItems.length: ${orderItems.length}');
+      
+      // Check each item for images
+      for (int i = 0; i < orderItems.length; i++) {
+        print('🔍 Item $i: orderItemId=${orderItems[i].orderItemId}, images=${orderItems[i].images.length}');
+      }
+
+      // Upload media files for each order item
+      if (savedOrderId != null && shopId != null) {
+        print('✅ CONDITIONS MET: Starting media upload process for orderId: $savedOrderId, shopId: $shopId');
+        print('📤 Total order items: ${orderItems.length}');
+        
+        // Upload media for each item
+        for (int i = 0; i < orderItems.length; i++) {
+          final item = orderItems[i];
+          print('📤 Processing item $i: has ${item.images.length} images, orderItemId: ${item.orderItemId}');
+          
+          // For updates, use the existing orderItemId directly
+          // For new orders, try to get from response, otherwise use item's orderItemId
+          int? orderItemId;
+          
+          if (widget.orderId != null) {
+            // Updating existing order - use the orderItemId from the item
+            // Only use if it's a valid ID (greater than 0)
+            if (item.orderItemId != null && item.orderItemId! > 0) {
+              orderItemId = item.orderItemId;
+              print('✅ Update mode: Using orderItemId ${orderItemId} for item $i');
+            } else {
+              print('❌ Update mode: Invalid orderItemId ${item.orderItemId} for item $i');
+              print('❌ Item details: selectedDressTypeId=${item.selectedDressTypeId}, images=${item.images.length}');
+            }
+          } else {
+            // Creating new order - try to get from response
+            List<dynamic> savedItems = [];
+            if (responseData['data'] != null && responseData['data']['Item'] != null) {
+              savedItems = responseData['data']['Item'] as List<dynamic>;
+            } else if (responseData['Item'] != null) {
+              savedItems = responseData['Item'] as List<dynamic>;
+            } else if (responseData['data'] != null && responseData['data']['items'] != null) {
+              savedItems = responseData['data']['items'] as List<dynamic>;
+            }
+            
+            print('📤 Create mode: Found ${savedItems.length} saved items in response');
+            
+            if (i < savedItems.length) {
+              final savedItemId = savedItems[i]['orderItemId'];
+              if (savedItemId != null && savedItemId > 0) {
+                orderItemId = savedItemId;
+                print('✅ Create mode: Got orderItemId ${orderItemId} from response for item $i');
+              } else {
+                print('❌ Create mode: Saved item $i has invalid orderItemId: $savedItemId');
+              }
+            } else if (item.orderItemId != null && item.orderItemId! > 0) {
+              orderItemId = item.orderItemId;
+              print('✅ Create mode: Using item.orderItemId ${orderItemId} for item $i');
+            } else {
+              print('❌ Create mode: No valid orderItemId found for item $i');
+            }
+          }
+          
+          // Upload media if we have a valid orderItemId and images to upload
+          if (orderItemId != null && orderItemId > 0 && item.images.isNotEmpty) {
+            print('🚀 UPLOADING ${item.images.length} image(s) for orderItemId: $orderItemId, orderId: $savedOrderId, shopId: $shopId');
+            try {
+              await _uploadOrderItemMedia(shopId, savedOrderId, orderItemId, item);
+              print('✅ Upload completed for item $i');
+            } catch (e, stackTrace) {
+              print('❌ Upload failed for item $i: $e');
+              print('❌ Stack trace: $stackTrace');
+              // Don't throw - continue with other items
+            }
+          } else {
+            if (item.images.isNotEmpty) {
+              print('❌ SKIPPING upload: orderItemId is invalid (${orderItemId}) for item $i (has ${item.images.length} images)');
+            } else {
+              print('ℹ️ No images to upload for item $i');
+            }
+          }
+        }
+        print('📤 Media upload process completed');
+      } else {
+        print('❌ Cannot upload media: savedOrderId=$savedOrderId, shopId=$shopId');
+      }
+
+      hideLoader(context);
 
       CustomSnackbar.showSnackbar(
         context,
         message,
         duration: Duration(seconds: 2),
       );
+      
       if(widget.orderId == null){
         // For new orders, navigate to order detail page
-        final orderId = responseData['orderId'] ?? responseData['id'];
-        if (orderId != null) {
+        if (savedOrderId != null) {
           Navigator.pushReplacementNamed(
             context, 
             AppRoutes.orderDetailsScreen,
-            arguments: orderId,
+            arguments: savedOrderId,
           );
         } else {
           Navigator.pop(context, true);
@@ -1265,13 +1773,15 @@ await _loadDataInBackground();
         );
       }
     } else {
+      hideLoader(context);
       CustomSnackbar.showSnackbar(
         context,
-        'Failed to update order',
+        'Failed to save order',
         duration: Duration(seconds: 2),
       );
     }
   } catch (e) {
+    hideLoader(context);
     print('Error: $e');
     
     // Parse error message for better user feedback
@@ -1645,13 +2155,41 @@ await _loadDataInBackground();
                                 children: [
                                   Expanded(
                                       child: _buildButton("🎙 Record Audio",
-                                          onPressed: _recordAudio)),
+                                          onPressed: () => _recordAudio(item))),
                                   const SizedBox(width: 10),
                                   Expanded(
                                       child: _buildButton("📷 Take Picture",
-                                          onPressed: _showImagePickerOptions)),
+                                          onPressed: () => _showImagePickerOptions(item))),
                                 ],
                               ),
+                              // Display uploaded and local images
+                              if (item.images.isNotEmpty || item.uploadedMedia.isNotEmpty) ...[
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Icon(Icons.photo_library, size: 18, color: ColorPalatte.primary),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Pictures',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: ColorPalatte.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '(${(item.images.length + item.uploadedMedia.length)} ${(item.images.length + item.uploadedMedia.length) == 1 ? 'picture' : 'pictures'})',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                _buildMediaGrid(item),
+                              ],
                               const SizedBox(height: 18),
                               Row(
                                 children: [
@@ -2291,7 +2829,7 @@ await _loadDataInBackground();
           "special_instructions": item.specialInstructions?.text ?? "",
           "recording": "",
           "videoLink": "",
-          "pictures": _selectedImages.map((f) => f.path).toList(),
+          "pictures": [], // Media is now handled separately via OrderMedia table
           "delivery_date": item.deliveryDate?.text?.trim().isNotEmpty == true
               ? item.deliveryDate!.text.trim()
               : DateFormat("yyyy-MM-dd").format(DateTime.now()),
@@ -2795,6 +3333,9 @@ class OrderItem {
   int? orderItemId;
   int? orderItemMeasurementId;
   int? orderItemPatternId;
+  List<dynamic> images = []; // Images for this order item (File for mobile, XFile for web)
+  List<File> audioFiles = []; // Audio files for this order item
+  List<Map<String, dynamic>> uploadedMedia = []; // Media already uploaded to server
 
   OrderItem({
     this.selectedDressType,
@@ -2811,13 +3352,19 @@ class OrderItem {
     this.orderItemId,
     this.orderItemMeasurementId,
     this.orderItemPatternId,
+    List<dynamic>? images,
+    List<File>? audioFiles,
+    List<Map<String, dynamic>>? uploadedMedia,
   })  : originalCost = originalCost ?? TextEditingController(),
         specialInstructions = specialInstructions ?? TextEditingController(),
         dropdownDressController = dropdownDressController ??
             TextEditingController(text: "Select Dress Type"),
         deliveryDate = deliveryDate ??
             TextEditingController(
-                text: DateFormat('yyyy-MM-dd').format(DateTime.now().add(Duration(days: 1))));
+                text: DateFormat('yyyy-MM-dd').format(DateTime.now().add(Duration(days: 1)))),
+        images = images ?? [],
+        audioFiles = audioFiles ?? [],
+        uploadedMedia = uploadedMedia ?? [];
 
   // Method to create a copy of this OrderItem
   OrderItem copyFrom(OrderItem source) {
@@ -2853,6 +3400,11 @@ class OrderItem {
       originalCost: TextEditingController(text: source.originalCost?.text ?? ''),
       specialInstructions: TextEditingController(text: source.specialInstructions?.text ?? ''),
       dropdownDressController: TextEditingController(text: source.dropdownDressController.text),
+      images: kIsWeb 
+          ? List.from(source.images) // On web, keep XFile objects
+          : List.from(source.images.map((img) => img is File ? File((img as File).path) : img)), // On mobile, ensure File objects
+      audioFiles: List.from(source.audioFiles),
+      uploadedMedia: List.from(source.uploadedMedia),
     );
   }
 }

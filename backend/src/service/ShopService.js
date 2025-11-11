@@ -13,6 +13,7 @@ const MeasurementSchema = require('../models/MeasurementModel').schema;
 const OrderItemSchema = require('../models/OrderItemModel').schema;
 const OrderSchema = require('../models/OrderModel').schema;
 const OrderItemAdditionalCostSchema = require('../models/OrderItemAdditionalCostModel').schema;
+const OrderMediaSchema = require('../models/OrderMediaModel').schema;
 const RoleSchema = require('../models/RoleModel').schema;
 const { getDynamicModel } = require('../utils/DynamicModel');
 const { getNextSequenceValue } = require('./sequenceService');
@@ -109,6 +110,7 @@ const createShopService = async (shopData) => {
       await getDynamicModel('OrderItem', OrderItemSchema, `orderItem_${shopId}`);
       await getDynamicModel('Order', OrderSchema, `order_${shopId}`);
       await getDynamicModel('OrderItemAdditionalCost', OrderItemAdditionalCostSchema, `orderitemadditionalcost_${shopId}`);
+      await getDynamicModel('OrderMedia', OrderMediaSchema, `ordermedia_${shopId}`);
       // Await Role creation to ensure roles are saved before user creation
       await getDynamicModel('Role', RoleSchema, `role_${shopId}`, defaultRoles);
     };

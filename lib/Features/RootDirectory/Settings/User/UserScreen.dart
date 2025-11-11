@@ -9,6 +9,7 @@ import 'package:tailorapp/Core/Widgets/CommonHeader.dart';
 import 'package:tailorapp/Features/RootDirectory/Settings/User/AddUserModal.dart';
 import '../../../../Core/Widgets/CustomLoader.dart';
 import '../../../../Core/Widgets/CustomSnakBar.dart';
+import '../../../../GlobalVariables.dart';
 
 class Userscreen extends StatefulWidget {
   const Userscreen({super.key});
@@ -69,13 +70,30 @@ class _UserscreenState extends State<Userscreen> {
 
   void fetchUserData() async {
     if (loading || !hasMoreData) return;
+    
+    // Get shopId from GlobalVariables
+    final int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null) {
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Shop ID is missing. Please login again.',
+          duration: const Duration(seconds: 2),
+        );
+      }
+      setState(() => loading = false);
+      return;
+    }
+    
     setState(() => loading = true);
     try {
       if (isFirstLoad) {
         Future.delayed(Duration.zero, () => showLoader(context));
       }
+      // Include shopId in the query parameters to filter users by shop
+      final String encodedSearchKeyword = Uri.encodeComponent(searchKeywordController.text);
       final String requestUrl =
-          "${Urls.addUsers}?pageNumber=$pageNumber&pageSize=$pageSize&searchKeyword=${searchKeywordController.text}";
+          "${Urls.addUsers}?pageNumber=$pageNumber&pageSize=$pageSize&shopId=$shopId&searchKeyword=$encodedSearchKeyword";
       final response = await ApiService().get(requestUrl, context);
       if (isFirstLoad) {
         Future.delayed(Duration.zero, () => hideLoader(context));
@@ -89,6 +107,7 @@ class _UserscreenState extends State<Userscreen> {
             return {
               'name': user['name'] ?? 'Unknown',
               'roleId': user['roleId'] ?? 'No Role',
+              'roleName': user['roleName'] ?? user['roleId']?.toString() ?? 'No Role',
               'phone': user['mobile'] ?? 'No Phone',
               'userId': user['userId']?.toString() ?? 'N/A',
               'shopId': user['shopId']?.toString() ?? 'N/A',
@@ -247,7 +266,7 @@ class _UserscreenState extends State<Userscreen> {
                             style:
                                 const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
-                            'Role Id: ${user['roleId']}  |  ${user['phone']}'),
+                            'Role: ${user['roleName']}  |  ${user['phone']}'),
                         trailing: Text(
                           'Shop ID: ${user['shopId']}',
                           style: TextStyle(

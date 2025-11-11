@@ -23,6 +23,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   bool isLoading = true;
   dynamic orderId;
   Map<int, String> dressTypeNames = {}; // Cache for dress type names
+  Map<int, List<Map<String, dynamic>>> orderItemMedia = {}; // Media for each order item (key: orderItemId)
 
   @override
   void initState() {
@@ -76,6 +77,44 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     }
   }
 
+  // Fetch media for all order items
+  Future<void> _fetchOrderItemMedia() async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null || orderId == null || order == null) return;
+
+    try {
+      final items = order?['items'] as List<dynamic>? ?? [];
+      Map<int, List<Map<String, dynamic>>> mediaMap = {};
+
+      // Fetch media for each order item
+      for (var item in items) {
+        final orderItemId = item['orderItemId'];
+        if (orderItemId != null) {
+          try {
+            final String requestUrl = "${Urls.orderMedia}/$shopId/$orderId/$orderItemId";
+            final response = await ApiService().get(requestUrl, context);
+            
+            if (response.data != null && response.data['data'] != null) {
+              final mediaList = response.data['data'] as List<dynamic>;
+              mediaMap[orderItemId] = mediaList.cast<Map<String, dynamic>>();
+            }
+          } catch (e) {
+            print('Error fetching media for orderItemId $orderItemId: $e');
+            // Continue with other items even if one fails
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          orderItemMedia = mediaMap;
+        });
+      }
+    } catch (e) {
+      print('Error fetching order item media: $e');
+    }
+  }
+
   void fetchProductDetail() async {
     showLoader(context);
     int? shopId = GlobalVariables.shopIdGet;
@@ -101,6 +140,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           });
           // Fetch dress type names after order is loaded
           _fetchDressTypeNames();
+          // Fetch media for all order items
+          _fetchOrderItemMedia();
         } else {
           setState(() {
             isLoading = false;
@@ -351,17 +392,41 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         final dressTypeId = item['dressTypeId'];
         final dressTypeName = dressTypeNames[dressTypeId] ?? 'Dress Type $dressTypeId';
         
-        return _buildItemCard(
-          title: 'Item #${index + 1} - $dressTypeName',
-          type: type,
-          measurements: Map.fromEntries(measurementFields),
-          cost: itemCost,
+        final orderItemId = item['orderItemId'];
+        final itemMedia = orderItemId != null ? orderItemMedia[orderItemId] : null;
+        
+        return Column(
+          children: [
+            _buildItemCard(
+              title: 'Item #${index + 1} - $dressTypeName',
+              type: type,
+              measurements: Map.fromEntries(measurementFields),
+              cost: itemCost,
+            ),
+            // Display media for this item
+            if (itemMedia != null && itemMedia.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildItemMedia(itemMedia),
+            ],
+          ],
         );
       } else {
-        return _buildSimpleItem(
-          title: 'Item #${index + 1}',
-          description: item['specialInstructions']?.toString() ?? 'No details',
-          cost: itemCost,
+        final orderItemId = item['orderItemId'];
+        final itemMedia = orderItemId != null ? orderItemMedia[orderItemId] : null;
+        
+        return Column(
+          children: [
+            _buildSimpleItem(
+              title: 'Item #${index + 1}',
+              description: item['specialInstructions']?.toString() ?? 'No details',
+              cost: itemCost,
+            ),
+            // Display media for this item
+            if (itemMedia != null && itemMedia.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildItemMedia(itemMedia),
+            ],
+          ],
         );
       }
     }).toList();
@@ -696,6 +761,192 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // Build media display for an order item
+  Widget _buildItemMedia(List<Map<String, dynamic>> mediaList) {
+    // Separate images and audio
+    final images = mediaList.where((m) => m['mediaType'] == 'image').toList();
+    final audioFiles = mediaList.where((m) => m['mediaType'] == 'audio').toList();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.photo_library, size: 18, color: ColorPalatte.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Pictures (${images.length} ${images.length == 1 ? 'picture' : 'pictures'}${audioFiles.isNotEmpty ? ', ${audioFiles.length} ${audioFiles.length == 1 ? 'audio' : 'audio files'}' : ''})',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: ColorPalatte.primary,
+                ),
+              ),
+            ],
+          ),
+          if (images.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1,
+              ),
+              itemCount: images.length,
+              itemBuilder: (context, index) {
+                final media = images[index];
+                final mediaUrl = media['mediaUrl']?.toString() ?? '';
+                return GestureDetector(
+                  onTap: () {
+                    // Show full screen image
+                    _showFullScreenImage(mediaUrl);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        '${Urls.baseUrl}$mediaUrl',
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: Colors.grey.shade200,
+                            child: Icon(Icons.broken_image, color: Colors.grey),
+                          );
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            color: Colors.grey.shade200,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+          if (audioFiles.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...audioFiles.map((audio) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.audiotrack, color: ColorPalatte.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            audio['fileName']?.toString() ?? 'Audio File',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (audio['fileSize'] != null)
+                            Text(
+                              '${(audio['fileSize'] / 1024).toStringAsFixed(1)} KB',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.play_circle_outline, color: ColorPalatte.primary),
+                      onPressed: () {
+                        // TODO: Play audio
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Audio playback coming soon')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Show full screen image
+  void _showFullScreenImage(String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                child: Image.network(
+                  '${Urls.baseUrl}$imageUrl',
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey.shade200,
+                      child: Icon(Icons.broken_image, color: Colors.grey, size: 64),
+                    );
+                  },
+                ),
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                icon: Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.pop(context),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                  shape: CircleBorder(),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
