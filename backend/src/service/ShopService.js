@@ -60,16 +60,17 @@ const createShopService = async (shopData) => {
           
           if (masterData && masterData.length > 0) {
             // Map documents - apply field mapper if provided, otherwise use direct copy
-            const documentsToInsert = masterData.map(doc => {
+            const documentsToInsert = await Promise.all(masterData.map(async (doc, index) => {
               const { _id, ...rest } = doc;
               
               // Apply field mapping if provided
               if (fieldMapper && typeof fieldMapper === 'function') {
-                return fieldMapper(rest);
+                const mapped = await fieldMapper(rest, index);
+                return mapped;
               }
               
               return rest;
-            });
+            }));
             
             if (documentsToInsert.length > 0) {
               await targetModel.insertMany(documentsToInsert);
