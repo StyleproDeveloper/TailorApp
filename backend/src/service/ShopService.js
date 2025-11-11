@@ -54,14 +54,20 @@ const createShopService = async (shopData) => {
       const db = mongoose.connection.db;
       
       // Helper function to copy data from master collection to shop-specific collection
-      const copyMasterData = async (masterCollectionName, targetModel, shopId, dataType) => {
+      const copyMasterData = async (masterCollectionName, targetModel, shopId, dataType, fieldMapper = null) => {
         try {
           const masterData = await db.collection(masterCollectionName).find({}).toArray();
           
           if (masterData && masterData.length > 0) {
-            // Remove _id field to let MongoDB generate new ones
+            // Map documents - apply field mapper if provided, otherwise use direct copy
             const documentsToInsert = masterData.map(doc => {
               const { _id, ...rest } = doc;
+              
+              // Apply field mapping if provided
+              if (fieldMapper && typeof fieldMapper === 'function') {
+                return fieldMapper(rest);
+              }
+              
               return rest;
             });
             
@@ -107,7 +113,17 @@ const createShopService = async (shopData) => {
         DressTypeMeasurementSchema,
         `dressTypeMeasurement_${shopId}`
       );
-      await copyMasterData('masterdresstypemeasurements', dressTypeMeasurementModel, shopId, 'dress type measurements');
+      // Map old field names to new schema field names
+      await copyMasterData('masterdresstypemeasurements', dressTypeMeasurementModel, shopId, 'dress type measurements', (doc) => {
+        // Map old format (DressType_ID, Measurement_ID, Measurement) to new format (dressTypeId, measurementId, name)
+        return {
+          dressTypeId: doc.DressType_ID ?? doc.dressTypeId ?? null,
+          measurementId: doc.Measurement_ID ?? doc.measurementId ?? null,
+          name: doc.Measurement ?? doc.name ?? '',
+          dressTypeMeasurementId: doc.dressTypeMeasurementId ?? null, // Will be auto-generated if null
+          owner: doc.owner ?? null,
+        };
+      });
       
       // Create dressTypeDressPattern collection and copy from masterdresstypedresspattern
       const dressTypeDressPatternModel = await getDynamicModel(
@@ -115,7 +131,17 @@ const createShopService = async (shopData) => {
         DressTypeDresspatternSchema,
         `dressTypeDressPattern_${shopId}`
       );
-      await copyMasterData('masterdresstypedresspattern', dressTypeDressPatternModel, shopId, 'dress type dress patterns');
+      // Map old field names to new schema field names
+      await copyMasterData('masterdresstypedresspattern', dressTypeDressPatternModel, shopId, 'dress type dress patterns', (doc) => {
+        // Map old format to new format if needed
+        return {
+          dressTypeId: doc.DressType_ID ?? doc.dressTypeId ?? null,
+          dressPatternId: doc.DressPattern_ID ?? doc.dressPatternId ?? null,
+          dressTypePatternId: doc.dressTypePatternId ?? doc.Id ?? null, // Will be auto-generated if null
+          category: doc.category ?? null,
+          owner: doc.owner ?? null,
+        };
+      });
       
       // Create other collections (no master data to copy)
       await getDynamicModel('Customer', CustomerSchema, `customer_${shopId}`);
