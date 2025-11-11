@@ -51,61 +51,78 @@ const createShopService = async (shopData) => {
 
     // Dynamically initialize  collections based on shopId
     const initializeCollections = async () => {
+      const db = mongoose.connection.db;
+      
+      // Helper function to copy data from master collection to shop-specific collection
+      const copyMasterData = async (masterCollectionName, targetModel, shopId, dataType) => {
+        try {
+          const masterData = await db.collection(masterCollectionName).find({}).toArray();
+          
+          if (masterData && masterData.length > 0) {
+            // Remove _id field to let MongoDB generate new ones
+            const documentsToInsert = masterData.map(doc => {
+              const { _id, ...rest } = doc;
+              return rest;
+            });
+            
+            if (documentsToInsert.length > 0) {
+              await targetModel.insertMany(documentsToInsert);
+              logger.info(`Copied ${dataType} from ${masterCollectionName}`, {
+                shopId,
+                count: documentsToInsert.length,
+              });
+            }
+          } else {
+            logger.warn(`No ${dataType} found in ${masterCollectionName} collection`, { shopId });
+          }
+        } catch (copyError) {
+          logger.error(`Error copying ${dataType} from ${masterCollectionName}`, copyError);
+          // Continue even if copy fails - collection is still created
+        }
+      };
+
       // Create dressType collection and copy from masterdresstype
       const dressTypeModel = await getDynamicModel('DressType', DressTypeSchema, `dressType_${shopId}`);
+      await copyMasterData('masterdresstype', dressTypeModel, shopId, 'dress types');
       
-      // Copy records from masterdresstype to the new dressType collection
-      try {
-        const db = mongoose.connection.db;
-        const masterDressTypes = await db.collection('masterdresstype').find({}).toArray();
-        
-        if (masterDressTypes && masterDressTypes.length > 0) {
-          // Remove _id field to let MongoDB generate new ones
-          const documentsToInsert = masterDressTypes.map(doc => {
-            const { _id, ...rest } = doc;
-            return rest;
-          });
-          
-          if (documentsToInsert.length > 0) {
-            await dressTypeModel.insertMany(documentsToInsert);
-            logger.info(`Copied dress types from masterdresstype`, {
-              shopId,
-              count: documentsToInsert.length,
-            });
-          }
-        } else {
-          logger.warn('No dress types found in masterdresstype collection', { shopId });
-        }
-      } catch (copyError) {
-        logger.error('Error copying dress types from masterdresstype', copyError);
-        // Continue even if copy fails - collection is still created
-      }
+      // Create measurement collection and copy from mastermeasurements
+      const measurementModel = await getDynamicModel(
+        'Measurements',
+        MeasurementSchema,
+        `measurement_${shopId}`
+      );
+      await copyMasterData('mastermeasurements', measurementModel, shopId, 'measurements');
       
-      await getDynamicModel('Customer', CustomerSchema, `customer_${shopId}`);
-      await getDynamicModel(
+      // Create dresspattern collection and copy from masterdresspatterns
+      const dressPatternModel = await getDynamicModel(
         'Dresspattern',
         DressPatternSchema,
         `dresspattern_${shopId}`
       );
-      await getDynamicModel(
-        'DressTypeDressPattern',
-        DressTypeDresspatternSchema,
-        `dressTypeDressPattern_${shopId}`
-      );
-      await getDynamicModel(
+      await copyMasterData('masterdresspatterns', dressPatternModel, shopId, 'dress patterns');
+      
+      // Create dressTypeMeasurement collection and copy from masterdresstypemeasurements
+      const dressTypeMeasurementModel = await getDynamicModel(
         'DressTypeMeasurement',
         DressTypeMeasurementSchema,
         `dressTypeMeasurement_${shopId}`
       );
+      await copyMasterData('masterdresstypemeasurements', dressTypeMeasurementModel, shopId, 'dress type measurements');
+      
+      // Create dressTypeDressPattern collection and copy from masterdresstypedresspattern
+      const dressTypeDressPatternModel = await getDynamicModel(
+        'DressTypeDressPattern',
+        DressTypeDresspatternSchema,
+        `dressTypeDressPattern_${shopId}`
+      );
+      await copyMasterData('masterdresstypedresspattern', dressTypeDressPatternModel, shopId, 'dress type dress patterns');
+      
+      // Create other collections (no master data to copy)
+      await getDynamicModel('Customer', CustomerSchema, `customer_${shopId}`);
       await getDynamicModel(
         'MeasurementHistory',
         MeasurementHistorySchema,
         `measurementHistory_${shopId}`
-      );
-      await getDynamicModel(
-        'Measurements',
-        MeasurementSchema,
-        `measurement_${shopId}`
       );
       await getDynamicModel('OrderItem', OrderItemSchema, `orderItem_${shopId}`);
       await getDynamicModel('Order', OrderSchema, `order_${shopId}`);
