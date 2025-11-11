@@ -84,18 +84,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       // Check if response is successful
       // Backend returns: { success: true, message: '...', data: {...} }
-      final responseData = response.data;
-      final isSuccess = responseData != null && 
-                       (responseData['success'] == true || 
-                        responseData['data'] != null ||
-                        response.statusCode == 201);
+      // response.data is a Map<String, dynamic>, not a boolean
+      final responseData = response.data as Map<String, dynamic>?;
+      
+      // Check success: status code 201 or response has success: true
+      final bool isSuccess = response.statusCode == 201 || 
+                            (responseData != null && 
+                             responseData.containsKey('success') && 
+                             responseData['success'] == true) ||
+                            (responseData != null && 
+                             responseData.containsKey('data'));
 
       if (isSuccess) {
         // Show success message briefly
         if (mounted) {
+          final successMessage = responseData?['message']?.toString() ?? 
+                                'Shop registered successfully!';
           CustomSnackbar.showSnackbar(
             context,
-            responseData['message'] ?? 'Shop registered successfully!',
+            successMessage,
             duration: const Duration(seconds: 2),
           );
         }
@@ -120,9 +127,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         }
       } else {
         // Handle error response
-        final errorMessage = responseData?['message'] ?? 
-                            responseData?['error'] ?? 
-                            'Registration failed. Please try again.';
+        final errorMessage = (responseData != null && responseData.containsKey('error'))
+            ? (responseData['error'] is List 
+                ? (responseData['error'] as List).join(', ')
+                : responseData['error'].toString())
+            : (responseData?['message']?.toString() ?? 
+               'Registration failed. Please try again.');
         if (mounted) {
           CustomSnackbar.showSnackbar(
             context,
