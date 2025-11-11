@@ -6,6 +6,10 @@
   "installCommand": "echo 'Install handled in build script'",
   "rewrites": [
     {
+      "source": "/manifest.json",
+      "destination": "/manifest.json"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
