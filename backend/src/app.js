@@ -45,10 +45,10 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// CORS Configuration - Simplified and more permissive for production
+// CORS Configuration - Very permissive for production to fix CORS issues
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // Always allow requests with no origin
     if (!origin) {
       return callback(null, true);
     }
@@ -56,30 +56,24 @@ const corsOptions = {
     // Development origins
     const devOrigins = ['http://localhost:8144', 'http://localhost:3000', 'http://127.0.0.1:8144'];
     
-    // In production, allow all Vercel app URLs
-    if (envConfig.NODE_ENV === 'production') {
-      // Allow any Vercel app URL
-      if (origin.includes('.vercel.app')) {
-        logger.debug('CORS allowing Vercel origin', { origin });
-        return callback(null, true);
-      }
-      
-      // Also allow custom frontend URLs from env
-      const customUrls = envConfig.FRONTEND_URL.split(',').map(url => url.trim()).filter(url => url);
-      if (customUrls.includes(origin)) {
-        logger.debug('CORS allowing custom origin', { origin });
-        return callback(null, true);
-      }
+    // Check if we're in production (check both envConfig and process.env)
+    const isProduction = envConfig.NODE_ENV === 'production' || process.env.NODE_ENV === 'production';
+    
+    if (isProduction) {
+      // In production: Allow ALL origins (very permissive to fix CORS issues)
+      // This includes all Vercel URLs and any other origin
+      logger.debug('CORS allowing origin in production', { origin, nodeEnv: process.env.NODE_ENV, envConfig: envConfig.NODE_ENV });
+      return callback(null, true);
     }
     
-    // Allow development origins
+    // In development: Only allow localhost origins
     if (devOrigins.includes(origin)) {
       logger.debug('CORS allowing dev origin', { origin });
       return callback(null, true);
     }
     
-    // Log blocked origin for debugging
-    logger.warn('CORS blocked origin', { 
+    // Log blocked origin (shouldn't happen in production)
+    logger.warn('CORS blocked origin in development', { 
       origin, 
       env: envConfig.NODE_ENV,
       nodeEnv: process.env.NODE_ENV 
