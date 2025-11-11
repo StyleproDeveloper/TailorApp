@@ -45,45 +45,52 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// CORS Configuration
+// CORS Configuration - Simplified and more permissive for production
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      return callback(null, true);
+    }
     
     // Development origins
     const devOrigins = ['http://localhost:8144', 'http://localhost:3000', 'http://127.0.0.1:8144'];
     
-    // Production: Allow all Vercel app URLs and custom frontend URLs
-    const allowedOrigins = envConfig.NODE_ENV === 'production'
-      ? [
-          ...envConfig.FRONTEND_URL.split(',').map(url => url.trim()),
-          /^https:\/\/.*\.vercel\.app$/, // Allow all Vercel app URLs
-          /^https:\/\/tailorapp.*\.vercel\.app$/, // Specific pattern for tailorapp
-        ]
-      : devOrigins;
-    
-    // Check if origin matches any allowed origin
-    const isAllowed = allowedOrigins.some(allowed => {
-      if (typeof allowed === 'string') {
-        return origin === allowed;
-      } else if (allowed instanceof RegExp) {
-        return allowed.test(origin);
+    // In production, allow all Vercel app URLs
+    if (envConfig.NODE_ENV === 'production') {
+      // Allow any Vercel app URL
+      if (origin.includes('.vercel.app')) {
+        logger.debug('CORS allowing Vercel origin', { origin });
+        return callback(null, true);
       }
-      return false;
-    });
-    
-    if (isAllowed || devOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      logger.warn('CORS blocked origin', { origin, env: envConfig.NODE_ENV });
-      callback(new Error('Not allowed by CORS'));
+      
+      // Also allow custom frontend URLs from env
+      const customUrls = envConfig.FRONTEND_URL.split(',').map(url => url.trim()).filter(url => url);
+      if (customUrls.includes(origin)) {
+        logger.debug('CORS allowing custom origin', { origin });
+        return callback(null, true);
+      }
     }
+    
+    // Allow development origins
+    if (devOrigins.includes(origin)) {
+      logger.debug('CORS allowing dev origin', { origin });
+      return callback(null, true);
+    }
+    
+    // Log blocked origin for debugging
+    logger.warn('CORS blocked origin', { 
+      origin, 
+      env: envConfig.NODE_ENV,
+      nodeEnv: process.env.NODE_ENV 
+    });
+    callback(new Error('Not allowed by CORS'));
   },
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-  allowedHeaders: 'Content-Type, Authorization, X-Requested-With',
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
   credentials: true,
   optionsSuccessStatus: 200,
+  preflightContinue: false,
 };
 
 app.use(cors(corsOptions));
