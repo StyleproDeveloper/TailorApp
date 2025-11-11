@@ -82,13 +82,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
         context
       );
 
-      if (response.data) {
-        // Set loading to false before navigation
-        setState(() {
-          isLoading = false;
-        });
+      // Check if response is successful
+      // Backend returns: { success: true, message: '...', data: {...} }
+      final responseData = response.data;
+      final isSuccess = responseData != null && 
+                       (responseData['success'] == true || 
+                        responseData['data'] != null ||
+                        response.statusCode == 201);
+
+      if (isSuccess) {
+        // Show success message briefly
+        if (mounted) {
+          CustomSnackbar.showSnackbar(
+            context,
+            responseData['message'] ?? 'Shop registered successfully!',
+            duration: const Duration(seconds: 2),
+          );
+        }
         
-        // Navigate to success page instead of directly to login
+        // Wait a moment for user to see the message, then navigate
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // Set loading to false before navigation
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+        }
+        
+        // Navigate to success page
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
@@ -97,16 +119,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
           );
         }
       } else {
-        CustomSnackbar.showSnackbar(context, response.data['message'],
-            duration: Duration(seconds: 1));
+        // Handle error response
+        final errorMessage = responseData?['message'] ?? 
+                            responseData?['error'] ?? 
+                            'Registration failed. Please try again.';
+        if (mounted) {
+          CustomSnackbar.showSnackbar(
+            context,
+            errorMessage,
+            duration: const Duration(seconds: 3),
+          );
+        }
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+        }
       }
     } catch (e) {
-      CustomSnackbar.showSnackbar(context, e.toString(),
-          duration: Duration(seconds: 1));
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
+      // Handle exceptions
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Registration failed: ${e.toString()}',
+          duration: const Duration(seconds: 3),
+        );
+      }
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
