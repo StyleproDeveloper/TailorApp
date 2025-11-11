@@ -132,12 +132,20 @@ const createShopService = async (shopData) => {
         `dressTypeDressPattern_${shopId}`
       );
       // Map old field names to new schema field names
-      await copyMasterData('masterdresstypedresspattern', dressTypeDressPatternModel, shopId, 'dress type dress patterns', (doc) => {
+      // Note: masterdresstypedresspattern might be empty, but mapping is ready for when data exists
+      await copyMasterData('masterdresstypedresspattern', dressTypeDressPatternModel, shopId, 'dress type dress patterns', async (doc, index) => {
         // Map old format to new format if needed
+        // dressTypePatternId is required, so we'll generate it if missing
+        let dressTypePatternId = doc.dressTypePatternId ?? doc.Id ?? null;
+        if (!dressTypePatternId) {
+          // Generate a unique ID if missing (using index + timestamp as fallback)
+          dressTypePatternId = Date.now() + index;
+        }
+        
         return {
           dressTypeId: doc.DressType_ID ?? doc.dressTypeId ?? null,
           dressPatternId: doc.DressPattern_ID ?? doc.dressPatternId ?? null,
-          dressTypePatternId: doc.dressTypePatternId ?? doc.Id ?? null, // Will be auto-generated if null
+          dressTypePatternId: dressTypePatternId,
           category: doc.category ?? null,
           owner: doc.owner ?? null,
         };
