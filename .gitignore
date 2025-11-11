@@ -139,3 +139,6 @@ Thumbs.db
 local.properties
 .vercel
 tailorapp-static/
+
+# Uploaded files
+backend/uploads/
