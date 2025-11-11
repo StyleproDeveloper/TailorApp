@@ -18,14 +18,15 @@ class Urls {
         return url;
       }
       
-      // Otherwise, use production backend (Vercel) - Latest deployment with CORS fix
-      final url = 'https://backend-4im43gqpt-stylepros-projects.vercel.app';
+      // Otherwise, use production backend (Vercel)
+      // Note: Production backend needs to be redeployed with CORS fix
+      final url = 'https://backend-pics4hvfk-stylepros-projects.vercel.app';
       print('✅ Using PRODUCTION backend: $url');
       return url;
     } catch (e) {
       // Fallback: if window is not available, default to production
       print('⚠️ Error detecting hostname, using production backend');
-      return 'https://backend-4im43gqpt-stylepros-projects.vercel.app';
+      return 'https://backend-pics4hvfk-stylepros-projects.vercel.app';
     }
   }
   
