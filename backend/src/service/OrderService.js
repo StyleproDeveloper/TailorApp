@@ -226,7 +226,15 @@ const createOrderService = async (orderData, shop_id) => {
     await session.commitTransaction();
     session.endSession();
 
-    return { message: 'Order created successfully', order };
+    // Fetch the created order items to return with orderItemIds
+    const createdOrderItems = await OrderItemModel.find({ orderId }).select('orderItemId dressTypeId').lean();
+
+    return { 
+      message: 'Order created successfully', 
+      order,
+      orderId: order.orderId,
+      Item: createdOrderItems, // Return items with orderItemIds for media upload
+    };
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
