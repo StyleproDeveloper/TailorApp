@@ -39,6 +39,15 @@ app.use(
   swaggerConfig.swaggerUi.setup(swaggerConfig.specs)
 );
 
+// Handle OPTIONS preflight requests FIRST - before any other middleware
+app.options('*', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  res.status(200).end();
+});
+
 // Security Middleware
 app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP for API (can be enabled if needed)
@@ -48,7 +57,7 @@ app.use(helmet({
 // CORS Configuration - Allow ALL origins to fix CORS issues completely
 // This is the most permissive configuration - allows requests from any origin
 const corsOptions = {
-  origin: true, // Allow all origins - this is the simplest and most permissive option
+  origin: '*', // Explicitly use wildcard for maximum compatibility
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Request-Method', 'Access-Control-Request-Headers'],
   credentials: false, // Set to false when using wildcard origin (*)
