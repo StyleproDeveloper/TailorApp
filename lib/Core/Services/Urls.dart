@@ -19,14 +19,14 @@ class Urls {
       }
       
       // Otherwise, use production backend (Vercel)
-      // Using the backend URL that's currently deployed
-      final url = 'https://tailor-app-backend-hg6l9d3vz-stylepros-projects.vercel.app';
+      // Latest deployment with CORS fix
+      final url = 'https://backend-kf2hci0ys-stylepros-projects.vercel.app';
       print('✅ Using PRODUCTION backend: $url');
       return url;
     } catch (e) {
       // Fallback: if window is not available, default to production
       print('⚠️ Error detecting hostname, using production backend');
-      return 'https://tailor-app-backend-hg6l9d3vz-stylepros-projects.vercel.app';
+      return 'https://backend-kf2hci0ys-stylepros-projects.vercel.app';
     }
   }
   
