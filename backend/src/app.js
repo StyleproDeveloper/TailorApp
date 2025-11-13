@@ -48,10 +48,11 @@ app.options('*', (req, res) => {
   res.status(200).end();
 });
 
-// Security Middleware
+// Security Middleware - DISABLE helmet CORS blocking
 app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP for API (can be enabled if needed)
   crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: false, // Allow cross-origin resources
 }));
 
 // CORS Configuration - Allow ALL origins to fix CORS issues completely
