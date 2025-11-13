@@ -1,4 +1,4 @@
-// Web-specific implementation
+// Web-specific implementation using dart:html
 import 'dart:html' as html;
 
 String getWebUrl() {
@@ -15,11 +15,14 @@ String getWebUrl() {
       print('✅ Using LOCAL backend: $url');
       return url;
     }
+    
+    // Otherwise, use production backend
+    final url = 'https://tailor-app-backend-1bfc2dnm3-stylepros-projects.vercel.app';
+    print('✅ Using PRODUCTION backend: $url');
+    return url;
   } catch (e) {
     print('⚠️ Error detecting hostname: $e');
+    // Fallback to production
+    return 'https://tailor-app-backend-1bfc2dnm3-stylepros-projects.vercel.app';
   }
-  
-  // Default to production
-  return 'https://tailor-app-backend-1bfc2dnm3-stylepros-projects.vercel.app';
 }
-

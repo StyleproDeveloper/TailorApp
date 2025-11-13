@@ -58,3 +58,4 @@ This will cause 404 errors because Vercel won't find `api/index.js`.
 
 For detailed instructions, see: `VERCEL_SETUP_COMPLETE.md`
 
+
