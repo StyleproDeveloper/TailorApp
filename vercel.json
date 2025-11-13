@@ -29,15 +29,6 @@
       ]
     },
     {
-      "source": "/(.*\\.(json|js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|wasm))",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        }
-      ]
-    },
-    {
       "source": "/(.*)",
       "headers": [
         {
