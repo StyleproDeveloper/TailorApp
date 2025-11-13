@@ -84,10 +84,11 @@ module.exports = (req, res) => {
   console.log('📍 Origin:', req.headers.origin || 'no origin');
   console.log('📍 Path:', req.path);
   console.log('📍 Original URL:', req.originalUrl);
+  console.log('📍 Query:', JSON.stringify(req.query));
   
   // IMPORTANT: Vercel rewrites preserve the original URL in req.url
+  // The req.url should already be correct (e.g., /auth/login)
   // But we need to ensure Express gets the correct path
-  // The req.url should already be correct, but let's make sure
   
   // IMPORTANT: Ensure CORS headers are set on the response object
   // before passing to Express, as Express might modify the response
