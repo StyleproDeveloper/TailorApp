@@ -61,5 +61,25 @@ connectDB().catch(err => {
   console.error('MongoDB connection initialization error:', err.message);
 });
 
-// Export the Express app for Vercel
-module.exports = app;
+// CRITICAL: Wrap the app to handle CORS at the ABSOLUTE entry point
+// This ensures CORS headers are set BEFORE any Express middleware can interfere
+const handler = (req, res) => {
+  // Set CORS headers IMMEDIATELY - this happens before Express even sees the request
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  
+  // Handle OPTIONS preflight IMMEDIATELY - don't even pass to Express
+  if (req.method === 'OPTIONS') {
+    console.log('✅ OPTIONS preflight handled at serverless function level');
+    return res.status(200).end();
+  }
+  
+  // Pass to Express app for all other requests
+  return app(req, res);
+};
+
+// Export the wrapped handler for Vercel
+// This is the entry point - CORS is handled here FIRST
+module.exports = handler;
