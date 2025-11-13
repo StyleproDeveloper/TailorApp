@@ -19,14 +19,14 @@ class Urls {
       }
       
       // Otherwise, use production backend (Vercel)
-      // Latest deployment: tailor-app-backend-hg6l9d3vz-stylepros-projects.vercel.app
-      final url = 'https://tailor-app-backend-hg6l9d3vz-stylepros-projects.vercel.app';
+      // Latest deployment: tailor-app-backend-1bfc2dnm3-stylepros-projects.vercel.app
+      final url = 'https://tailor-app-backend-1bfc2dnm3-stylepros-projects.vercel.app';
       print('✅ Using PRODUCTION backend: $url');
       return url;
     } catch (e) {
       // Fallback: if window is not available, default to production
       print('⚠️ Error detecting hostname, using production backend');
-      return 'https://tailor-app-backend-hg6l9d3vz-stylepros-projects.vercel.app';
+      return 'https://tailor-app-backend-1bfc2dnm3-stylepros-projects.vercel.app';
     }
   }
   
