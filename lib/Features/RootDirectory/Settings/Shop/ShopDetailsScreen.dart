@@ -28,6 +28,7 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
   final TextEditingController addressLine1Controller = TextEditingController();
   final TextEditingController streetController = TextEditingController();
   final TextEditingController cityController = TextEditingController();
+  final TextEditingController stateController = TextEditingController();
   final TextEditingController postalCodeController = TextEditingController();
   final TextEditingController countryCodeController = TextEditingController(text: '+91');
   final TextEditingController countryCodeSecondaryController = TextEditingController(text: '+91');
@@ -42,12 +43,9 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.shopData != null) {
-      shopData = widget.shopData;
-      _loadShopData();
-    } else {
-      _fetchShopData();
-    }
+    // Always fetch fresh data from API to ensure all fields are loaded
+    // Even if shopData is passed, it might be incomplete (e.g., from BranchesScreen)
+    _fetchShopData();
   }
 
   Future<void> _fetchShopData() async {
@@ -64,8 +62,12 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
       final response = await ApiService().get('${Urls.shopName}/$shopId', context);
       
       if (response.data != null) {
+        // Handle nested response structure: { success: true, data: {...} }
+        final responseData = response.data is Map ? response.data as Map<String, dynamic> : <String, dynamic>{};
+        final shopDataFromResponse = responseData['data'] ?? responseData;
+        
         setState(() {
-          shopData = response.data;
+          shopData = shopDataFromResponse is Map ? shopDataFromResponse as Map<String, dynamic> : null;
           _loadShopData();
           isLoading = false;
         });
@@ -80,15 +82,16 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
 
   void _loadShopData() {
     if (shopData != null) {
-      shopNameController.text = shopData!['shopName'] ?? '';
-      mobileController.text = shopData!['mobile'] ?? '';
-      secondaryMobileController.text = shopData!['secondaryMobile'] ?? '';
-      emailController.text = shopData!['email'] ?? '';
-      addressLine1Controller.text = shopData!['addressLine1'] ?? '';
-      streetController.text = shopData!['street'] ?? '';
-      cityController.text = shopData!['city'] ?? '';
+      shopNameController.text = shopData!['shopName']?.toString() ?? '';
+      mobileController.text = shopData!['mobile']?.toString() ?? '';
+      secondaryMobileController.text = shopData!['secondaryMobile']?.toString() ?? '';
+      emailController.text = shopData!['email']?.toString() ?? '';
+      addressLine1Controller.text = shopData!['addressLine1']?.toString() ?? '';
+      streetController.text = shopData!['street']?.toString() ?? '';
+      cityController.text = shopData!['city']?.toString() ?? '';
+      stateController.text = shopData!['state']?.toString() ?? '';
       postalCodeController.text = shopData!['postalCode']?.toString() ?? '';
-      selectedShopType = shopData!['shopType'] ?? 'Store';
+      selectedShopType = shopData!['shopType']?.toString() ?? 'Store';
       
       // Set country codes if available, otherwise keep default +91
       if (shopData!['countryCode'] != null && shopData!['countryCode'].toString().isNotEmpty) {
@@ -135,9 +138,12 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
         'city': cityController.text.trim().isNotEmpty 
             ? cityController.text.trim() 
             : '',
+        'state': stateController.text.trim().isNotEmpty 
+            ? stateController.text.trim() 
+            : '',
         'postalCode': postalCodeController.text.trim().isNotEmpty 
-            ? int.tryParse(postalCodeController.text.trim()) ?? 0 
-            : 0,
+            ? postalCodeController.text.trim() 
+            : '',
       };
 
       final response = await ApiService().put('${Urls.shopName}/$shopId', context, data: payload);
@@ -346,12 +352,22 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
             ),
             SizedBox(height: 16),
 
+            // State
+            CustomTextInput(
+              controller: stateController,
+              label: 'State (Optional)',
+              iconWidget: Icon(Icons.map, color: ColorPalatte.primary),
+              isEnabled: isEditing,
+            ),
+            SizedBox(height: 16),
+
             // Postal Code
             CustomTextInput(
               controller: postalCodeController,
               label: 'Postal Code (Optional)',
               iconWidget: Icon(Icons.pin_drop, color: ColorPalatte.primary),
               keyboardType: TextInputType.number,
+              maxLength: 6,
               isEnabled: isEditing,
             ),
             SizedBox(height: 32),
@@ -422,6 +438,7 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
     addressLine1Controller.dispose();
     streetController.dispose();
     cityController.dispose();
+    stateController.dispose();
     postalCodeController.dispose();
     countryCodeController.dispose();
     countryCodeSecondaryController.dispose();

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 import 'package:tailorapp/Core/Constants/Images.dart';
 import 'package:tailorapp/Core/Constants/StaticValues.dart';
@@ -20,6 +21,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  final _formKey = GlobalKey<FormState>();
   final name = TextEditingController();
   final shopName = TextEditingController();
   final code = TextEditingController();
@@ -46,23 +48,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String selectedCountryCode = "+91";
 
   Future<void> handleRegister(BuildContext context) async {
+    // Validate form before submission
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    // Additional validation for required fields
     if (name.text.trim().isEmpty || shopName.text.trim().isEmpty) {
       Requiredalert.showRequiredFieldsAlert(context);
       return;
     }
+
+    // Validate mobile number
+    if (mobileNumberController.text.trim().isEmpty) {
+      CustomSnackbar.showSnackbar(
+        context,
+        'Mobile number is required',
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
     setState(() {
       isLoading = true;
     });
 
     try {
+      // Combine country code with mobile number
+      final mobileNumber = mobileNumberController.text.trim();
+      final countryCode = countryCodeController.text.trim();
+      final fullMobileNumber = mobileNumber.startsWith('+') 
+          ? mobileNumber 
+          : '$countryCode$mobileNumber';
+
       final Map<String, dynamic> payload = {
         'branch_id': 0,
         'yourName': name.text.trim(),
         'shopName': shopName.text.trim(),
         'code': 'your_code_here',
         'shopType': selectedShopType,
-        'mobile': mobileNumberController.text.trim(),
-        'secondaryMobile': secondaryMobile.text.trim(),
+        'mobile': fullMobileNumber,
+        'secondaryMobile': secondaryMobile.text.trim().isNotEmpty
+            ? (secondaryMobile.text.trim().startsWith('+')
+                ? secondaryMobile.text.trim()
+                : '$countryCode${secondaryMobile.text.trim()}')
+            : '',
         'email': email.text.trim(),
         'website': website.text.trim(),
         'instagram_url': instagram.text.trim(),
@@ -146,8 +176,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
           });
         }
       }
+    } on DioException catch (e) {
+      // Handle DioException specifically
+      String errorMessage = 'Registration failed. Please try again.';
+      
+      if (e.response != null) {
+        final responseData = e.response!.data;
+        if (responseData is Map<String, dynamic>) {
+          errorMessage = responseData['message']?.toString() ?? 
+                        responseData['error']?.toString() ?? 
+                        errorMessage;
+        } else if (responseData is String) {
+          errorMessage = responseData;
+        }
+      } else {
+        errorMessage = e.message ?? errorMessage;
+      }
+      
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          errorMessage,
+          duration: const Duration(seconds: 3),
+        );
+      }
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     } catch (e) {
-      // Handle exceptions
+      // Handle other exceptions
       if (mounted) {
         CustomSnackbar.showSnackbar(
           context,
@@ -216,8 +275,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           appBar: Commonheader(title: Textstring().shopReg),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
                 CustomTextInput(
                     controller: name,
                     label: Textstring().name,
@@ -352,11 +413,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   label: Textstring().website,
                   iconWidget: Icon(Icons.public, color: ColorPalatte.primary),
                   validator: (value) {
-                    if (value != null &&
-                        value.isNotEmpty &&
-                        !RegExp(r'^(http|https):\/\/([a-zA-Z0-9.-]+)\.([a-zA-Z]{2,})(\/.*)?$')
-                            .hasMatch(value)) {
-                      return 'Enter a valid website URL';
+                    if (value != null && value.isNotEmpty) {
+                      // Allow URLs with or without protocol (http://, https://, or none)
+                      // Matches backend validation: /^(https?:\/\/)?([\w-]+\.)+[A-Za-z]{2,}(\/.*)?$/
+                      final urlPattern = RegExp(r'^(https?:\/\/)?([\w-]+\.)+[A-Za-z]{2,}(\/.*)?$', caseSensitive: false);
+                      if (!urlPattern.hasMatch(value.trim())) {
+                        return 'Enter a valid website URL (e.g., example.com or https://example.com)';
+                      }
                     }
                     return null;
                   },
@@ -511,7 +574,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     style: TextStyle(color: ColorPalatte.white),
                   ),
                 ),
-              ],
+                ],
+              ),
             ),
           ),
         ));

@@ -43,11 +43,37 @@ const createShopService = async (shopData) => {
     }
     logger.debug('Default roles initialized', { count: defaultRoles.length });
 
-    const newShop = new ShopInfo({
+    // Ensure all address fields are properly set and preserved
+    // Handle both string and already-trimmed values
+    const normalizeAddressField = (value) => {
+      if (value === null || value === undefined) return null;
+      const strValue = String(value).trim();
+      return strValue !== '' ? strValue : null;
+    };
+
+    const shopDataToSave = {
       ...shopData,
       shop_id: shopId,
       subscriptionType,
+      active: shopData.active !== undefined ? shopData.active : true, // Default to true on registration
+      // Explicitly set address fields to ensure they're saved (preserve values even if empty strings)
+      addressLine1: normalizeAddressField(shopData.addressLine1),
+      street: normalizeAddressField(shopData.street),
+      city: normalizeAddressField(shopData.city),
+      state: normalizeAddressField(shopData.state),
+      postalCode: shopData.postalCode ? String(shopData.postalCode).trim() : null,
+    };
+
+    logger.debug('Creating shop with data', {
+      shopId,
+      addressLine1: shopDataToSave.addressLine1,
+      street: shopDataToSave.street,
+      city: shopDataToSave.city,
+      state: shopDataToSave.state,
+      postalCode: shopDataToSave.postalCode,
     });
+
+    const newShop = new ShopInfo(shopDataToSave);
 
     // Dynamically initialize  collections based on shopId
     const initializeCollections = async () => {
@@ -170,6 +196,16 @@ const createShopService = async (shopData) => {
     await initializeCollections();
 
     const savedShop = await newShop.save();
+    
+    // Log saved shop data to verify all fields are saved
+    logger.debug('Shop saved successfully', {
+      shopId: savedShop.shop_id,
+      addressLine1: savedShop.addressLine1,
+      street: savedShop.street,
+      city: savedShop.city,
+      state: savedShop.state,
+      postalCode: savedShop.postalCode,
+    });
 
     // After shop is created, create a user with Owner role
     try {

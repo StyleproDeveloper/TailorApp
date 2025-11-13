@@ -129,6 +129,10 @@ const ShopValidationSchema = Joi.object({
   setupComplete: Joi.boolean().optional().messages({
     'boolean.base': 'Setup Complete must be a boolean value!',
   }),
+
+  active: Joi.boolean().optional().default(true).messages({
+    'boolean.base': 'Active must be a boolean value!',
+  }),
 });
 
 module.exports = ShopValidationSchema;

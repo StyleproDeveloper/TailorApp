@@ -60,9 +60,24 @@ const updateShop = asyncHandler(async (req, res) => {
     }
   });
 
+  // Normalize address fields (trim and convert empty strings to null)
+  ['addressLine1', 'street', 'city', 'state'].forEach((key) => {
+    if (typeof payload[key] === 'string') {
+      payload[key] = payload[key].trim();
+      if (payload[key] === '') {
+        payload[key] = null;
+      }
+    }
+  });
+
   // Coerce postalCode number to string (schema validates digits; model field is String)
   if (typeof payload.postalCode === 'number') {
     payload.postalCode = String(payload.postalCode);
+  } else if (typeof payload.postalCode === 'string') {
+    payload.postalCode = payload.postalCode.trim();
+    if (payload.postalCode === '') {
+      payload.postalCode = null;
+    }
   }
 
   // Handle subscriptionEndDate: allow empty/null or coerce invalid strings to null

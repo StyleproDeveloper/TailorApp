@@ -227,6 +227,10 @@ const ShopInfoSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,

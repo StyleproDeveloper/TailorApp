@@ -2,6 +2,7 @@ const {
   createOrderService,
   getAllOrdersService,
   updateOrderService,
+  updateOrderItemDeliveryStatusService,
 } = require('../service/OrderService');
 const { asyncHandler, CustomError } = require('../utils/error.handlers');
 const logger = require('../utils/logger');
@@ -51,8 +52,30 @@ const updateOrder = asyncHandler(async (req, res) => {
   });
 });
 
+const updateOrderItemDeliveryStatus = asyncHandler(async (req, res) => {
+  const { shop_id, orderItemId } = req.params;
+  if (!shop_id) {
+    throw new CustomError('Shop ID is required', 400);
+  }
+  if (!orderItemId) {
+    throw new CustomError('Order Item ID is required', 400);
+  }
+  
+  const response = await updateOrderItemDeliveryStatusService(shop_id, orderItemId, req.body);
+  if (!response) {
+    throw new CustomError('Order item not found', 404);
+  }
+  
+  res.status(200).json({
+    success: true,
+    message: 'Order item delivery status updated successfully',
+    data: response,
+  });
+});
+
 module.exports = {
   createOrder,
   getAllOrders,
   updateOrder,
+  updateOrderItemDeliveryStatus,
 };
