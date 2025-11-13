@@ -63,9 +63,8 @@ connectDB().catch(err => {
 
 // Vercel serverless function handler
 // CRITICAL: This MUST handle CORS before Express app runs
-module.exports = async (req, res) => {
+module.exports = (req, res) => {
   // Set CORS headers IMMEDIATELY - before anything else
-  // Use res.setHeader() which works in Vercel serverless functions
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
@@ -83,6 +82,12 @@ module.exports = async (req, res) => {
   // Log all requests for debugging
   console.log('📥 Incoming request:', req.method, req.url);
   console.log('📍 Origin:', req.headers.origin || 'no origin');
+  console.log('📍 Path:', req.path);
+  console.log('📍 Original URL:', req.originalUrl);
+  
+  // IMPORTANT: Vercel rewrites preserve the original URL in req.url
+  // But we need to ensure Express gets the correct path
+  // The req.url should already be correct, but let's make sure
   
   // IMPORTANT: Ensure CORS headers are set on the response object
   // before passing to Express, as Express might modify the response
@@ -99,5 +104,6 @@ module.exports = async (req, res) => {
   
   // Pass to Express app for all other requests
   // Express will handle routing and business logic
+  // Note: Not using async/await here - Express handles it synchronously
   return app(req, res);
 };
