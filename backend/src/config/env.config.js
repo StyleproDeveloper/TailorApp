@@ -11,12 +11,22 @@ const validateEnv = () => {
   
   if (missing.length > 0) {
     console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
+    // Don't exit in serverless environment - let it fail gracefully
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      console.warn('⚠️ Running in serverless environment - app will start but may fail on API calls');
+      return;
+    }
     process.exit(1);
   }
   
   // Validate MongoDB URL format
   if (process.env.MONGO_URL && !process.env.MONGO_URL.startsWith('mongodb')) {
     console.error('❌ Invalid MONGO_URL format. Must start with "mongodb"');
+    // Don't exit in serverless environment
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      console.warn('⚠️ Invalid MONGO_URL - app will start but may fail on API calls');
+      return;
+    }
     process.exit(1);
   }
 };
