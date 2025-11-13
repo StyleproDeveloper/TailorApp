@@ -61,50 +61,65 @@ connectDB().catch(err => {
   console.error('MongoDB connection initialization error:', err.message);
 });
 
+// Allowed origins for CORS
+const allowedOrigins = [
+  'https://tailor-app-lemon.vercel.app',
+  'http://localhost:8144',
+  'http://localhost:3000',
+  'http://127.0.0.1:8144',
+  'http://127.0.0.1:3000',
+];
+
 // Vercel serverless function handler
 // CRITICAL: This MUST handle CORS before Express app runs
+// 🔥 FIX: Set req.path, req.originalUrl, and req.hostname before passing to Express
 module.exports = (req, res) => {
-  // Set CORS headers IMMEDIATELY - before anything else
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
-  res.setHeader('Access-Control-Max-Age', '86400');
-  
-  // Handle OPTIONS preflight request - return immediately
+  const origin = req.headers.origin;
+
+  // CORS HEADERS — Allow immediately
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers'
+  );
+
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS'
+  );
+
+  // Handle OPTIONS preflight
   if (req.method === 'OPTIONS') {
     console.log('✅ OPTIONS preflight handled at serverless function level');
-    console.log('📍 Origin:', req.headers.origin || 'no origin');
-    console.log('📍 Method:', req.method);
-    console.log('📍 URL:', req.url);
+    console.log('📍 Origin:', origin || 'no origin');
     return res.status(200).end();
   }
-  
-  // Log all requests for debugging
-  console.log('📥 Incoming request:', req.method, req.url);
-  console.log('📍 Origin:', req.headers.origin || 'no origin');
-  console.log('📍 Path:', req.path);
-  console.log('📍 Original URL:', req.originalUrl);
-  console.log('📍 Query:', JSON.stringify(req.query));
-  
-  // IMPORTANT: Vercel rewrites preserve the original URL in req.url
-  // The req.url should already be correct (e.g., /auth/login)
-  // But we need to ensure Express gets the correct path
-  
-  // IMPORTANT: Ensure CORS headers are set on the response object
-  // before passing to Express, as Express might modify the response
-  const originalEnd = res.end;
-  res.end = function(...args) {
-    // Ensure CORS headers are still set before sending response
+
+  // 🔥 FIX MISSING EXPRESS FIELDS
+  // Vercel doesn't provide these fields, but Express requires them
+  req.originalUrl = req.originalUrl || req.url;
+  req.path = req.path || req.url.split('?')[0];
+  req.hostname = req.headers.host;
+
+  // Debug Logs
+  console.log('📥 Incoming:', req.method, req.url);
+  console.log('📍 req.path:', req.path);
+  console.log('📍 req.originalUrl:', req.originalUrl);
+
+  // Ensure CORS remains even after Express modifies response
+  const _end = res.end;
+  res.end = function (...args) {
     if (!res.getHeader('Access-Control-Allow-Origin')) {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
     }
-    return originalEnd.apply(this, args);
+    return _end.apply(this, args);
   };
-  
-  // Pass to Express app for all other requests
-  // Express will handle routing and business logic
-  // Note: Not using async/await here - Express handles it synchronously
+
   return app(req, res);
 };

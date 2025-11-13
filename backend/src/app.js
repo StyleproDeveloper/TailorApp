@@ -39,9 +39,32 @@ app.use(
   swaggerConfig.swaggerUi.setup(swaggerConfig.specs)
 );
 
+// CORS Configuration - Explicitly allow specific origins
+// This includes the production Vercel frontend and localhost for development
+const allowedOrigins = [
+  'https://tailor-app-lemon.vercel.app',
+  'http://localhost:8144',
+  'http://localhost:3000',
+  'http://127.0.0.1:8144',
+  'http://127.0.0.1:3000',
+];
+
 // Handle OPTIONS preflight requests FIRST - before any other middleware
 app.options('*', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  
+  // Check if origin is in allowed list
+  if (origin && allowedOrigins.indexOf(origin) !== -1) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (envConfig.NODE_ENV === 'development') {
+    // In development, allow any origin
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  } else if (origin) {
+    // In production, only allow specific origins
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
   res.setHeader('Access-Control-Max-Age', '86400');
@@ -55,13 +78,29 @@ app.use(helmet({
   crossOriginResourcePolicy: false, // Allow cross-origin resources
 }));
 
-// CORS Configuration - Allow ALL origins to fix CORS issues completely
-// This is the most permissive configuration - allows requests from any origin
 const corsOptions = {
-  origin: '*', // Explicitly use wildcard for maximum compatibility
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, Postman, or curl)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Check if the origin is in the allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      // In development, allow all origins for easier testing
+      if (envConfig.NODE_ENV === 'development') {
+        callback(null, true);
+      } else {
+        // In production, only allow specific origins
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Request-Method', 'Access-Control-Request-Headers'],
-  credentials: false, // Set to false when using wildcard origin (*)
+  credentials: true, // Allow credentials when origin matches
   optionsSuccessStatus: 200,
   preflightContinue: false,
   maxAge: 86400, // Cache preflight requests for 24 hours
@@ -71,8 +110,20 @@ app.use(cors(corsOptions));
 
 // Additional explicit CORS headers as backup (in case cors middleware doesn't work)
 app.use((req, res, next) => {
-  // Set CORS headers explicitly - use wildcard for maximum compatibility
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  
+  // Check if origin is in allowed list
+  if (origin && allowedOrigins.indexOf(origin) !== -1) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (envConfig.NODE_ENV === 'development') {
+    // In development, allow any origin
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  } else if (origin) {
+    // In production, only allow specific origins
+    // Don't set CORS headers for disallowed origins
+  }
+  
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
   res.setHeader('Access-Control-Max-Age', '86400');
