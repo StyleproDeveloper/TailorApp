@@ -51,7 +51,7 @@ const corsOptions = {
   origin: true, // Allow all origins - this is the simplest and most permissive option
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Request-Method', 'Access-Control-Request-Headers'],
-  credentials: true,
+  credentials: false, // Set to false when using wildcard origin (*)
   optionsSuccessStatus: 200,
   preflightContinue: false,
   maxAge: 86400, // Cache preflight requests for 24 hours
@@ -61,16 +61,10 @@ app.use(cors(corsOptions));
 
 // Additional explicit CORS headers as backup (in case cors middleware doesn't work)
 app.use((req, res, next) => {
-  // Set CORS headers explicitly
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
+  // Set CORS headers explicitly - use wildcard for maximum compatibility
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Max-Age', '86400');
   
   // Handle preflight requests
