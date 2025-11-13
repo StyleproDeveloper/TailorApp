@@ -45,59 +45,41 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// CORS Configuration - Very permissive for production to fix CORS issues
+// CORS Configuration - Allow ALL origins to fix CORS issues completely
+// This is the most permissive configuration - allows requests from any origin
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Always allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
-    
-    // Development origins
-    const devOrigins = ['http://localhost:8144', 'http://localhost:3000', 'http://127.0.0.1:8144'];
-    
-    // Check if origin is a Vercel URL (both preview and production)
-    const isVercelUrl = origin.includes('.vercel.app') || origin.includes('vercel.app');
-    
-    // Check if we're in production (check both envConfig and process.env)
-    const isProduction = envConfig.NODE_ENV === 'production' || process.env.NODE_ENV === 'production';
-    
-    // Always allow Vercel URLs (preview and production)
-    if (isVercelUrl) {
-      logger.debug('CORS allowing Vercel origin', { origin, nodeEnv: process.env.NODE_ENV, envConfig: envConfig.NODE_ENV });
-      return callback(null, true);
-    }
-    
-    // In production: Allow ALL origins (very permissive to fix CORS issues)
-    if (isProduction) {
-      logger.debug('CORS allowing origin in production', { origin, nodeEnv: process.env.NODE_ENV, envConfig: envConfig.NODE_ENV });
-      return callback(null, true);
-    }
-    
-    // In development: Only allow localhost origins
-    if (devOrigins.includes(origin)) {
-      logger.debug('CORS allowing dev origin', { origin });
-      return callback(null, true);
-    }
-    
-    // Log blocked origin (shouldn't happen in production or for Vercel URLs)
-    logger.warn('CORS blocked origin', { 
-      origin, 
-      env: envConfig.NODE_ENV,
-      nodeEnv: process.env.NODE_ENV,
-      isVercelUrl,
-      isProduction
-    });
-    callback(new Error('Not allowed by CORS'));
-  },
+  origin: true, // Allow all origins - this is the simplest and most permissive option
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Request-Method', 'Access-Control-Request-Headers'],
   credentials: true,
   optionsSuccessStatus: 200,
   preflightContinue: false,
+  maxAge: 86400, // Cache preflight requests for 24 hours
 };
 
 app.use(cors(corsOptions));
+
+// Additional explicit CORS headers as backup (in case cors middleware doesn't work)
+app.use((req, res, next) => {
+  // Set CORS headers explicitly
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
 
 // Rate Limiting - More lenient in development
 const limiter = rateLimit({
