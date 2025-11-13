@@ -1,14 +1,22 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+// Conditional imports for web vs mobile
+import 'urls_stub.dart'
+    if (dart.library.html) 'urls_web.dart' as urls_impl;
+
 class Urls {
   // Backend URL - automatically detects environment
   static String get baseUrl {
     // For web platform, try to detect hostname
     if (kIsWeb) {
-      // On web, we can't use dart:html in mobile builds
-      // So we'll just use production URL for now
-      // Web-specific detection would need conditional imports
-      return _getProductionUrl();
+      try {
+        // Use web-specific implementation to detect localhost
+        return urls_impl.getWebUrl();
+      } catch (e) {
+        // Fallback to production if detection fails
+        print('⚠️ Error detecting hostname: $e');
+        return _getProductionUrl();
+      }
     }
     
     // For mobile platforms (Android/iOS), always use production backend

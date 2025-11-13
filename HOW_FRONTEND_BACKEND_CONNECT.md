@@ -253,3 +253,4 @@ curl https://backend-xxx.vercel.app/
 
 **Key Point:** They're connected via **HTTP requests**, not by being in the same project!
 
+

@@ -210,3 +210,4 @@ If you encounter issues:
 
 **Remember:** The most common mistake is forgetting to set **Root Directory** to `./backend` for the backend project!
 
+
