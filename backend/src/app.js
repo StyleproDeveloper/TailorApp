@@ -48,7 +48,7 @@ app.use(helmet({
 // CORS Configuration - Very permissive for production to fix CORS issues
 const corsOptions = {
   origin: function (origin, callback) {
-    // Always allow requests with no origin
+    // Always allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) {
       return callback(null, true);
     }
@@ -56,12 +56,20 @@ const corsOptions = {
     // Development origins
     const devOrigins = ['http://localhost:8144', 'http://localhost:3000', 'http://127.0.0.1:8144'];
     
+    // Check if origin is a Vercel URL (both preview and production)
+    const isVercelUrl = origin.includes('.vercel.app') || origin.includes('vercel.app');
+    
     // Check if we're in production (check both envConfig and process.env)
     const isProduction = envConfig.NODE_ENV === 'production' || process.env.NODE_ENV === 'production';
     
+    // Always allow Vercel URLs (preview and production)
+    if (isVercelUrl) {
+      logger.debug('CORS allowing Vercel origin', { origin, nodeEnv: process.env.NODE_ENV, envConfig: envConfig.NODE_ENV });
+      return callback(null, true);
+    }
+    
+    // In production: Allow ALL origins (very permissive to fix CORS issues)
     if (isProduction) {
-      // In production: Allow ALL origins (very permissive to fix CORS issues)
-      // This includes all Vercel URLs and any other origin
       logger.debug('CORS allowing origin in production', { origin, nodeEnv: process.env.NODE_ENV, envConfig: envConfig.NODE_ENV });
       return callback(null, true);
     }
@@ -72,11 +80,13 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    // Log blocked origin (shouldn't happen in production)
-    logger.warn('CORS blocked origin in development', { 
+    // Log blocked origin (shouldn't happen in production or for Vercel URLs)
+    logger.warn('CORS blocked origin', { 
       origin, 
       env: envConfig.NODE_ENV,
-      nodeEnv: process.env.NODE_ENV 
+      nodeEnv: process.env.NODE_ENV,
+      isVercelUrl,
+      isProduction
     });
     callback(new Error('Not allowed by CORS'));
   },
