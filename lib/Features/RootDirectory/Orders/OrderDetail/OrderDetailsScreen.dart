@@ -402,6 +402,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               type: type,
               measurements: Map.fromEntries(measurementFields),
               cost: itemCost,
+              orderItemId: orderItemId,
+              item: item,
             ),
             // Display media for this item
             if (itemMedia != null && itemMedia.isNotEmpty) ...[
@@ -420,6 +422,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               title: 'Item #${index + 1}',
               description: item['specialInstructions']?.toString() ?? 'No details',
               cost: itemCost,
+              orderItemId: orderItemId,
+              item: item,
             ),
             // Display media for this item
             if (itemMedia != null && itemMedia.isNotEmpty) ...[
@@ -501,6 +505,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     required String type,
     required Map<String, String> measurements,
     required String cost,
+    int? orderItemId,
+    Map<String, dynamic>? item,
   }) {
     return Card(
       shape: RoundedRectangleBorder(
@@ -593,6 +599,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                     );
                   }).toList(),
                 ),
+                const SizedBox(height: 12),
+                _buildDeliveryStatusSection(orderItemId, item),
               ],
             ),
           ),
@@ -605,6 +613,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     required String title,
     required String description,
     required String cost,
+    int? orderItemId,
+    Map<String, dynamic>? item,
   }) {
     return Card(
       shape: RoundedRectangleBorder(
@@ -631,13 +641,15 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(12.0),
-            child: Column(
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   description,
                   style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
+                const SizedBox(height: 12),
+                _buildDeliveryStatusSection(orderItemId, item),
               ],
             ),
           ),
@@ -763,6 +775,155 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         ],
       ),
     );
+  }
+
+  // Build delivery status section with checkbox and date field
+  Widget _buildDeliveryStatusSection(int? orderItemId, Map<String, dynamic>? item) {
+    if (orderItemId == null || item == null) {
+      return const SizedBox.shrink();
+    }
+
+    bool isDelivered = item['delivered'] == true;
+    String? actualDeliveryDateStr = item['actualDeliveryDate'];
+    DateTime? actualDeliveryDate;
+    
+    if (actualDeliveryDateStr != null && actualDeliveryDateStr.isNotEmpty) {
+      try {
+        actualDeliveryDate = DateTime.parse(actualDeliveryDateStr);
+      } catch (e) {
+        print('Error parsing actualDeliveryDate: $e');
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Checkbox(
+                value: isDelivered,
+                onChanged: (bool? value) async {
+                  if (value != null) {
+                    await _updateDeliveryStatus(orderItemId, value, actualDeliveryDate);
+                  }
+                },
+                activeColor: ColorPalatte.primary,
+              ),
+              const Text(
+                'Delivered',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today, size: 18, color: Colors.grey),
+              const SizedBox(width: 8),
+              const Text(
+                'Actual Delivery Date: ',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () async {
+                    final DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: actualDeliveryDate ?? DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) {
+                      await _updateDeliveryStatus(orderItemId, isDelivered, picked);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      actualDeliveryDate != null
+                          ? DateFormat('MMM dd, yyyy').format(actualDeliveryDate)
+                          : 'Select Date',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: actualDeliveryDate != null ? Colors.black : Colors.grey,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateDeliveryStatus(int orderItemId, bool delivered, DateTime? actualDeliveryDate) async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null) {
+      CustomSnackbar.showSnackbar(context, "Shop ID is missing", duration: const Duration(seconds: 2));
+      return;
+    }
+
+    try {
+      final payload = {
+        'delivered': delivered,
+        'actualDeliveryDate': actualDeliveryDate != null
+            ? DateFormat('yyyy-MM-dd').format(actualDeliveryDate)
+            : null,
+      };
+
+      final response = await ApiService().patch(
+        '${Urls.orders}/$shopId/item/$orderItemId/delivery',
+        context,
+        data: payload,
+      );
+
+      if (response.statusCode == 200) {
+        // Update local state
+        setState(() {
+          final items = order?['items'] as List<dynamic>? ?? [];
+          for (var i = 0; i < items.length; i++) {
+            if (items[i]['orderItemId'] == orderItemId) {
+              items[i]['delivered'] = delivered;
+              items[i]['actualDeliveryDate'] = actualDeliveryDate != null
+                  ? DateFormat('yyyy-MM-dd').format(actualDeliveryDate)
+                  : null;
+              break;
+            }
+          }
+        });
+
+        CustomSnackbar.showSnackbar(
+          context,
+          'Delivery status updated successfully',
+          duration: const Duration(seconds: 2),
+        );
+      }
+    } catch (e) {
+      CustomSnackbar.showSnackbar(
+        context,
+        'Error updating delivery status: $e',
+        duration: const Duration(seconds: 2),
+      );
+    }
   }
 
   // Build media display for an order item

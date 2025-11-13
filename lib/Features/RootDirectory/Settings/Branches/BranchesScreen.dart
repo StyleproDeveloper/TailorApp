@@ -18,6 +18,7 @@ class BranchesScreen extends StatefulWidget {
 
 class _BranchesScreenState extends State<BranchesScreen> {
   List<Map<String, dynamic>> _branches = [];
+  Map<String, dynamic>? _fullShopData; // Store full shop data
   bool _isLoading = true;
 
   @override
@@ -48,8 +49,14 @@ class _BranchesScreenState extends State<BranchesScreen> {
       
       // Handle both direct data and nested data structure
       final shopData = data is Map ? (data['data'] ?? data) : data;
+      
+      // Store full shop data for passing to ShopDetailsScreen
+      final fullShopData = shopData is Map<String, dynamic> 
+          ? shopData as Map<String, dynamic>
+          : <String, dynamic>{};
 
       setState(() {
+        _fullShopData = fullShopData;
         _branches = [
           {
             'branch_id': shopData['branch_id']?.toString() ?? shopData['branchId']?.toString() ?? 'N/A',
@@ -62,6 +69,7 @@ class _BranchesScreenState extends State<BranchesScreen> {
     } else {
       setState(() {
         _branches = [];
+        _fullShopData = null;
         _isLoading = false;
       });
     }
@@ -137,7 +145,7 @@ class _BranchesScreenState extends State<BranchesScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => ShopDetailsScreen(
-                              shopData: _branches.isNotEmpty ? _branches[0] : null,
+                              shopData: _fullShopData, // Pass full shop data instead of limited branch data
                             ),
                           ),
                         ).then((_) => fetchBranchData());
@@ -287,11 +295,12 @@ class _BranchesScreenState extends State<BranchesScreen> {
                             ),
                             onTap: () {
                               // Navigate to shop details when tapping on the main shop
+                              // Pass full shop data if available, otherwise it will fetch from API
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => ShopDetailsScreen(
-                                    shopData: branch,
+                                    shopData: _fullShopData, // Pass full shop data with all fields
                                   ),
                                 ),
                               ).then((_) => fetchBranchData());

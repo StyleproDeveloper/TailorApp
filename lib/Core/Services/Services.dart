@@ -127,6 +127,17 @@ class ApiService {
   }
 }
 
+  // PATCH Request
+  Future<Response> patch(String endpoint, BuildContext context, {dynamic data}) async {
+    try {
+      final response = await _dio.patch(endpoint, data: data);
+      return response;
+    } on DioException catch (e) {
+      _handleDioError(e, context);
+      rethrow;
+    }
+  }
+
   // POST Request without UI error surfacing (silent)
   Future<Response?> postSilent(String endpoint, {dynamic data}) async {
     try {

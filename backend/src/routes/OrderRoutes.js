@@ -4,6 +4,7 @@ const {
   createOrder,
   getAllOrders,
   updateOrder,
+  updateOrderItemDeliveryStatus,
 } = require('../controller/OrderController');
 const createOrderPayloadSchema = require('../validations/OrderValidation');
 const validateRequest = require('../middlewares/validateRequest');
@@ -392,5 +393,42 @@ router.put(
   validateRequest(createOrderPayloadSchema),
   updateOrder
 );
+
+/**
+ * @swagger
+ * /orders/{shop_id}/item/{orderItemId}/delivery:
+ *   patch:
+ *     summary: Update order item delivery status
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: shop_id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: orderItemId
+ *         required: true
+ *         schema:
+ *           type: number
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               delivered:
+ *                 type: boolean
+ *               actualDeliveryDate:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       200:
+ *         description: Order item delivery status updated successfully
+ *       404:
+ *         description: Order item not found
+ */
+router.patch('/:shop_id/item/:orderItemId/delivery', updateOrderItemDeliveryStatus);
 
 module.exports = router;

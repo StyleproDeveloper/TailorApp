@@ -49,6 +49,7 @@ class Urls {
   static const String getDressPattern = '/dress-pattern';
   static const String orderDressTypeMea = '/order-dressType-mea';
   static const String ordersSave = '/orders';
+  static String get orders => '/orders';
   static const String billingTerm = '/billing-term';
   static const String userBranch = '/user-branch';
   static const String shopSetupComplete = '/shops/setup-complete';
