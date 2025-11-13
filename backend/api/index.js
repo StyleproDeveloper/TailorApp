@@ -61,25 +61,43 @@ connectDB().catch(err => {
   console.error('MongoDB connection initialization error:', err.message);
 });
 
-// CRITICAL: Wrap the app to handle CORS at the ABSOLUTE entry point
-// This ensures CORS headers are set BEFORE any Express middleware can interfere
-const handler = (req, res) => {
-  // Set CORS headers IMMEDIATELY - this happens before Express even sees the request
+// Vercel serverless function handler
+// CRITICAL: This MUST handle CORS before Express app runs
+module.exports = async (req, res) => {
+  // Set CORS headers IMMEDIATELY - before anything else
+  // Use res.setHeader() which works in Vercel serverless functions
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
   res.setHeader('Access-Control-Max-Age', '86400');
   
-  // Handle OPTIONS preflight IMMEDIATELY - don't even pass to Express
+  // Handle OPTIONS preflight request - return immediately
   if (req.method === 'OPTIONS') {
     console.log('✅ OPTIONS preflight handled at serverless function level');
+    console.log('📍 Origin:', req.headers.origin || 'no origin');
+    console.log('📍 Method:', req.method);
+    console.log('📍 URL:', req.url);
     return res.status(200).end();
   }
   
+  // Log all requests for debugging
+  console.log('📥 Incoming request:', req.method, req.url);
+  console.log('📍 Origin:', req.headers.origin || 'no origin');
+  
+  // IMPORTANT: Ensure CORS headers are set on the response object
+  // before passing to Express, as Express might modify the response
+  const originalEnd = res.end;
+  res.end = function(...args) {
+    // Ensure CORS headers are still set before sending response
+    if (!res.getHeader('Access-Control-Allow-Origin')) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
+    }
+    return originalEnd.apply(this, args);
+  };
+  
   // Pass to Express app for all other requests
+  // Express will handle routing and business logic
   return app(req, res);
 };
-
-// Export the wrapped handler for Vercel
-// This is the entry point - CORS is handled here FIRST
-module.exports = handler;
