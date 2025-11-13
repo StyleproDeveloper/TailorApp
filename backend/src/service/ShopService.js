@@ -13,6 +13,7 @@ const MeasurementSchema = require('../models/MeasurementModel').schema;
 const OrderItemSchema = require('../models/OrderItemModel').schema;
 const OrderSchema = require('../models/OrderModel').schema;
 const OrderItemAdditionalCostSchema = require('../models/OrderItemAdditionalCostModel').schema;
+const OrderMediaSchema = require('../models/OrderMediaModel').schema;
 const RoleSchema = require('../models/RoleModel').schema;
 const { getDynamicModel } = require('../utils/DynamicModel');
 const { getNextSequenceValue } = require('./sequenceService');
@@ -42,73 +43,152 @@ const createShopService = async (shopData) => {
     }
     logger.debug('Default roles initialized', { count: defaultRoles.length });
 
-    const newShop = new ShopInfo({
+    // Ensure all address fields are properly set and preserved
+    // Handle both string and already-trimmed values
+    const normalizeAddressField = (value) => {
+      if (value === null || value === undefined) return null;
+      const strValue = String(value).trim();
+      return strValue !== '' ? strValue : null;
+    };
+
+    const shopDataToSave = {
       ...shopData,
       shop_id: shopId,
       subscriptionType,
+      active: shopData.active !== undefined ? shopData.active : true, // Default to true on registration
+      // Explicitly set address fields to ensure they're saved (preserve values even if empty strings)
+      addressLine1: normalizeAddressField(shopData.addressLine1),
+      street: normalizeAddressField(shopData.street),
+      city: normalizeAddressField(shopData.city),
+      state: normalizeAddressField(shopData.state),
+      postalCode: shopData.postalCode ? String(shopData.postalCode).trim() : null,
+    };
+
+    logger.debug('Creating shop with data', {
+      shopId,
+      addressLine1: shopDataToSave.addressLine1,
+      street: shopDataToSave.street,
+      city: shopDataToSave.city,
+      state: shopDataToSave.state,
+      postalCode: shopDataToSave.postalCode,
     });
+
+    const newShop = new ShopInfo(shopDataToSave);
 
     // Dynamically initialize  collections based on shopId
     const initializeCollections = async () => {
+      const db = mongoose.connection.db;
+      
+      // Helper function to copy data from master collection to shop-specific collection
+      const copyMasterData = async (masterCollectionName, targetModel, shopId, dataType, fieldMapper = null) => {
+        try {
+          const masterData = await db.collection(masterCollectionName).find({}).toArray();
+          
+          if (masterData && masterData.length > 0) {
+            // Map documents - apply field mapper if provided, otherwise use direct copy
+            const documentsToInsert = await Promise.all(masterData.map(async (doc, index) => {
+              const { _id, ...rest } = doc;
+              
+              // Apply field mapping if provided
+              if (fieldMapper && typeof fieldMapper === 'function') {
+                const mapped = await fieldMapper(rest, index);
+                return mapped;
+              }
+              
+              return rest;
+            }));
+            
+            if (documentsToInsert.length > 0) {
+              await targetModel.insertMany(documentsToInsert);
+              logger.info(`Copied ${dataType} from ${masterCollectionName}`, {
+                shopId,
+                count: documentsToInsert.length,
+              });
+            }
+          } else {
+            logger.warn(`No ${dataType} found in ${masterCollectionName} collection`, { shopId });
+          }
+        } catch (copyError) {
+          logger.error(`Error copying ${dataType} from ${masterCollectionName}`, copyError);
+          // Continue even if copy fails - collection is still created
+        }
+      };
+
       // Create dressType collection and copy from masterdresstype
       const dressTypeModel = await getDynamicModel('DressType', DressTypeSchema, `dressType_${shopId}`);
+      await copyMasterData('masterdresstype', dressTypeModel, shopId, 'dress types');
       
-      // Copy records from masterdresstype to the new dressType collection
-      try {
-        const db = mongoose.connection.db;
-        const masterDressTypes = await db.collection('masterdresstype').find({}).toArray();
-        
-        if (masterDressTypes && masterDressTypes.length > 0) {
-          // Remove _id field to let MongoDB generate new ones
-          const documentsToInsert = masterDressTypes.map(doc => {
-            const { _id, ...rest } = doc;
-            return rest;
-          });
-          
-          if (documentsToInsert.length > 0) {
-            await dressTypeModel.insertMany(documentsToInsert);
-            logger.info(`Copied dress types from masterdresstype`, {
-              shopId,
-              count: documentsToInsert.length,
-            });
-          }
-        } else {
-          logger.warn('No dress types found in masterdresstype collection', { shopId });
-        }
-      } catch (copyError) {
-        logger.error('Error copying dress types from masterdresstype', copyError);
-        // Continue even if copy fails - collection is still created
-      }
+      // Create measurement collection and copy from mastermeasurements
+      const measurementModel = await getDynamicModel(
+        'Measurements',
+        MeasurementSchema,
+        `measurement_${shopId}`
+      );
+      await copyMasterData('mastermeasurements', measurementModel, shopId, 'measurements');
       
-      await getDynamicModel('Customer', CustomerSchema, `customer_${shopId}`);
-      await getDynamicModel(
+      // Create dresspattern collection and copy from masterdresspatterns
+      const dressPatternModel = await getDynamicModel(
         'Dresspattern',
         DressPatternSchema,
         `dresspattern_${shopId}`
       );
-      await getDynamicModel(
-        'DressTypeDressPattern',
-        DressTypeDresspatternSchema,
-        `dressTypeDressPattern_${shopId}`
-      );
-      await getDynamicModel(
+      await copyMasterData('masterdresspatterns', dressPatternModel, shopId, 'dress patterns');
+      
+      // Create dressTypeMeasurement collection and copy from masterdresstypemeasurements
+      const dressTypeMeasurementModel = await getDynamicModel(
         'DressTypeMeasurement',
         DressTypeMeasurementSchema,
         `dressTypeMeasurement_${shopId}`
       );
+      // Map old field names to new schema field names
+      await copyMasterData('masterdresstypemeasurements', dressTypeMeasurementModel, shopId, 'dress type measurements', (doc) => {
+        // Map old format (DressType_ID, Measurement_ID, Measurement) to new format (dressTypeId, measurementId, name)
+        return {
+          dressTypeId: doc.DressType_ID ?? doc.dressTypeId ?? null,
+          measurementId: doc.Measurement_ID ?? doc.measurementId ?? null,
+          name: doc.Measurement ?? doc.name ?? '',
+          dressTypeMeasurementId: doc.dressTypeMeasurementId ?? null, // Will be auto-generated if null
+          owner: doc.owner ?? null,
+        };
+      });
+      
+      // Create dressTypeDressPattern collection and copy from masterdresstypedresspattern
+      const dressTypeDressPatternModel = await getDynamicModel(
+        'DressTypeDressPattern',
+        DressTypeDresspatternSchema,
+        `dressTypeDressPattern_${shopId}`
+      );
+      // Map old field names to new schema field names
+      // Note: masterdresstypedresspattern might be empty, but mapping is ready for when data exists
+      await copyMasterData('masterdresstypedresspattern', dressTypeDressPatternModel, shopId, 'dress type dress patterns', async (doc, index) => {
+        // Map old format to new format if needed
+        // dressTypePatternId is required, so we'll generate it if missing
+        let dressTypePatternId = doc.dressTypePatternId ?? doc.Id ?? null;
+        if (!dressTypePatternId) {
+          // Generate a unique ID if missing (using index + timestamp as fallback)
+          dressTypePatternId = Date.now() + index;
+        }
+        
+        return {
+          dressTypeId: doc.DressType_ID ?? doc.dressTypeId ?? null,
+          dressPatternId: doc.DressPattern_ID ?? doc.dressPatternId ?? null,
+          dressTypePatternId: dressTypePatternId,
+          category: doc.category ?? null,
+          owner: doc.owner ?? null,
+        };
+      });
+      
+      // Create other collections (no master data to copy)
+      await getDynamicModel('Customer', CustomerSchema, `customer_${shopId}`);
       await getDynamicModel(
         'MeasurementHistory',
         MeasurementHistorySchema,
         `measurementHistory_${shopId}`
       );
-      await getDynamicModel(
-        'Measurements',
-        MeasurementSchema,
-        `measurement_${shopId}`
-      );
       await getDynamicModel('OrderItem', OrderItemSchema, `orderItem_${shopId}`);
       await getDynamicModel('Order', OrderSchema, `order_${shopId}`);
       await getDynamicModel('OrderItemAdditionalCost', OrderItemAdditionalCostSchema, `orderitemadditionalcost_${shopId}`);
+      await getDynamicModel('OrderMedia', OrderMediaSchema, `ordermedia_${shopId}`);
       // Await Role creation to ensure roles are saved before user creation
       await getDynamicModel('Role', RoleSchema, `role_${shopId}`, defaultRoles);
     };
@@ -116,6 +196,16 @@ const createShopService = async (shopData) => {
     await initializeCollections();
 
     const savedShop = await newShop.save();
+    
+    // Log saved shop data to verify all fields are saved
+    logger.debug('Shop saved successfully', {
+      shopId: savedShop.shop_id,
+      addressLine1: savedShop.addressLine1,
+      street: savedShop.street,
+      city: savedShop.city,
+      state: savedShop.state,
+      postalCode: savedShop.postalCode,
+    });
 
     // After shop is created, create a user with Owner role
     try {

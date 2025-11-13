@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 import 'package:tailorapp/Core/Constants/Images.dart';
 import 'package:tailorapp/Core/Constants/StaticValues.dart';
@@ -20,6 +21,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  final _formKey = GlobalKey<FormState>();
   final name = TextEditingController();
   final shopName = TextEditingController();
   final code = TextEditingController();
@@ -46,23 +48,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String selectedCountryCode = "+91";
 
   Future<void> handleRegister(BuildContext context) async {
+    // Validate form before submission
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    // Additional validation for required fields
     if (name.text.trim().isEmpty || shopName.text.trim().isEmpty) {
       Requiredalert.showRequiredFieldsAlert(context);
       return;
     }
+
+    // Validate mobile number
+    if (mobileNumberController.text.trim().isEmpty) {
+      CustomSnackbar.showSnackbar(
+        context,
+        'Mobile number is required',
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
     setState(() {
       isLoading = true;
     });
 
     try {
+      // Combine country code with mobile number
+      final mobileNumber = mobileNumberController.text.trim();
+      final countryCode = countryCodeController.text.trim();
+      final fullMobileNumber = mobileNumber.startsWith('+') 
+          ? mobileNumber 
+          : '$countryCode$mobileNumber';
+
       final Map<String, dynamic> payload = {
         'branch_id': 0,
         'yourName': name.text.trim(),
         'shopName': shopName.text.trim(),
         'code': 'your_code_here',
         'shopType': selectedShopType,
-        'mobile': mobileNumberController.text.trim(),
-        'secondaryMobile': secondaryMobile.text.trim(),
+        'mobile': fullMobileNumber,
+        'secondaryMobile': secondaryMobile.text.trim().isNotEmpty
+            ? (secondaryMobile.text.trim().startsWith('+')
+                ? secondaryMobile.text.trim()
+                : '$countryCode${secondaryMobile.text.trim()}')
+            : '',
         'email': email.text.trim(),
         'website': website.text.trim(),
         'instagram_url': instagram.text.trim(),
@@ -82,13 +112,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
         context
       );
 
-      if (response.data) {
-        // Set loading to false before navigation
-        setState(() {
-          isLoading = false;
-        });
+      // Check if response is successful
+      // Backend returns: { success: true, message: '...', data: {...} }
+      // response.data is a Map<String, dynamic>, not a boolean
+      final responseData = response.data as Map<String, dynamic>?;
+      
+      // Check success: status code 201 or response has success: true
+      final bool isSuccess = response.statusCode == 201 || 
+                            (responseData != null && 
+                             responseData.containsKey('success') && 
+                             responseData['success'] == true) ||
+                            (responseData != null && 
+                             responseData.containsKey('data'));
+
+      if (isSuccess) {
+        // Show success message briefly
+        if (mounted) {
+          final successMessage = responseData?['message']?.toString() ?? 
+                                'Shop registered successfully!';
+          CustomSnackbar.showSnackbar(
+            context,
+            successMessage,
+            duration: const Duration(seconds: 2),
+          );
+        }
         
-        // Navigate to success page instead of directly to login
+        // Wait a moment for user to see the message, then navigate
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // Set loading to false before navigation
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+        }
+        
+        // Navigate to success page
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
@@ -97,16 +156,69 @@ class _RegisterScreenState extends State<RegisterScreen> {
           );
         }
       } else {
-        CustomSnackbar.showSnackbar(context, response.data['message'],
-            duration: Duration(seconds: 1));
+        // Handle error response
+        final errorMessage = (responseData != null && responseData.containsKey('error'))
+            ? (responseData['error'] is List 
+                ? (responseData['error'] as List).join(', ')
+                : responseData['error'].toString())
+            : (responseData?['message']?.toString() ?? 
+               'Registration failed. Please try again.');
+        if (mounted) {
+          CustomSnackbar.showSnackbar(
+            context,
+            errorMessage,
+            duration: const Duration(seconds: 3),
+          );
+        }
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+        }
+      }
+    } on DioException catch (e) {
+      // Handle DioException specifically
+      String errorMessage = 'Registration failed. Please try again.';
+      
+      if (e.response != null) {
+        final responseData = e.response!.data;
+        if (responseData is Map<String, dynamic>) {
+          errorMessage = responseData['message']?.toString() ?? 
+                        responseData['error']?.toString() ?? 
+                        errorMessage;
+        } else if (responseData is String) {
+          errorMessage = responseData;
+        }
+      } else {
+        errorMessage = e.message ?? errorMessage;
+      }
+      
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          errorMessage,
+          duration: const Duration(seconds: 3),
+        );
+      }
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
       }
     } catch (e) {
-      CustomSnackbar.showSnackbar(context, e.toString(),
-          duration: Duration(seconds: 1));
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
+      // Handle other exceptions
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Registration failed: ${e.toString()}',
+          duration: const Duration(seconds: 3),
+        );
+      }
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -163,8 +275,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           appBar: Commonheader(title: Textstring().shopReg),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
                 CustomTextInput(
                     controller: name,
                     label: Textstring().name,
@@ -299,11 +413,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   label: Textstring().website,
                   iconWidget: Icon(Icons.public, color: ColorPalatte.primary),
                   validator: (value) {
-                    if (value != null &&
-                        value.isNotEmpty &&
-                        !RegExp(r'^(http|https):\/\/([a-zA-Z0-9.-]+)\.([a-zA-Z]{2,})(\/.*)?$')
-                            .hasMatch(value)) {
-                      return 'Enter a valid website URL';
+                    if (value != null && value.isNotEmpty) {
+                      // Allow URLs with or without protocol (http://, https://, or none)
+                      // Matches backend validation: /^(https?:\/\/)?([\w-]+\.)+[A-Za-z]{2,}(\/.*)?$/
+                      final urlPattern = RegExp(r'^(https?:\/\/)?([\w-]+\.)+[A-Za-z]{2,}(\/.*)?$', caseSensitive: false);
+                      if (!urlPattern.hasMatch(value.trim())) {
+                        return 'Enter a valid website URL (e.g., example.com or https://example.com)';
+                      }
                     }
                     return null;
                   },
@@ -458,7 +574,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     style: TextStyle(color: ColorPalatte.white),
                   ),
                 ),
-              ],
+                ],
+              ),
             ),
           ),
         ));

@@ -48,6 +48,14 @@ const OrderItemSchema = Schema(
     delivery_date: {
       type: String,
     },
+    delivered: {
+      type: Boolean,
+      default: false,
+    },
+    actualDeliveryDate: {
+      type: Date,
+      default: null,
+    },
     owner: {
       type: String,
     },

@@ -226,7 +226,15 @@ const createOrderService = async (orderData, shop_id) => {
     await session.commitTransaction();
     session.endSession();
 
-    return { message: 'Order created successfully', order };
+    // Fetch the created order items to return with orderItemIds
+    const createdOrderItems = await OrderItemModel.find({ orderId }).select('orderItemId dressTypeId').lean();
+
+    return { 
+      message: 'Order created successfully', 
+      order,
+      orderId: order.orderId,
+      Item: createdOrderItems, // Return items with orderItemIds for media upload
+    };
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -795,8 +803,43 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
   }
 };
 
+const updateOrderItemDeliveryStatusService = async (shop_id, orderItemId, deliveryData) => {
+  try {
+    // Check if shop exists
+    const shopExists = await isShopExists(shop_id);
+    if (!shopExists) throw new Error(`Shop with ID ${shop_id} does not exist`);
+
+    const OrderItemModel = getOrderItemModel(shop_id);
+
+    const updateData = {};
+    if (deliveryData.delivered !== undefined) {
+      updateData.delivered = deliveryData.delivered;
+    }
+    if (deliveryData.actualDeliveryDate !== undefined) {
+      updateData.actualDeliveryDate = deliveryData.actualDeliveryDate 
+        ? new Date(deliveryData.actualDeliveryDate) 
+        : null;
+    }
+
+    const updatedItem = await OrderItemModel.findOneAndUpdate(
+      { orderItemId },
+      { $set: updateData },
+      { new: true }
+    );
+
+    if (!updatedItem) {
+      throw new Error(`Order item with ID ${orderItemId} not found`);
+    }
+
+    return updatedItem;
+  } catch (error) {
+    throw error;
+  }
+};
+
 module.exports = {
   createOrderService,
   getAllOrdersService,
   updateOrderService,
+  updateOrderItemDeliveryStatusService,
 };

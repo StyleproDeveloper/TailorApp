@@ -46,9 +46,25 @@ const getOrderDressTypeMeaPatternService = async (shop_id, dressTypeId) => {
     );
 
     // Fetch Measurements
+    // Support both old format (DressType_ID, Measurement) and new format (dressTypeId, name)
     const measurements = await MeasurementModel.find({
-      dressTypeId: dressTypeId,
-    }).select('dressTypeMeasurementId dressTypeId name');
+      $or: [
+        { dressTypeId: Number(dressTypeId) },
+        { DressType_ID: Number(dressTypeId) },
+      ],
+    });
+    
+    // Map measurements to consistent format
+    // Support both old format (DressType_ID, Measurement) and new format (dressTypeId, name)
+    const formattedMeasurements = measurements.map((m) => {
+      const doc = m.toObject ? m.toObject() : m;
+      return {
+        dressTypeMeasurementId: doc.dressTypeMeasurementId || null,
+        dressTypeId: doc.dressTypeId !== undefined ? doc.dressTypeId : (doc.DressType_ID !== undefined ? doc.DressType_ID : null),
+        name: doc.name || doc.Measurement || doc.measurement || '',
+        measurementId: doc.measurementId !== undefined ? doc.measurementId : (doc.Measurement_ID !== undefined ? doc.Measurement_ID : null),
+      };
+    });
 
     // Fetch DressType-DressPattern Relations
     const dressTypeDressPatterns = await DressTypePatternModel.find({
@@ -67,7 +83,7 @@ const getOrderDressTypeMeaPatternService = async (shop_id, dressTypeId) => {
 
     // Format response
     return {
-      DressTypeMeasurement: measurements,
+      DressTypeMeasurement: formattedMeasurements,
       DressTypeDressPattern: dressTypeDressPatterns.map((dp) => ({
         ...dp.toObject(),
         PatternDetails: dressPatterns.find(

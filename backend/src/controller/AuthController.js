@@ -1,9 +1,16 @@
 const { loginService, validateOTPService } = require('../service/AuthService');
+const { asyncHandler } = require('../utils/error.handlers');
+const { CustomError } = require('../utils/error.handlers');
+const logger = require('../utils/logger');
 
-const loginController = async (req, res) => {
+const loginController = asyncHandler(async (req, res) => {
+  const { mobileNumber } = req.body;
+
+  if (!mobileNumber) {
+    throw new CustomError('Mobile number is required', 400);
+  }
+
   try {
-    const { mobileNumber } = req.body;
-
     // Call the login service
     const result = await loginService(mobileNumber);
 
@@ -14,35 +21,39 @@ const loginController = async (req, res) => {
       otp: result.otp,
     });
   } catch (error) {
-    console.error('Error in loginController:', error);
+    logger.error('Error in loginController', {
+      error: error.message,
+      stack: error.stack,
+      mobileNumber: mobileNumber ? mobileNumber.substring(0, 4) + '****' : 'N/A',
+    });
 
-    // Handle specific errors
-    if (error.message === 'Mobile number is required') {
-      return res.status(400).json({ error: error.message });
-    }
-    if (error.message === 'User not found') {
-      return res.status(404).json({ error: error.message });
-    }
-
-    // Handle generic errors
-    res.status(500).json({ error: 'Internal server error' });
+    // Re-throw to let errorHandler handle it
+    throw error;
   }
-};
+});
 
 // OTP Validation Controller
-const validateOTPController = async (req, res) => {
-  try {
-    const { mobileNumber, otp } = req.body;
-    const result = await validateOTPService(mobileNumber, parseInt(otp));
+const validateOTPController = asyncHandler(async (req, res) => {
+  const { mobileNumber, otp } = req.body;
 
+  if (!mobileNumber || !otp) {
+    throw new CustomError('Mobile number and OTP are required', 400);
+  }
+
+  try {
+    const result = await validateOTPService(mobileNumber, parseInt(otp));
     res.status(200).json(result);
   } catch (error) {
-    console.error('Error in validateOTPController:', error);
-    return res
-      .status(error.message === 'Invalid OTP' ? 400 : 404)
-      .json({ error: error.message });
+    logger.error('Error in validateOTPController', {
+      error: error.message,
+      stack: error.stack,
+      mobileNumber: mobileNumber ? mobileNumber.substring(0, 4) + '****' : 'N/A',
+    });
+
+    // Re-throw to let errorHandler handle it
+    throw error;
   }
-};
+});
 
 module.exports = {
   loginController,

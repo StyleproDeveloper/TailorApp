@@ -18,6 +18,7 @@ class BranchesScreen extends StatefulWidget {
 
 class _BranchesScreenState extends State<BranchesScreen> {
   List<Map<String, dynamic>> _branches = [];
+  Map<String, dynamic>? _fullShopData; // Store full shop data
   bool _isLoading = true;
 
   @override
@@ -45,19 +46,32 @@ class _BranchesScreenState extends State<BranchesScreen> {
 
     if (response.data != null) {
       final data = response.data;
+      
+      // Handle both direct data and nested data structure
+      final shopData = data is Map ? (data['data'] ?? data) : data;
+      
+      // Store full shop data for passing to ShopDetailsScreen
+      final fullShopData = shopData is Map<String, dynamic> 
+          ? shopData as Map<String, dynamic>
+          : <String, dynamic>{};
 
       setState(() {
+        _fullShopData = fullShopData;
         _branches = [
           {
-            'branch_id': data['branch_id'].toString(),
-            'shopName': data['shopName'] ?? '',
-            'mobile': data['mobile'] ?? '',
+            'branch_id': shopData['branch_id']?.toString() ?? shopData['branchId']?.toString() ?? 'N/A',
+            'shopName': shopData['shopName']?.toString() ?? shopData['yourName']?.toString() ?? 'Unnamed Shop',
+            'mobile': shopData['mobile']?.toString() ?? '',
           }
         ];
         _isLoading = false;
       });
     } else {
-      throw Exception("Invalid API response");
+      setState(() {
+        _branches = [];
+        _fullShopData = null;
+        _isLoading = false;
+      });
     }
   } catch (e) {
     setState(() => _isLoading = false);
@@ -131,7 +145,7 @@ class _BranchesScreenState extends State<BranchesScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => ShopDetailsScreen(
-                              shopData: _branches.isNotEmpty ? _branches[0] : null,
+                              shopData: _fullShopData, // Pass full shop data instead of limited branch data
                             ),
                           ),
                         ).then((_) => fetchBranchData());
@@ -252,11 +266,13 @@ class _BranchesScreenState extends State<BranchesScreen> {
                             Divider(color: Colors.grey.shade300, thickness: 1),
                         itemBuilder: (context, index) {
                           final branch = _branches[index];
+                          final shopName = branch['shopName']?.toString() ?? '';
+                          final initial = shopName.isNotEmpty ? shopName[0].toUpperCase() : '?';
                           return ListTile(
                             leading: CircleAvatar(
                               backgroundColor: Colors.grey.shade200,
                               child: Text(
-                                branch['shopName'][0].toUpperCase(),
+                                initial,
                                 style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -264,14 +280,14 @@ class _BranchesScreenState extends State<BranchesScreen> {
                               ),
                             ),
                             title: Text(
-                              branch['shopName'],
+                              branch['shopName']?.toString() ?? 'Unnamed Branch',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontFamily: Fonts.Medium,
                               ),
                             ),
                             subtitle: Text(
-                              'Branch ID: ${branch['branch_id']} | Phone: ${branch['mobile']}',
+                              'Branch ID: ${branch['branch_id']?.toString() ?? 'N/A'} | Phone: ${branch['mobile']?.toString() ?? 'N/A'}',
                               style: TextStyle(
                                 fontFamily: Fonts.Regular,
                                 color: Colors.grey[600],
@@ -279,11 +295,12 @@ class _BranchesScreenState extends State<BranchesScreen> {
                             ),
                             onTap: () {
                               // Navigate to shop details when tapping on the main shop
+                              // Pass full shop data if available, otherwise it will fetch from API
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => ShopDetailsScreen(
-                                    shopData: branch,
+                                    shopData: _fullShopData, // Pass full shop data with all fields
                                   ),
                                 ),
                               ).then((_) => fetchBranchData());

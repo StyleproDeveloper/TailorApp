@@ -42,7 +42,20 @@ const errorHandler = (err, req, res, next) => {
     err.message = 'Invalid ID format';
   } else if (err.name === 'MongoServerError' && err.code === 11000) {
     statusCode = 409;
-    err.message = 'Duplicate entry. This record already exists.';
+    // Extract the field name from the error message
+    const keyPattern = err.keyPattern || {};
+    const keyValue = err.keyValue || {};
+    const duplicateField = Object.keys(keyPattern)[0];
+    const duplicateValue = keyValue[duplicateField];
+    
+    // Create a more specific error message
+    if (duplicateField === 'mobile') {
+      err.message = `Mobile number ${duplicateValue} is already registered. Please use a different mobile number.`;
+    } else if (duplicateField === 'email') {
+      err.message = `Email ${duplicateValue} is already registered. Please use a different email.`;
+    } else {
+      err.message = `Duplicate entry: ${duplicateField} "${duplicateValue}" already exists.`;
+    }
   }
 
   // Prepare error response

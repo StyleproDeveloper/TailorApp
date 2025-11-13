@@ -94,12 +94,7 @@ const ShopInfoSchema = new mongoose.Schema(
       type: String,
       required: true,
       maxlength: 100,
-      validate: {
-        validator: function (v) {
-          return /^[a-zA-Z\s]+$/.test(v);
-        },
-        message: 'Shop name cannot contain numbers!',
-      },
+      trim: true,
     },
     code: {
       type: String,
@@ -231,6 +226,10 @@ const ShopInfoSchema = new mongoose.Schema(
     setupComplete: {
       type: Boolean,
       default: false,
+    },
+    active: {
+      type: Boolean,
+      default: true,
     },
   },
   {

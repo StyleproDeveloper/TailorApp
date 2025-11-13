@@ -1,5 +1,8 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:tailorapp/Core/Services/Urls.dart';
 import '../Widgets/CustomSnakBar.dart';
 
@@ -124,6 +127,17 @@ class ApiService {
   }
 }
 
+  // PATCH Request
+  Future<Response> patch(String endpoint, BuildContext context, {dynamic data}) async {
+    try {
+      final response = await _dio.patch(endpoint, data: data);
+      return response;
+    } on DioException catch (e) {
+      _handleDioError(e, context);
+      rethrow;
+    }
+  }
+
   // POST Request without UI error surfacing (silent)
   Future<Response?> postSilent(String endpoint, {dynamic data}) async {
     try {
@@ -143,7 +157,84 @@ class ApiService {
   // POST with FormData
   Future<Response> postFormData(String endpoint, BuildContext context, FormData formData) async {
     try {
-      final response = await _dio.post(endpoint, data: formData);
+      print('📤 postFormData: Sending to $endpoint');
+      print('📤 postFormData: FormData has ${formData.fields.length} fields');
+      print('📤 postFormData: FormData has ${formData.files.length} files');
+      
+      // Don't set Content-Type manually - Dio will set it automatically with boundary for multipart/form-data
+      final response = await _dio.post(
+        endpoint,
+        data: formData,
+        // Let Dio handle Content-Type automatically for FormData
+      );
+      
+      print('📤 postFormData: Response status: ${response.statusCode}');
+      return response;
+    } on DioException catch (e) {
+      print('❌ postFormData error: ${e.message}');
+      print('❌ postFormData error type: ${e.type}');
+      if (e.response != null) {
+        print('❌ postFormData error response: ${e.response?.data}');
+      }
+      _handleDioError(e, context);
+      rethrow;
+    }
+  }
+
+  // Upload file (for media uploads)
+  Future<Response> uploadMediaFile(
+    String endpoint,
+    BuildContext context, {
+    required File file,
+    required Map<String, dynamic> fields,
+    String fileFieldName = 'file',
+  }) async {
+    try {
+      String fileName = file.path.split('/').last;
+      MultipartFile multipartFile;
+      
+      if (kIsWeb) {
+        // On web, file.path might be a blob URL, read as bytes
+        try {
+          final bytes = await file.readAsBytes();
+          // Remove query parameters from filename if present
+          if (fileName.contains('?')) {
+            fileName = fileName.split('?').first;
+          }
+          // Use a default filename if empty
+          if (fileName.isEmpty) {
+            fileName = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          }
+          multipartFile = MultipartFile.fromBytes(
+            bytes,
+            filename: fileName,
+          );
+        } catch (e) {
+          print('Error reading file bytes on web: $e');
+          throw Exception('Failed to read file for upload on web: $e');
+        }
+      } else {
+        // On mobile, use file path directly
+        multipartFile = await MultipartFile.fromFile(
+          file.path,
+          filename: fileName,
+        );
+      }
+      
+      FormData formData = FormData.fromMap({
+        ...fields,
+        fileFieldName: multipartFile,
+      });
+
+      final response = await _dio.post(
+        endpoint,
+        data: formData,
+        options: Options(
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        ),
+      );
       return response;
     } on DioException catch (e) {
       _handleDioError(e, context);

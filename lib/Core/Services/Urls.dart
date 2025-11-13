@@ -1,28 +1,27 @@
-import 'dart:html' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class Urls {
   // Backend URL - automatically detects environment
   static String get baseUrl {
-    // Check if running in browser
-    try {
-      final hostname = html.window.location.hostname;
-      
-      // If running on localhost or 127.0.0.1, use local backend
-      if (hostname == 'localhost' || hostname == '127.0.0.1') {
-        return 'http://localhost:5500';
-      }
-      
-      // Otherwise, use production backend (Vercel)
-      return 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
-    } catch (e) {
-      // Fallback: if window is not available, default to production
-      return 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
+    // For web platform, try to detect hostname
+    if (kIsWeb) {
+      // On web, we can't use dart:html in mobile builds
+      // So we'll just use production URL for now
+      // Web-specific detection would need conditional imports
+      return _getProductionUrl();
     }
+    
+    // For mobile platforms (Android/iOS), always use production backend
+    return _getProductionUrl();
   }
   
-  // Alternative Vercel URLs (if main URL has issues)
-  // static const String baseUrl = 'https://backend-oh2r1ys5u-stylepros-projects.vercel.app';
-  // static const String baseUrl = 'https://backend-ohnwrg4uj-stylepros-projects.vercel.app';
+  // Get production backend URL
+  static String _getProductionUrl() {
+    // Latest deployment: tailor-app-backend-1bfc2dnm3-stylepros-projects.vercel.app
+    final url = 'https://tailor-app-backend-1bfc2dnm3-stylepros-projects.vercel.app';
+    print('✅ Using PRODUCTION backend: $url');
+    return url;
+  }
   
   static const String shopName = '/shops';
   static const String customer = '/customer';
@@ -38,7 +37,9 @@ class Urls {
   static const String getDressPattern = '/dress-pattern';
   static const String orderDressTypeMea = '/order-dressType-mea';
   static const String ordersSave = '/orders';
+  static String get orders => '/orders';
   static const String billingTerm = '/billing-term';
   static const String userBranch = '/user-branch';
   static const String shopSetupComplete = '/shops/setup-complete';
+  static const String orderMedia = '/order-media';
 }

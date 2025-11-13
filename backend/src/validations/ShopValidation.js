@@ -10,12 +10,12 @@ const ShopValidationSchema = Joi.object({
 
   shopName: Joi.string()
     .max(100)
-    .regex(/^[a-zA-Z\s]+$/)
+    .trim()
     .required()
     .messages({
       'any.required': 'Shop name is required!',
       'string.max': 'Shop name cannot exceed 100 characters!',
-      'string.pattern.base': 'Shop name cannot contain numbers!',
+      'string.empty': 'Shop name cannot be empty!',
     }),
 
   code: Joi.string().max(80).optional().allow('', null),
@@ -128,6 +128,10 @@ const ShopValidationSchema = Joi.object({
 
   setupComplete: Joi.boolean().optional().messages({
     'boolean.base': 'Setup Complete must be a boolean value!',
+  }),
+
+  active: Joi.boolean().optional().default(true).messages({
+    'boolean.base': 'Active must be a boolean value!',
   }),
 });
 

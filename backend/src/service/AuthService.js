@@ -1,6 +1,8 @@
 const User = require('../models/UserModel');
 const Role = require('../models/RoleModel');
+const ShopInfo = require('../models/ShopModel');
 const otpStore = new Map();
+const logger = require('../utils/logger');
 
 // Generate a 4-digit OTP
 const generateOTP = () => {
@@ -41,13 +43,26 @@ const loginService = async (mobileNumber) => {
     }
 
     // Log for debugging
-    console.log('Login attempt - Received:', mobileNumber);
-    console.log('Login attempt - Normalized:', normalizedMobile);
-    console.log('Login attempt - User found:', user ? 'Yes' : 'No');
+    logger.debug('Login attempt', {
+      received: mobileNumber,
+      normalized: normalizedMobile,
+      userFound: user ? 'Yes' : 'No',
+    });
 
     // If user does not exist, throw an error
     if (!user) {
       throw new Error('User not found');
+    }
+
+    // Check if the shop is active before generating OTP
+    if (user.shopId) {
+      const shop = await ShopInfo.findOne({ shop_id: user.shopId });
+      if (!shop) {
+        throw new Error('Shop not found for this user');
+      }
+      if (shop.active === false) {
+        throw new Error('This shop account is inactive. Please contact support.');
+      }
     }
 
     // Generate a 4-digit OTP
@@ -73,7 +88,7 @@ const validateOTPService = async (mobileNumber, otp) => {
     // Retrieve stored OTP
     const storedOTP = otpStore.get(mobileNumber);
 
-    console.log('storedOTP', storedOTP);
+    logger.debug('OTP validation', { hasStoredOTP: !!storedOTP });
 
     if (!storedOTP) {
       throw new Error('OTP expired or not found');
@@ -112,6 +127,17 @@ const validateOTPService = async (mobileNumber, otp) => {
 
     if (!user) {
       throw new Error('User not found');
+    }
+
+    // Check if the shop is active
+    if (user.shopId) {
+      const shop = await ShopInfo.findOne({ shop_id: user.shopId });
+      if (!shop) {
+        throw new Error('Shop not found for this user');
+      }
+      if (shop.active === false) {
+        throw new Error('This shop account is inactive. Please contact support.');
+      }
     }
 
     return {
