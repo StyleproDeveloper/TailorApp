@@ -63,13 +63,15 @@ connectDB().catch(err => {
 
 // Vercel serverless function handler
 // CRITICAL: This MUST handle CORS before Express app runs
-module.exports = async (req, res) => {
+// TEMPORARILY ALLOWING ALL ORIGINS - CORS fix
+module.exports = (req, res) => {
   // Set CORS headers IMMEDIATELY - before anything else
-  // Use res.setHeader() which works in Vercel serverless functions
+  // ALLOW ALL ORIGINS - TEMPORARY FIX
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
   res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader('Access-Control-Allow-Credentials', 'false');
   
   // Handle OPTIONS preflight request - return immediately
   if (req.method === 'OPTIONS') {
@@ -84,9 +86,20 @@ module.exports = async (req, res) => {
   console.log('📥 Incoming request:', req.method, req.url);
   console.log('📍 Origin:', req.headers.origin || 'no origin');
   
-  // IMPORTANT: Ensure CORS headers are set on the response object
-  // before passing to Express, as Express might modify the response
+  // IMPORTANT: Wrap response.end to ensure CORS headers are ALWAYS set
   const originalEnd = res.end;
+  const originalWriteHead = res.writeHead;
+  
+  // Override writeHead to ensure CORS headers
+  res.writeHead = function(statusCode, statusMessage, headers) {
+    if (!headers) headers = {};
+    headers['Access-Control-Allow-Origin'] = '*';
+    headers['Access-Control-Allow-Methods'] = 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS';
+    headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers';
+    return originalWriteHead.call(this, statusCode, statusMessage, headers);
+  };
+  
+  // Override end to ensure CORS headers
   res.end = function(...args) {
     // Ensure CORS headers are still set before sending response
     if (!res.getHeader('Access-Control-Allow-Origin')) {
