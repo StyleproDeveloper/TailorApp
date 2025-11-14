@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.env
+.env.local
+.git
+.gitignore
+README.md
+.vercel
+vercel.json
+api
+server.js
+*.md
+.vscode
+.idea
+
