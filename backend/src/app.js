@@ -21,6 +21,7 @@ const BillingTermRoutes = require('./routes/BillingTermRoutes');
 const OrderRoutes = require('./routes/OrderRoutes');
 const OrderMediaRoutes = require('./routes/OrderMediaRoutes');
 const UserBarnchRoutes = require('./routes/UserBranchRoutes');
+const PaymentRoutes = require('./routes/PaymentRoutes');
 const swaggerConfig = require('./config/swagger');
 const envConfig = require('./config/env.config');
 const logger = require('./utils/logger');
@@ -202,6 +203,7 @@ app.use('/billing-term', BillingTermRoutes);
 app.use('/orders', OrderRoutes);
 app.use('/order-media', OrderMediaRoutes);
 app.use('/user-branch', UserBarnchRoutes);
+app.use('/payments', PaymentRoutes);
 
 // Handle 404 (Not Found)
 app.use(notFound);

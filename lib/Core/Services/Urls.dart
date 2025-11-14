@@ -53,4 +53,5 @@ class Urls {
   static const String userBranch = '/user-branch';
   static const String shopSetupComplete = '/shops/setup-complete';
   static const String orderMedia = '/order-media';
+  static const String payments = '/payments';
 }

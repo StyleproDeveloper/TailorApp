@@ -11,6 +11,7 @@ class Commonheader extends StatelessWidget implements PreferredSizeWidget {
   final Icon? backArrowIcon;
   final bool backArrowdisable;
   final int? titleSpacing;
+  final Widget? leading;
 
   const Commonheader({
     super.key,
@@ -21,7 +22,8 @@ class Commonheader extends StatelessWidget implements PreferredSizeWidget {
     this.showBackArrow = true,
     this.backArrowIcon,
     this.backArrowdisable = true,
-    this.titleSpacing = 0
+    this.titleSpacing = 0,
+    this.leading,
   });
 
   @override
@@ -33,14 +35,14 @@ class Commonheader extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       titleSpacing: titleSpacing?.toDouble(),
       actions: actions,
-      leading: showBackArrow
+      leading: leading ?? (showBackArrow
           ? IconButton(
               icon: backArrowIcon ??
                   const Icon(Icons.arrow_back_ios,
                       color: ColorPalatte.black, size: 19),
               onPressed: onPressed ?? () => Navigator.of(context).pop(),
             )
-          : null,
+          : null),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(

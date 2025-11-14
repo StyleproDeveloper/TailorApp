@@ -980,10 +980,19 @@ await _loadDataInBackground();
   double get calculateTotalCosts {
     final courierAmount = double.tryParse(courierController.text) ?? 0.0;
     final discountAmount = double.tryParse(discountController.text) ?? 0.0;
-    final total = totalOriginalCost +
-        totalAdditionalCost +
-        courierAmount -
-        discountAmount;
+    
+    // Calculate subtotal: items + additional costs
+    final subtotal = totalOriginalCost + totalAdditionalCost;
+    
+    // Apply discount to subtotal
+    final subtotalAfterDiscount = (subtotal - discountAmount).clamp(0.0, double.infinity);
+    
+    // Calculate GST on discounted subtotal (18%)
+    final gstAmount = isGstChecked ? (subtotalAfterDiscount * 0.18) : 0.0;
+    
+    // Final total: discounted subtotal + courier + GST
+    final total = subtotalAfterDiscount + courierAmount + gstAmount;
+    
     totalCostController.text = total.toStringAsFixed(2);
     return total;
   }
@@ -2288,6 +2297,8 @@ await _loadDataInBackground();
                             onChanged: (value) {
                               setState(() {
                                 isGstChecked = value!;
+                                // Recalculate total when GST checkbox changes
+                                _updateTotalCost();
                               });
                             },
                           ),
@@ -2962,7 +2973,12 @@ await _loadDataInBackground();
                 _addNewItem();
               },
             ),
-            if (orderItems.length > 1) ...[
+            // Show "Copy from Previous Item" option if there's at least one item with data
+            if (orderItems.any((item) => 
+              item.selectedDressTypeId != null && 
+              item.selectedDressType != null &&
+              item.measurements.isNotEmpty
+            )) ...[
               const Divider(),
               ListTile(
                 leading: Icon(Icons.copy, color: ColorPalatte.primary),

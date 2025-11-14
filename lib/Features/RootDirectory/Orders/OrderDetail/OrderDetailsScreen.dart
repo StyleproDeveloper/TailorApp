@@ -4,7 +4,9 @@ import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 import 'package:tailorapp/Core/Constants/TextString.dart';
 import 'package:tailorapp/Core/Services/Services.dart';
 import 'package:tailorapp/Core/Services/Urls.dart';
+import 'package:tailorapp/Core/Services/PDFService.dart';
 import 'package:tailorapp/Core/Widgets/CommonHeader.dart';
+import 'package:tailorapp/Core/Widgets/CommonStyles.dart';
 import 'package:tailorapp/Core/Widgets/CustomLoader.dart';
 import 'package:tailorapp/Core/Widgets/CustomSnakBar.dart';
 import 'package:tailorapp/Features/RootDirectory/Orders/OrderDetail/OrderDetailStyles.dart';
@@ -24,6 +26,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   dynamic orderId;
   Map<int, String> dressTypeNames = {}; // Cache for dress type names
   Map<int, List<Map<String, dynamic>>> orderItemMedia = {}; // Media for each order item (key: orderItemId)
+  Map<String, dynamic>? shopInfo; // Shop information for PDF
+  String? billingTerms; // Billing terms for PDF
 
   @override
   void initState() {
@@ -115,7 +119,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     }
   }
 
-  void fetchProductDetail() async {
+  Future<void> fetchProductDetail() async {
     showLoader(context);
     int? shopId = GlobalVariables.shopIdGet;
     if (orderId == null || shopId == null) {
@@ -142,6 +146,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           _fetchDressTypeNames();
           // Fetch media for all order items
           _fetchOrderItemMedia();
+          // Fetch shop information for PDF
+          _fetchShopInfo();
+          // Fetch billing terms for PDF
+          _fetchBillingTerms();
         } else {
           setState(() {
             isLoading = false;
@@ -187,8 +195,52 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
     return Scaffold(
       backgroundColor: ColorPalatte.white,
-      appBar: Commonheader(
-        title: 'Order Details',
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(
+                color: ColorPalatte.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _generatePDF,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(
+                      Icons.print,
+                      color: ColorPalatte.primary,
+                      size: 26,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const Text('Order Details', style: Commonstyles.headerText),
+          ],
+        ),
+        backgroundColor: ColorPalatte.white,
+        elevation: 0,
+        automaticallyImplyLeading: true,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back_ios,
+            color: ColorPalatte.black,
+            size: 19,
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: ColorPalatte.borderGray,
+            height: 0.5,
+          ),
+        ),
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 16.0),
@@ -695,17 +747,29 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       subtotalValue = (order?['estimationCost'] ?? 0).toDouble();
     }
     
+    // Apply discount to subtotal
+    final discountAmount = (order?['discount'] ?? 0).toDouble();
+    final subtotalAfterDiscount = (subtotalValue - discountAmount).clamp(0.0, double.infinity);
+    
     final subtotal = subtotalValue.toStringAsFixed(0);
+    final discount = discountAmount.toStringAsFixed(0);
+    final subtotalAfterDiscountStr = subtotalAfterDiscount.toStringAsFixed(0);
     final courierCharge = order?['courierCharge']?.toString() ?? '0';
+    
+    // Calculate GST on discounted subtotal (18%)
     final gst = order?['gst'] == true
-        ? (subtotalValue * 0.18).toStringAsFixed(0)
+        ? (subtotalAfterDiscount * 0.18).toStringAsFixed(0)
         : '0';
     final advanceReceived = order?['advancereceived']?.toString() ?? '0';
-    final total = (subtotalValue +
+    final paidAmount = (order?['paidAmount'] ?? 0).toDouble();
+    
+    // Final total: discounted subtotal + courier + GST
+    final total = (subtotalAfterDiscount +
             double.parse(courierCharge) +
             double.parse(gst))
         .toStringAsFixed(0);
-    final balance = (double.parse(total) - double.parse(advanceReceived))
+    // Balance = Total - Total Paid (which includes advance + all payments)
+    final balance = (double.parse(total) - paidAmount)
         .toStringAsFixed(0);
 
     return Column(
@@ -718,13 +782,47 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         ),
         const SizedBox(height: 8),
         _buildSummaryRow('Subtotal', subtotal),
+        if (discountAmount > 0) ...[
+          _buildSummaryRow('Discount', '-$discount', isNegative: true),
+          _buildSummaryRow('Subtotal After Discount', subtotalAfterDiscountStr),
+        ],
         _buildSummaryRow('Courier Charge', courierCharge),
         _buildSummaryRow('GST (18%)', gst),
-        _buildSummaryRow('Advance Received', advanceReceived),
         const Divider(),
         _buildSummaryRow('Total', total, isBold: true),
+        _buildSummaryRow('Total Paid', paidAmount.toStringAsFixed(0), isBold: true),
         _buildSummaryRow('Balance Due', balance,
             isBold: true, isNegative: double.parse(balance) > 0),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _showAddPaymentDialog(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ColorPalatte.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                icon: const Icon(Icons.payment, size: 20),
+                label: const Text('Add Payment'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _showPaymentHistoryDialog(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: ColorPalatte.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: BorderSide(color: ColorPalatte.primary),
+                ),
+                icon: const Icon(Icons.history, size: 20),
+                label: const Text('Payment History'),
+              ),
+            ),
+          ],
+        ),
         const Divider(),
       ],
     );
@@ -1110,5 +1208,501 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         ),
       ),
     );
+  }
+
+  // Fetch shop information for PDF
+  Future<void> _fetchShopInfo() async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null) return;
+
+    try {
+      final response = await ApiService().get('${Urls.shopName}/$shopId', context);
+      
+      if (response.data != null) {
+        final responseData = response.data is Map ? response.data as Map<String, dynamic> : <String, dynamic>{};
+        final shopDataFromResponse = responseData['data'] ?? responseData;
+        
+        if (mounted) {
+          setState(() {
+            shopInfo = shopDataFromResponse is Map ? shopDataFromResponse as Map<String, dynamic> : null;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching shop info: $e');
+      // Don't show error to user, PDF generation will use defaults
+    }
+  }
+
+  // Fetch billing terms for PDF
+  Future<void> _fetchBillingTerms() async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null) return;
+
+    try {
+      final response = await ApiService().get('${Urls.billingTerm}/$shopId?pageNumber=1&pageSize=1', context);
+      
+      if (response.data != null && response.data['data'] != null) {
+        final billingTermsList = response.data['data'] as List<dynamic>?;
+        if (billingTermsList != null && billingTermsList.isNotEmpty) {
+          final billingTerm = billingTermsList[0] as Map<String, dynamic>;
+          final terms = billingTerm['terms']?.toString();
+          
+          if (mounted && terms != null && terms.isNotEmpty) {
+            setState(() {
+              billingTerms = terms;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching billing terms: $e');
+      // Don't show error to user, PDF generation will work without terms
+    }
+  }
+
+  // Generate PDF invoice
+  Future<void> _generatePDF() async {
+    if (order == null) {
+      CustomSnackbar.showSnackbar(
+        context,
+        'Order data not available',
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
+    // If shop info not loaded, try to fetch it
+    if (shopInfo == null) {
+      showLoader(context);
+      await _fetchShopInfo();
+      hideLoader(context);
+    }
+
+    // If billing terms not loaded, try to fetch them
+    if (billingTerms == null || billingTerms!.isEmpty) {
+      await _fetchBillingTerms();
+    }
+
+    // Fetch payment history for PDF
+    List<dynamic> paymentHistory = [];
+    try {
+      paymentHistory = await _fetchPaymentHistory();
+    } catch (e) {
+      print('Error fetching payment history for PDF: $e');
+      // Continue without payment history if fetch fails
+    }
+
+    // Use default shop info if not available
+    final shopData = shopInfo ?? {
+      'shopName': 'Style Pros',
+      'yourName': '',
+      'mobile': '',
+      'email': '',
+      'addressLine1': '',
+      'street': '',
+      'city': '',
+      'state': '',
+      'postalCode': '',
+    };
+
+    try {
+      await PDFService.generateOrderInvoice(
+        order: order!,
+        shopInfo: shopData,
+        dressTypeNames: dressTypeNames,
+        billingTerms: billingTerms,
+        paymentHistory: paymentHistory.isNotEmpty ? paymentHistory : null,
+      );
+    } catch (e) {
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Error generating PDF: $e',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    }
+  }
+
+  // Show Add Payment Dialog
+  void _showAddPaymentDialog() {
+    final amountController = TextEditingController();
+    final notesController = TextEditingController();
+    final dateController = TextEditingController(
+      text: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+    );
+    String selectedPaymentType = 'partial';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Add Payment'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: amountController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Amount *',
+                    hintText: 'Enter payment amount',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: dateController,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Payment Date *',
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.calendar_today),
+                  ),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (date != null) {
+                      setState(() {
+                        dateController.text = DateFormat('yyyy-MM-dd').format(date);
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedPaymentType,
+                  decoration: const InputDecoration(
+                    labelText: 'Payment Type',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'advance', child: Text('Advance')),
+                    DropdownMenuItem(value: 'partial', child: Text('Partial')),
+                    DropdownMenuItem(value: 'final', child: Text('Final')),
+                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      selectedPaymentType = value ?? 'partial';
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: notesController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (Optional)',
+                    hintText: 'Add any notes about this payment',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (amountController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter payment amount')),
+                  );
+                  return;
+                }
+                final amount = double.tryParse(amountController.text);
+                if (amount == null || amount <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a valid amount')),
+                  );
+                  return;
+                }
+                await _addPayment(
+                  amount,
+                  dateController.text,
+                  selectedPaymentType,
+                  notesController.text,
+                );
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Add Payment'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Add Payment
+  Future<void> _addPayment(
+    double amount,
+    String paymentDate,
+    String paymentType,
+    String notes,
+  ) async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null || orderId == null) return;
+
+    showLoader(context);
+    try {
+      final userId = GlobalVariables.userId?.toString() ?? '';
+      final payload = {
+        'orderId': orderId,
+        'paidAmount': amount,
+        'paymentDate': paymentDate,
+        'paymentType': paymentType,
+        'notes': notes,
+        'owner': userId,
+      };
+
+      final response = await ApiService().post(
+        '${Urls.payments}/$shopId',
+        data: payload,
+        context,
+      );
+
+      hideLoader(context);
+
+      if (response.data != null && response.data['success'] == true) {
+        if (mounted) {
+          // Refresh order data first, then show success message
+          await fetchProductDetail();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment added successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response.data?['message'] ?? 'Failed to add payment'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      hideLoader(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding payment: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Show Payment History Dialog
+  void _showPaymentHistoryDialog() {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null || orderId == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => FutureBuilder(
+        future: _fetchPaymentHistory(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const AlertDialog(
+              content: Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          if (snapshot.hasError) {
+            return AlertDialog(
+              title: const Text('Payment History'),
+              content: Text('Error loading payment history: ${snapshot.error}'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          }
+
+          final payments = snapshot.data as List<dynamic>? ?? [];
+          final advanceReceived = (order?['advancereceived'] ?? 0).toDouble();
+          final advanceReceivedDate = order?['advanceReceivedDate']?.toString() ?? '';
+
+          return AlertDialog(
+            title: const Text('Payment History'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (advanceReceived > 0) ...[
+                      _buildPaymentHistoryRow(
+                        'Advance Payment',
+                        advanceReceived,
+                        advanceReceivedDate,
+                        'advance',
+                      ),
+                      const Divider(),
+                    ],
+                    if (payments.isEmpty && advanceReceived == 0)
+                      const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text('No payments recorded'),
+                      )
+                    else
+                      ...payments.map((payment) => _buildPaymentHistoryRow(
+                            _getPaymentTypeLabel(payment['paymentType'] ?? 'partial'),
+                            (payment['paidAmount'] ?? 0).toDouble(),
+                            payment['paymentDate']?.toString() ?? '',
+                            payment['paymentType'] ?? 'partial',
+                            notes: payment['notes']?.toString(),
+                          )),
+                    const Divider(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Total Paid:',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          Text(
+                            '₹${((order?['paidAmount'] ?? 0).toDouble()).toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // Fetch Payment History
+  Future<List<dynamic>> _fetchPaymentHistory() async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null || orderId == null) return [];
+
+    try {
+      final response = await ApiService().get(
+        '${Urls.payments}/$shopId/order/$orderId',
+        context,
+      );
+
+      if (response.data != null && response.data['success'] == true) {
+        return response.data['data'] as List<dynamic>? ?? [];
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching payment history: $e');
+      return [];
+    }
+  }
+
+  // Build Payment History Row
+  Widget _buildPaymentHistoryRow(
+    String label,
+    double amount,
+    String date,
+    String type, {
+    String? notes,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+              Text(
+                '₹${amount.toStringAsFixed(0)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+              const SizedBox(width: 4),
+              Text(
+                date,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              if (notes != null && notes.isNotEmpty) ...[
+                const SizedBox(width: 12),
+                Icon(Icons.note, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    notes,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Get Payment Type Label
+  String _getPaymentTypeLabel(String type) {
+    switch (type) {
+      case 'advance':
+        return 'Advance Payment';
+      case 'partial':
+        return 'Partial Payment';
+      case 'final':
+        return 'Final Payment';
+      case 'other':
+        return 'Other Payment';
+      default:
+        return 'Payment';
+    }
   }
 }

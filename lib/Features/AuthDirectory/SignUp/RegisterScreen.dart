@@ -82,7 +82,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           : '$countryCode$mobileNumber';
 
       final Map<String, dynamic> payload = {
-        'branch_id': 0,
+        'branch_id': 1,
         'yourName': name.text.trim(),
         'shopName': shopName.text.trim(),
         'code': 'your_code_here',
