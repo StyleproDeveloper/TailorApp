@@ -18,15 +18,14 @@ class Urls {
         return url;
       }
       
-      // Otherwise, use production backend (Vercel)
-      // Latest deployment with CORS fix
-      final url = 'https://backend-kf2hci0ys-stylepros-projects.vercel.app';
+      // Otherwise, use production backend (AWS Elastic Beanstalk)
+      final url = 'http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com';
       print('✅ Using PRODUCTION backend: $url');
       return url;
     } catch (e) {
       // Fallback: if window is not available, default to production
       print('⚠️ Error detecting hostname, using production backend');
-      return 'https://backend-kf2hci0ys-stylepros-projects.vercel.app';
+      return 'http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com';
     }
   }
   
