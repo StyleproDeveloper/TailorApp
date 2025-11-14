@@ -163,6 +163,15 @@ app.get('/', (req, res) => {
   });
 });
 
+// Dedicated health check endpoint for AWS/Docker
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // Routes
 app.use('/shops', shopRoutes);
 app.use('/customer', customerRoutes);
