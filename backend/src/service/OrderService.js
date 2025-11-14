@@ -612,11 +612,27 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
       }
     }
 
+    // Preserve critical fields that shouldn't be changed during update
+    // If customerId is not provided or is 0, preserve the existing customerId
+    const customerIdToUse = (orderDetails?.customerId && orderDetails.customerId !== 0) 
+      ? orderDetails.customerId 
+      : existingOrder.customerId;
+    
+    // Preserve branchId if not provided
+    const branchIdToUse = orderDetails?.branchId !== undefined 
+      ? orderDetails.branchId 
+      : existingOrder.branchId;
+
     // Update the main Order document
+    // Only update fields that are provided, preserve critical fields
     Object.assign(existingOrder, {
       ...orderDetails,
-      courier: orderDetails?.Courier, // ensure consistency in field name
-      deliveryDate: earliestDeliveryDate, // Set earliest delivery date from items
+      // Preserve critical fields
+      orderId: existingOrder.orderId, // Never change orderId
+      customerId: customerIdToUse, // Preserve existing customerId if not provided or is 0
+      branchId: branchIdToUse, // Preserve branchId if not provided
+      courier: orderDetails?.Courier !== undefined ? orderDetails.Courier : existingOrder.courier, // ensure consistency in field name
+      deliveryDate: earliestDeliveryDate || existingOrder.deliveryDate, // Set earliest delivery date from items or preserve existing
     });
 
     await existingOrder.save({ session });
