@@ -18,14 +18,14 @@ class Urls {
         return url;
       }
       
-      // Otherwise, use production backend (AWS Elastic Beanstalk)
-      final url = 'http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com';
+      // Otherwise, use production backend (AWS CloudFront with HTTPS)
+      final url = 'https://d3mi5vcvr32isw.cloudfront.net';
       print('✅ Using PRODUCTION backend: $url');
       return url;
     } catch (e) {
       // Fallback: if window is not available, default to production
       print('⚠️ Error detecting hostname, using production backend');
-      return 'http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com';
+      return 'https://d3mi5vcvr32isw.cloudfront.net';
     }
   }
   
