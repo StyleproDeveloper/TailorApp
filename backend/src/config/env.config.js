@@ -35,7 +35,7 @@ validateEnv();
 
 module.exports = {
   NODE_ENV: process.env.NODE_ENV || 'development',
-  PORT: process.env.PORT || 5500,
+  PORT: process.env.PORT || 8080, // Default to 8080 for Elastic Beanstalk compatibility
   MONGO_URL: process.env.MONGO_URL,
   // Add other environment variables as needed
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:8144',
