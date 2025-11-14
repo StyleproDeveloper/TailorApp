@@ -40,10 +40,11 @@ module.exports = {
   // Add other environment variables as needed
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:8144',
   JWT_SECRET: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-  // Rate limiting: More lenient in development, stricter in production
+  // Rate limiting: More lenient in development, reasonable limits in production
+  // Increased production limits to handle CloudFront and multiple users
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 
     (process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000), // 15 min prod, 1 min dev
   RATE_LIMIT_MAX_REQUESTS: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 
-    (process.env.NODE_ENV === 'production' ? 100 : 1000), // 100 prod, 1000 dev
+    (process.env.NODE_ENV === 'production' ? 1000 : 1000), // 1000 prod (increased from 100), 1000 dev
 };
 

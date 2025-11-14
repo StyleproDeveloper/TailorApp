@@ -86,6 +86,7 @@ app.use((req, res, next) => {
 });
 
 // Rate Limiting - More lenient in development
+// Use X-Forwarded-For header to get real client IP (important for CloudFront)
 const limiter = rateLimit({
   windowMs: envConfig.RATE_LIMIT_WINDOW_MS,
   max: envConfig.RATE_LIMIT_MAX_REQUESTS,
@@ -94,6 +95,18 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Get real client IP from X-Forwarded-For header (CloudFront forwards this)
+  keyGenerator: (req) => {
+    // CloudFront and load balancers forward the real client IP in X-Forwarded-For
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+      // X-Forwarded-For can contain multiple IPs, take the first one (original client)
+      const clientIp = forwarded.split(',')[0].trim();
+      return clientIp;
+    }
+    // Fallback to direct connection IP
+    return req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+  },
   // Skip rate limiting in development for localhost
   skip: (req) => {
     // Skip rate limiting for localhost in development
