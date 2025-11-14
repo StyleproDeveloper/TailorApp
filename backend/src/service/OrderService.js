@@ -478,10 +478,16 @@ const getAllOrdersService = async (shop_id, queryParams) => {
           courier: { $first: '$courier' },
           courierCharge: { $first: '$courierCharge' },
           discount: { $first: '$discount' },
+          paidAmount: { $first: '$paidAmount' },
           owner: { $first: '$owner' },
           createdAt: { $first: '$createdAt' },
           updatedAt: { $first: '$updatedAt' },
           items: { $push: '$items' },
+        },
+      },
+      {
+        $addFields: {
+          paidAmount: { $ifNull: ['$paidAmount', 0] },
         },
       },
       {
@@ -517,6 +523,28 @@ const getAllOrdersService = async (shop_id, queryParams) => {
                 }
               }
             }, 0]
+          }
+        }
+      }] : []),
+      // Add all delivered filter - orders where all items are delivered
+      ...(filterType === 'allDelivered' ? [{
+        $match: {
+          $expr: {
+            $and: [
+              { $gt: [{ $size: '$items' }, 0] }, // Order must have items
+              { $eq: [
+                  { $size: '$items' }, // Total number of items
+                  { $size: {
+                      $filter: {
+                        input: '$items',
+                        as: 'item',
+                        cond: { $eq: ['$$item.delivered', true] }
+                      }
+                    }
+                  } // Number of delivered items
+                ]
+              } // All items must be delivered
+            ]
           }
         }
       }] : []),
@@ -819,6 +847,15 @@ const updateOrderItemDeliveryStatusService = async (shop_id, orderItemId, delive
     if (!shopExists) throw new Error(`Shop with ID ${shop_id} does not exist`);
 
     const OrderItemModel = getOrderItemModel(shop_id);
+    const OrderModel = getOrderModel(shop_id);
+
+    // First, get the order item to find the orderId
+    const existingItem = await OrderItemModel.findOne({ orderItemId });
+    if (!existingItem) {
+      throw new Error(`Order item with ID ${orderItemId} not found`);
+    }
+
+    const orderId = existingItem.orderId;
 
     const updateData = {};
     if (deliveryData.delivered !== undefined) {
@@ -840,6 +877,45 @@ const updateOrderItemDeliveryStatusService = async (shop_id, orderItemId, delive
       throw new Error(`Order item with ID ${orderItemId} not found`);
     }
 
+    // Check if all items in the order are delivered
+    if (deliveryData.delivered === true) {
+      const allItems = await OrderItemModel.find({ orderId });
+      
+      // Check if all items are delivered
+      const allDelivered = allItems.length > 0 && allItems.every(item => item.delivered === true);
+      
+      if (allDelivered) {
+        // Update order status to "delivered"
+        await OrderModel.findOneAndUpdate(
+          { orderId },
+          { $set: { status: 'delivered' } },
+          { new: true }
+        );
+        logger.info('Order status automatically updated to "delivered"', {
+          shop_id,
+          orderId,
+          orderItemId,
+        });
+      }
+    } else if (deliveryData.delivered === false) {
+      // If an item is marked as not delivered, and order was "delivered", change it back to previous status
+      // We'll set it to "completed" or keep current status if not "delivered"
+      const order = await OrderModel.findOne({ orderId });
+      if (order && order.status === 'delivered') {
+        // Change back to "completed" when an item is unmarked as delivered
+        await OrderModel.findOneAndUpdate(
+          { orderId },
+          { $set: { status: 'completed' } },
+          { new: true }
+        );
+        logger.info('Order status changed from "delivered" to "completed"', {
+          shop_id,
+          orderId,
+          orderItemId,
+        });
+      }
+    }
+
     return updatedItem;
   } catch (error) {
     throw error;
@@ -847,6 +923,7 @@ const updateOrderItemDeliveryStatusService = async (shop_id, orderItemId, delive
 };
 
 module.exports = {
+  getOrderModel,
   createOrderService,
   getAllOrdersService,
   updateOrderService,

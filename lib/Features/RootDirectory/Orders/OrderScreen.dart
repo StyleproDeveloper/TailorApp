@@ -149,6 +149,20 @@ class _OrderScreenState extends State<OrderScreen>
                   },
                 ),
               ),
+              ListTile(
+                title: const Text('All Delivered'),
+                leading: Radio<String?>(
+                  value: 'allDelivered',
+                  groupValue: selectedFilter,
+                  onChanged: (String? value) {
+                    setState(() {
+                      selectedFilter = value;
+                    });
+                    Navigator.pop(context);
+                    _applyFilter();
+                  },
+                ),
+              ),
             ],
           ),
         );
@@ -265,12 +279,23 @@ class _OrderScreenState extends State<OrderScreen>
         List<Map<String, dynamic>> newOrders =
             List<Map<String, dynamic>>.from(response.data['data']);
 
+        // Apply client-side filter for "All Delivered" if selected (as fallback)
+        List<Map<String, dynamic>> filteredNewOrders = newOrders;
+        if (selectedFilter == 'allDelivered') {
+          filteredNewOrders = newOrders.where((order) {
+            final items = order['items'] as List<dynamic>? ?? [];
+            if (items.isEmpty) return false;
+            // Check if all items are delivered
+            return items.every((item) => item['delivered'] == true);
+          }).toList();
+        }
+
         setState(() {
-          orders.addAll(newOrders);
+          orders.addAll(filteredNewOrders);
           // Apply client-side filtering based on current tab
           _applyClientSideFiltering();
           isLoading = false;
-          if (newOrders.length < pageSize) {
+          if (filteredNewOrders.length < pageSize) {
             hasMoreData = false;
           } else {
             pageNumber++;

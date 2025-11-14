@@ -87,6 +87,10 @@ const OrderSchema = new Schema(
     discount: {
       type: Number,
     },
+    paidAmount: {
+      type: Number,
+      default: 0,
+    },
     owner: {
       type: String,
     },
