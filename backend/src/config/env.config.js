@@ -5,6 +5,8 @@ require('dotenv').config();
  * Validates and exports environment variables
  */
 const requiredEnvVars = ['MONGO_URL'];
+// AWS S3 is optional - only required if using S3 for file storage
+const optionalEnvVars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION'];
 
 const validateEnv = () => {
   const missing = requiredEnvVars.filter((varName) => !process.env[varName]);
@@ -40,6 +42,10 @@ module.exports = {
   // Add other environment variables as needed
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:8144',
   JWT_SECRET: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+  // AWS S3 Configuration
+  AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+  AWS_REGION: process.env.AWS_REGION || 'ap-south-1',
   // Rate limiting: More lenient in development, reasonable limits in production
   // Increased production limits to handle CloudFront and multiple users
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 

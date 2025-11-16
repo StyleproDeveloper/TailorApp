@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 import 'package:tailorapp/Core/Services/Services.dart';
 import 'package:tailorapp/Core/Services/Urls.dart';
@@ -251,8 +252,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       if (allOrdersResponse.data != null && allOrdersResponse.data['data'] != null) {
         final allOrders = allOrdersResponse.data['data'] as List<dynamic>;
 
-        // Get last 6 months
-        for (int i = 5; i >= 0; i--) {
+        // Get last 12 months
+        for (int i = 11; i >= 0; i--) {
           final monthStart = DateTime(now.year, now.month - i, 1);
           final monthEnd = DateTime(now.year, now.month - i + 1, 0, 23, 59, 59);
 
@@ -719,11 +720,64 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildMonthlySalesChart() {
+    if (monthlySales.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Monthly Sales Trend (Past 12 Months)',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: ColorPalatte.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                'No sales data available',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Find max sales value for scaling
+    double maxSales = 0;
+    for (var month in monthlySales) {
+      final sales = (month['sales'] as num).toDouble();
+      if (sales > maxSales) {
+        maxSales = sales;
+      }
+    }
+    // Add 20% padding to max value for better visualization
+    maxSales = maxSales * 1.2;
+    if (maxSales == 0) maxSales = 1000; // Default max if no sales
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Monthly Sales Trend',
+          'Monthly Sales Trend (Past 12 Months)',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
@@ -746,47 +800,255 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ],
           ),
           child: Column(
-            children: monthlySales.map((month) {
-              final monthName = month['month'] as String;
-              final sales = month['sales'] as double;
-              final orders = month['orders'] as int;
-              
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              SizedBox(
+                height: 280,
+                child: Stack(
                   children: [
-                    Text(
-                      monthName,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                    BarChart(
+                      BarChartData(
+                        alignment: BarChartAlignment.spaceAround,
+                        maxY: maxSales,
+                        barTouchData: BarTouchData(
+                          enabled: true,
+                          touchTooltipData: BarTouchTooltipData(
+                            getTooltipColor: (group) => ColorPalatte.primary,
+                            tooltipRoundedRadius: 8,
+                            tooltipPadding: const EdgeInsets.all(8),
+                            tooltipMargin: 8,
+                            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                              final month = monthlySales[groupIndex];
+                              final monthName = month['month'] as String;
+                              final sales = month['sales'] as double;
+                              final orders = month['orders'] as int;
+                              return BarTooltipItem(
+                                '$monthName\n₹${NumberFormat('#,##0').format(sales)}\n$orders orders',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    titlesData: FlTitlesData(
+                      show: true,
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (value, meta) {
+                            if (value.toInt() >= 0 && value.toInt() < monthlySales.length) {
+                              final month = monthlySales[value.toInt()];
+                              final monthName = month['month'] as String;
+                              // Show abbreviated month name (e.g., "Nov" instead of "Nov 2025")
+                              final parts = monthName.split(' ');
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                  parts[0],
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              );
+                            }
+                            return const Text('');
+                          },
+                          reservedSize: 40,
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 50,
+                          getTitlesWidget: (value, meta) {
+                            if (value <= 0) return const Text('');
+                            // Format Y-axis labels with K for thousands
+                            String label;
+                            if (value >= 1000) {
+                              label = '₹${(value / 1000).toStringAsFixed(value >= 10000 ? 0 : 1)}K';
+                            } else {
+                              label = '₹${value.toStringAsFixed(0)}';
+                            }
+                            return Text(
+                              label,
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
-                    Row(
+                    borderData: FlBorderData(
+                      show: true,
+                      border: Border(
+                        bottom: BorderSide(color: Colors.grey[300]!),
+                        left: BorderSide(color: Colors.grey[300]!),
+                      ),
+                    ),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      horizontalInterval: maxSales / 5,
+                      getDrawingHorizontalLine: (value) {
+                        return FlLine(
+                          color: Colors.grey[200]!,
+                          strokeWidth: 1,
+                        );
+                      },
+                    ),
+                    barGroups: monthlySales.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final month = entry.value;
+                      final sales = (month['sales'] as num).toDouble();
+                      
+                      return BarChartGroupData(
+                        x: index,
+                        barRods: [
+                          BarChartRodData(
+                            toY: sales,
+                            color: ColorPalatte.primary,
+                            width: 20,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(4),
+                              topRight: Radius.circular(4),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                      ),
+                    ),
+                    // Overlay text labels on top of bars
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 30, left: 50, right: 0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: monthlySales.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final month = entry.value;
+                            final sales = (month['sales'] as num).toDouble();
+                            
+                            // Calculate bar height percentage (chart height is 250px)
+                            final barHeight = sales / maxSales;
+                            final barHeightPx = 250 * barHeight;
+                            
+                            return Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  // Value label above bar
+                                  if (sales > 0)
+                                    Container(
+                                      margin: EdgeInsets.only(bottom: barHeightPx + 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 3,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: ColorPalatte.primary,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          '₹${NumberFormat('#,##0').format(sales)}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    SizedBox(height: barHeightPx + 4),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Summary row showing total sales and orders
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ColorPalatte.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Column(
                       children: [
                         Text(
-                          '₹${NumberFormat('#,##0').format(sales)}',
+                          'Total Sales',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '₹${NumberFormat('#,##0').format(monthlySales.fold<double>(0, (sum, month) => sum + (month['sales'] as num).toDouble()))}',
+                          style: TextStyle(
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: ColorPalatte.primary,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                      ],
+                    ),
+                    Container(
+                      width: 1,
+                      height: 40,
+                      color: Colors.grey[300],
+                    ),
+                    Column(
+                      children: [
                         Text(
-                          '($orders orders)',
+                          'Total Orders',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${monthlySales.fold<int>(0, (sum, month) => sum + (month['orders'] as num).toInt())}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: ColorPalatte.primary,
                           ),
                         ),
                       ],
                     ),
                   ],
                 ),
-              );
-            }).toList(),
+              ),
+            ],
           ),
         ),
       ],

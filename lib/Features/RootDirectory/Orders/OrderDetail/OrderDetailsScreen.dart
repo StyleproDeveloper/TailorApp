@@ -1069,6 +1069,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               itemBuilder: (context, index) {
                 final media = images[index];
                 final mediaUrl = media['mediaUrl']?.toString() ?? '';
+                // Check if URL is already a full URL (S3 URLs start with https://)
+                final imageUrl = mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')
+                    ? mediaUrl
+                    : '${Urls.baseUrl}$mediaUrl';
                 return GestureDetector(
                   onTap: () {
                     // Show full screen image
@@ -1082,7 +1086,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: Image.network(
-                        '${Urls.baseUrl}$mediaUrl',
+                        imageUrl,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
@@ -1171,6 +1175,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   // Show full screen image
   void _showFullScreenImage(String imageUrl) {
+    // Check if URL is already a full URL (S3 URLs start with https://)
+    final fullImageUrl = imageUrl.startsWith('http://') || imageUrl.startsWith('https://')
+        ? imageUrl
+        : '${Urls.baseUrl}$imageUrl';
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -1181,7 +1189,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             Center(
               child: InteractiveViewer(
                 child: Image.network(
-                  '${Urls.baseUrl}$imageUrl',
+                  fullImageUrl,
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
@@ -1509,6 +1517,196 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     }
   }
 
+  // Show Edit Payment Dialog
+  void _showEditPaymentDialog(Map<String, dynamic> payment) {
+    final amountController = TextEditingController(
+      text: (payment['paidAmount'] ?? 0).toString(),
+    );
+    final notesController = TextEditingController(
+      text: payment['notes']?.toString() ?? '',
+    );
+    final dateController = TextEditingController(
+      text: payment['paymentDate']?.toString() ?? DateFormat('yyyy-MM-dd').format(DateTime.now()),
+    );
+    String selectedPaymentType = payment['paymentType'] ?? 'partial';
+    final paymentId = payment['paymentId'];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Edit Payment'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: amountController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Amount *',
+                    hintText: 'Enter payment amount',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: dateController,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Payment Date *',
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.calendar_today),
+                  ),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: dateController.text.isNotEmpty
+                          ? DateTime.tryParse(dateController.text) ?? DateTime.now()
+                          : DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (date != null) {
+                      setState(() {
+                        dateController.text = DateFormat('yyyy-MM-dd').format(date);
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedPaymentType,
+                  decoration: const InputDecoration(
+                    labelText: 'Payment Type',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'advance', child: Text('Advance')),
+                    DropdownMenuItem(value: 'partial', child: Text('Partial')),
+                    DropdownMenuItem(value: 'final', child: Text('Final')),
+                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      selectedPaymentType = value ?? 'partial';
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: notesController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (Optional)',
+                    hintText: 'Add any notes about this payment',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (amountController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter payment amount')),
+                  );
+                  return;
+                }
+                final amount = double.tryParse(amountController.text);
+                if (amount == null || amount <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a valid amount')),
+                  );
+                  return;
+                }
+                await _updatePayment(
+                  paymentId,
+                  amount,
+                  dateController.text,
+                  selectedPaymentType,
+                  notesController.text,
+                );
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Update Payment'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Update Payment
+  Future<void> _updatePayment(
+    int? paymentId,
+    double amount,
+    String paymentDate,
+    String paymentType,
+    String notes,
+  ) async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null || paymentId == null) return;
+
+    showLoader(context);
+    try {
+      final payload = {
+        'paidAmount': amount,
+        'paymentDate': paymentDate,
+        'paymentType': paymentType,
+        'notes': notes,
+      };
+
+      final response = await ApiService().patch(
+        '${Urls.payments}/$shopId/$paymentId',
+        data: payload,
+        context,
+      );
+
+      hideLoader(context);
+
+      if (response.data != null && response.data['success'] == true) {
+        if (mounted) {
+          // Refresh order data first, then show success message
+          await fetchProductDetail();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response.data?['message'] ?? 'Failed to update payment'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      hideLoader(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating payment: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   // Show Payment History Dialog
   void _showPaymentHistoryDialog() {
     int? shopId = GlobalVariables.shopIdGet;
@@ -1552,12 +1750,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (advanceReceived > 0) ...[
-                      _buildPaymentHistoryRow(
-                        'Advance Payment',
-                        advanceReceived,
-                        advanceReceivedDate,
-                        'advance',
-                      ),
+                      _buildPaymentHistoryRow({
+                        'type': 'advance',
+                        'paymentType': 'advance',
+                        'paidAmount': advanceReceived,
+                        'paymentDate': advanceReceivedDate,
+                      }),
                       const Divider(),
                     ],
                     if (payments.isEmpty && advanceReceived == 0)
@@ -1567,11 +1765,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       )
                     else
                       ...payments.map((payment) => _buildPaymentHistoryRow(
-                            _getPaymentTypeLabel(payment['paymentType'] ?? 'partial'),
-                            (payment['paidAmount'] ?? 0).toDouble(),
-                            payment['paymentDate']?.toString() ?? '',
-                            payment['paymentType'] ?? 'partial',
-                            notes: payment['notes']?.toString(),
+                            payment, // Pass full payment object
                           )),
                     const Divider(),
                     Padding(
@@ -1632,13 +1826,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   // Build Payment History Row
-  Widget _buildPaymentHistoryRow(
-    String label,
-    double amount,
-    String date,
-    String type, {
-    String? notes,
-  }) {
+  Widget _buildPaymentHistoryRow(Map<String, dynamic> payment) {
+    final label = _getPaymentTypeLabel(payment['paymentType'] ?? 'partial');
+    final amount = (payment['paidAmount'] ?? 0).toDouble();
+    final date = payment['paymentDate']?.toString() ?? '';
+    final notes = payment['notes']?.toString();
+    final paymentId = payment['paymentId'];
+    final isAdvance = payment['paymentType'] == 'advance' || payment['type'] == 'advance';
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Column(
@@ -1653,12 +1848,30 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
               ),
-              Text(
-                '₹${amount.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
-                ),
+              Row(
+                children: [
+                  Text(
+                    '₹${amount.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                  // Show edit icon only for non-advance payments (advance is stored in order, not as separate payment)
+                  if (!isAdvance && paymentId != null) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(Icons.edit, size: 18, color: ColorPalatte.primary),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        Navigator.pop(context); // Close payment history dialog
+                        _showEditPaymentDialog(payment);
+                      },
+                      tooltip: 'Edit payment',
+                    ),
+                  ],
+                ],
               ),
             ],
           ),

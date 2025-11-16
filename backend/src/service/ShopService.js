@@ -22,6 +22,7 @@ const { buildQueryOptions } = require('../utils/buildQuery');
 const { paginate } = require('../utils/commonPagination');
 const { createUserService } = require('./UserService');
 const { getRoleModel } = require('./RoleService');
+const { createShopBucket } = require('../utils/s3Service');
 const mongoose = require('mongoose');
 const logger = require('../utils/logger');
 
@@ -34,14 +35,20 @@ const createShopService = async (shopData) => {
       throw new Error('Invalid shopId: Cannot create shop-related collections');
     }
 
-    let { subscriptionType } = shopData;
-
-    // Convert number to enum string if needed
-    if (typeof subscriptionType === 'number') {
-      subscriptionType =
-        SubscriptionEnumMapping[subscriptionType] || SubscriptionEnum.TRIAL; // Default to TRIAL if invalid
-    }
+    // Always set subscriptionType to TRIAL for new shops
+    let subscriptionType = SubscriptionEnum.TRIAL;
+    
+    // Calculate trial dates (30 days from creation)
+    const trialStartDate = new Date();
+    const trialEndDate = new Date();
+    trialEndDate.setDate(trialEndDate.getDate() + 30); // Add 30 days
+    
     logger.debug('Default roles initialized', { count: defaultRoles.length });
+    logger.info('Setting up trial period', {
+      shopId,
+      trialStartDate: trialStartDate.toISOString(),
+      trialEndDate: trialEndDate.toISOString(),
+    });
 
     // Ensure all address fields are properly set and preserved
     // Handle both string and already-trimmed values
@@ -54,7 +61,9 @@ const createShopService = async (shopData) => {
     const shopDataToSave = {
       ...shopData,
       shop_id: shopId,
-      subscriptionType,
+      subscriptionType: SubscriptionEnum.TRIAL, // Always set to TRIAL for new shops
+      trialStartDate, // Set trial start date
+      trialEndDate, // Set trial end date (30 days from start)
       active: shopData.active !== undefined ? shopData.active : true, // Default to true on registration
       // Explicitly set address fields to ensure they're saved (preserve values even if empty strings)
       addressLine1: normalizeAddressField(shopData.addressLine1),
@@ -206,6 +215,21 @@ const createShopService = async (shopData) => {
       state: savedShop.state,
       postalCode: savedShop.postalCode,
     });
+
+    // Create S3 bucket for the shop
+    try {
+      const bucketName = await createShopBucket(shopData.shopName || shopData.yourName, shopId);
+      
+      // Update shop with bucket name
+      savedShop.s3BucketName = bucketName;
+      await savedShop.save();
+      
+      logger.info('S3 bucket created and saved to shop', { shopId, bucketName });
+    } catch (s3Error) {
+      // Log error but don't fail shop creation if S3 bucket creation fails
+      logger.error('Error creating S3 bucket for shop', s3Error, { shopId });
+      // Continue - shop is already created, S3 bucket can be created later
+    }
 
     // After shop is created, create a user with Owner role
     try {

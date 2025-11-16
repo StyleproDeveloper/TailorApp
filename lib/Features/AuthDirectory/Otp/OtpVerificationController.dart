@@ -71,8 +71,19 @@ class OtpVerificationController {
         CustomSnackbar.showSnackbar(context, response.data['message'],
             duration: Duration(seconds: 1));
 
+        // Check if trial has expired and subscription is required
+        final subscriptionStatus = response.data['subscriptionStatus'];
+        final requiresSubscription = subscriptionStatus != null && 
+            subscriptionStatus['requiresSubscription'] == true;
+
         Future.delayed(Duration(milliseconds: 500), () {
-          Navigator.pushReplacementNamed(context, AppRoutes.homeUi);
+          if (requiresSubscription) {
+            // Redirect to subscribe page if trial expired
+            Navigator.pushReplacementNamed(context, AppRoutes.subscribe);
+          } else {
+            // Normal login flow
+            Navigator.pushReplacementNamed(context, AppRoutes.homeUi);
+          }
         });
       } else {
         CustomSnackbar.showSnackbar(context, Textstring().invalidOTP,

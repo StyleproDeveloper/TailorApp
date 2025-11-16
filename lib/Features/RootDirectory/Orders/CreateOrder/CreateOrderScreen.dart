@@ -1112,11 +1112,9 @@ await _loadDataInBackground();
         mediaWidgets.add(_buildMediaThumbnail(
           media['mediaUrl'],
           isUploaded: true,
-          onDelete: () {
-            // TODO: Delete from server
-            setState(() {
-              item.uploadedMedia.remove(media);
-            });
+          onDelete: () async {
+            // Delete from server (and S3 if applicable)
+            await _deleteOrderItemMedia(media, item);
           },
         ));
       }
@@ -1167,7 +1165,10 @@ await _loadDataInBackground();
             borderRadius: BorderRadius.circular(8),
             child: isUploaded
                 ? Image.network(
-                    '${Urls.baseUrl}$imageData',
+                    // Check if URL is already a full URL (S3 URLs start with https://)
+                    (imageData.toString().startsWith('http://') || imageData.toString().startsWith('https://'))
+                        ? imageData.toString()
+                        : '${Urls.baseUrl}$imageData',
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
@@ -1354,6 +1355,62 @@ await _loadDataInBackground();
     } catch (e) {
       print('Error loading media for orderItemId $orderItemId: $e');
       // Don't block order loading if media fetch fails
+    }
+  }
+
+  // Delete media for an order item (from server and S3)
+  Future<void> _deleteOrderItemMedia(Map<String, dynamic> media, OrderItem item) async {
+    int? shopId = GlobalVariables.shopIdGet;
+    final orderMediaId = media['orderMediaId'];
+    
+    if (shopId == null || orderMediaId == null) {
+      print('❌ Cannot delete media: shopId=$shopId, orderMediaId=$orderMediaId');
+      CustomSnackbar.showSnackbar(
+        context,
+        'Cannot delete media: Missing required information',
+        duration: Duration(seconds: 2),
+      );
+      return;
+    }
+
+    try {
+      print('🗑️ Deleting media: orderMediaId=$orderMediaId, shopId=$shopId');
+      
+      // Show loading indicator
+      showLoader(context);
+      
+      // Call delete API
+      final String deleteUrl = "${Urls.orderMedia}/$shopId/$orderMediaId";
+      final response = await ApiService().delete(deleteUrl, context);
+      
+      hideLoader(context);
+      
+      if (response.data != null && response.data['success'] == true) {
+        print('✅ Media deleted successfully from server and S3');
+        
+        // Remove from local state
+        if (mounted) {
+          setState(() {
+            item.uploadedMedia.remove(media);
+          });
+        }
+        
+        CustomSnackbar.showSnackbar(
+          context,
+          'Image deleted successfully',
+          duration: Duration(seconds: 2),
+        );
+      } else {
+        throw Exception('Delete response indicates failure');
+      }
+    } catch (e) {
+      hideLoader(context);
+      print('❌ Error deleting media: $e');
+      CustomSnackbar.showSnackbar(
+        context,
+        'Failed to delete image. Please try again.',
+        duration: Duration(seconds: 2),
+      );
     }
   }
 

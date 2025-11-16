@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:tailorapp/Routes/App_route.dart';
 import '../../../../Core/Constants/ColorPalatte.dart';
 import '../../../../Core/Services/Services.dart';
@@ -318,6 +320,56 @@ class _CustomerscreenState extends State<Customerscreen> {
     if (result == true) _resetAndFetch();
   }
 
+  Future<void> _makePhoneCall(String? phoneNumber) async {
+    if (phoneNumber == null || phoneNumber.isEmpty) {
+      CustomSnackbar.showSnackbar(
+        context,
+        'Phone number not available',
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
+    // Clean the phone number - remove spaces, dashes, and other non-digit characters
+    // Keep + if present at the start
+    String cleanedNumber = phoneNumber.trim();
+    if (cleanedNumber.startsWith('+')) {
+      cleanedNumber = '+' + cleanedNumber.substring(1).replaceAll(RegExp(r'[^\d]'), '');
+    } else {
+      cleanedNumber = cleanedNumber.replaceAll(RegExp(r'[^\d]'), '');
+    }
+
+    if (cleanedNumber.isEmpty) {
+      CustomSnackbar.showSnackbar(
+        context,
+        'Invalid phone number',
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
+    // Create tel: URL
+    final Uri phoneUri = Uri(scheme: 'tel', path: cleanedNumber);
+
+    try {
+      if (await canLaunchUrl(phoneUri)) {
+        await launchUrl(phoneUri);
+      } else {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Cannot make phone call',
+          duration: const Duration(seconds: 2),
+        );
+      }
+    } catch (e) {
+      CustomSnackbar.showSnackbar(
+        context,
+        'Error making phone call: $e',
+        duration: const Duration(seconds: 2),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -473,17 +525,41 @@ class _CustomerscreenState extends State<Customerscreen> {
                                   ),
                               ],
                             ),
-                            trailing: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Icon(
-                                Icons.arrow_forward_ios,
-                                size: 14,
-                                color: ColorPalatte.primary,
-                              ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Call icon - only visible on mobile
+                                if (!kIsWeb && customer['mobile'] != null && customer['mobile'].toString().isNotEmpty)
+                                  InkWell(
+                                    onTap: () => _makePhoneCall(customer['mobile']),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      margin: const EdgeInsets.only(right: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade50,
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Icon(
+                                        Icons.phone,
+                                        size: 18,
+                                        color: Colors.green.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                // Arrow icon
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Icon(
+                                    Icons.arrow_forward_ios,
+                                    size: 14,
+                                    color: ColorPalatte.primary,
+                                  ),
+                                ),
+                              ],
                             ),
                             onTap: () {
                               if (customer.isNotEmpty) {

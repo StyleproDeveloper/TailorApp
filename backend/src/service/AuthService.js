@@ -1,6 +1,7 @@
 const User = require('../models/UserModel');
 const Role = require('../models/RoleModel');
 const ShopInfo = require('../models/ShopModel');
+const mongoose = require('mongoose');
 const otpStore = new Map();
 const logger = require('../utils/logger');
 
@@ -129,14 +130,50 @@ const validateOTPService = async (mobileNumber, otp) => {
       throw new Error('User not found');
     }
 
-    // Check if the shop is active
+    // Check if the shop is active and trial status
+    let shop = null;
+    let isTrialExpired = false;
+    let trialEndDate = null;
+    
     if (user.shopId) {
-      const shop = await ShopInfo.findOne({ shop_id: user.shopId });
+      shop = await ShopInfo.findOne({ shop_id: user.shopId });
       if (!shop) {
         throw new Error('Shop not found for this user');
       }
       if (shop.active === false) {
         throw new Error('This shop account is inactive. Please contact support.');
+      }
+      
+      // Check if trial has expired
+      if (shop.subscriptionType === 'Trial' && shop.trialEndDate) {
+        const now = new Date();
+        const endDate = new Date(shop.trialEndDate);
+        isTrialExpired = now > endDate;
+        trialEndDate = shop.trialEndDate;
+        
+        logger.info('Trial status check', {
+          shopId: shop.shop_id,
+          subscriptionType: shop.subscriptionType,
+          trialEndDate: shop.trialEndDate,
+          isTrialExpired,
+          currentDate: now.toISOString(),
+        });
+      }
+    }
+
+    // Fetch role name from Role model
+    let roleName = null;
+    if (user.roleId && user.shopId) {
+      try {
+        const Role = require('../models/RoleModel');
+        const roleCollectionName = `role_${user.shopId}`;
+        const RoleModel = mongoose.model(roleCollectionName, Role.schema, roleCollectionName);
+        const role = await RoleModel.findOne({ roleId: user.roleId });
+        if (role) {
+          roleName = role.name;
+        }
+      } catch (error) {
+        logger.warn('Could not fetch role name', { error: error.message, roleId: user.roleId, shopId: user.shopId });
       }
     }
 
@@ -149,13 +186,21 @@ const validateOTPService = async (mobileNumber, otp) => {
         name: user.name,
         mobileNumber: user.mobile,
         email: user.email,
-        role: user.role,
+        roleId: user.roleId,
+        roleName: roleName,
         branchId: user.branchId,
         secondaryMobile: user.secondaryMobile,
         addressLine1: user.addressLine1,
         street: user.street,
         city: user.city,
         postalCode: user.postalCode,
+      },
+      // Include trial status information
+      subscriptionStatus: {
+        subscriptionType: shop?.subscriptionType || null,
+        isTrialExpired,
+        trialEndDate: trialEndDate ? new Date(trialEndDate).toISOString() : null,
+        requiresSubscription: isTrialExpired && shop?.subscriptionType === 'Trial',
       },
     };
   } catch (error) {

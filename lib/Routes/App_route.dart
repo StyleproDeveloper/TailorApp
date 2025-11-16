@@ -10,6 +10,7 @@ import 'package:tailorapp/Features/RootDirectory/Settings/Shop/ShopDetailsScreen
 import 'package:tailorapp/Features/RootDirectory/Settings/contactUs/ContactSupportScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/customer/CustomerInfo.dart';
 import 'package:tailorapp/Features/RootDirectory/BottomTabs/BottomTabs.dart';
+import 'package:tailorapp/Features/AuthDirectory/Subscribe/SubscribeScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/Orders/CreateOrder/CreateOrderScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/Settings/Dress/Dress_screen.dart';
 import 'package:tailorapp/Features/RootDirectory/Settings/Expenses/ExpenseScreen.dart';
@@ -38,6 +39,7 @@ class AppRoutes {
   static const String orderDetailsScreen = './orderDetailsScreen';
   static const String shopDetailsScreen = './shopDetailsScreen';
   static const String registrationSuccess = './registrationSuccess';
+  static const String subscribe = './subscribe';
 
   static Map<String, WidgetBuilder> routes = {
     home: (context) => const Splashscreen(), // Root route redirects to splash
@@ -59,5 +61,6 @@ class AppRoutes {
     orderDetailsScreen: (context) => OrderDetailsScreen(),
     shopDetailsScreen: (context) => ShopDetailsScreen(),
     registrationSuccess: (context) => const RegistrationSuccessScreen(),
+    subscribe: (context) => const SubscribeScreen(),
   };
 }

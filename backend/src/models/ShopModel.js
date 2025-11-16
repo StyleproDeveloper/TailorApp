@@ -223,6 +223,16 @@ const ShopInfoSchema = new mongoose.Schema(
       default: null,
       set: (v) => (v === '' ? null : v),
     },
+    trialStartDate: {
+      type: Date,
+      default: null,
+      set: (v) => (v === '' ? null : v),
+    },
+    trialEndDate: {
+      type: Date,
+      default: null,
+      set: (v) => (v === '' ? null : v),
+    },
     setupComplete: {
       type: Boolean,
       default: false,
@@ -230,6 +240,11 @@ const ShopInfoSchema = new mongoose.Schema(
     active: {
       type: Boolean,
       default: true,
+    },
+    s3BucketName: {
+      type: String,
+      default: null,
+      set: (v) => (v === '' ? null : v),
     },
   },
   {
