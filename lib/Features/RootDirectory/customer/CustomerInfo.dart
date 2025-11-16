@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 import 'package:tailorapp/Core/Constants/Fonts.dart';
 import 'package:tailorapp/Core/Constants/TextString.dart';
@@ -337,6 +339,86 @@ void initState() {
       return null;
     }
 
+  Future<void> _pickContact() async {
+    try {
+      // Request permission
+      final permission = await Permission.contacts.request();
+      
+      if (permission.isDenied || permission.isPermanentlyDenied) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Contact permission is required to select a contact',
+          duration: Duration(seconds: 2),
+        );
+        return;
+      }
+
+      // Open contact picker
+      final contact = await FlutterContacts.openExternalPick();
+      
+      if (contact != null) {
+        setState(() {
+          // Set name - use displayName if available, otherwise use first + last name
+          String contactName = contact.displayName;
+          if (contactName.isEmpty) {
+            contactName = '${contact.name.first} ${contact.name.last}'.trim();
+          }
+          if (contactName.isNotEmpty) {
+            name.text = contactName;
+          }
+          
+          // Set mobile number (use first phone number if available)
+          if (contact.phones.isNotEmpty) {
+            String phoneNumber = contact.phones.first.number;
+            // Remove any non-digit characters except +
+            phoneNumber = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+            
+            // Handle country code
+            if (phoneNumber.startsWith('+91')) {
+              countryCodeController.text = '+91';
+              mobile.text = phoneNumber.substring(3).replaceAll(RegExp(r'[^\d]'), '');
+            } else if (phoneNumber.startsWith('91') && phoneNumber.length > 10) {
+              countryCodeController.text = '+91';
+              mobile.text = phoneNumber.substring(2).replaceAll(RegExp(r'[^\d]'), '');
+            } else {
+              // Extract only digits
+              String digitsOnly = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
+              if (digitsOnly.length >= 10) {
+                // Take last 10 digits
+                mobile.text = digitsOnly.substring(digitsOnly.length - 10);
+              } else {
+                mobile.text = digitsOnly;
+              }
+            }
+            
+            // Limit to 10 digits
+            if (mobile.text.length > 10) {
+              mobile.text = mobile.text.substring(0, 10);
+            }
+          }
+          
+          // Set email if available
+          if (contact.emails.isNotEmpty) {
+            email.text = contact.emails.first.address;
+          }
+        });
+        
+        CustomSnackbar.showSnackbar(
+          context,
+          'Contact details loaded successfully',
+          duration: Duration(seconds: 2),
+        );
+      }
+    } catch (e) {
+      print('Error picking contact: $e');
+      CustomSnackbar.showSnackbar(
+        context,
+        'Failed to pick contact. Please try again.',
+        duration: Duration(seconds: 2),
+      );
+    }
+  }
+
     return Scaffold(
       appBar: Commonheader(
           title: customerId != null
@@ -352,17 +434,45 @@ void initState() {
               child: Column(
                 children: [
                   SizedBox(height: 15),
-                  CustomTextInput(
-                    controller: name,
-                    label: Textstring().name,
-                    iconWidget: Icon(Icons.person, color: ColorPalatte.primary),
-                    isRequired: true,
-                    keyboardType: TextInputType.name,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                          RegExp(r'^[a-zA-Z\s]+$')),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CustomTextInput(
+                          controller: name,
+                          label: Textstring().name,
+                          iconWidget: Icon(Icons.person, color: ColorPalatte.primary),
+                          isRequired: true,
+                          keyboardType: TextInputType.name,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'^[a-zA-Z\s]+$')),
+                          ],
+                          validator: validateName,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      if (customerId == null) // Only show for new customers
+                        Container(
+                          height: 50,
+                          width: 50,
+                          decoration: BoxDecoration(
+                            color: ColorPalatte.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: ColorPalatte.primary,
+                              width: 1,
+                            ),
+                          ),
+                          child: IconButton(
+                            onPressed: _pickContact,
+                            icon: Icon(
+                              Icons.contacts,
+                              color: ColorPalatte.primary,
+                            ),
+                            tooltip: 'Pick from contacts',
+                          ),
+                        ),
                     ],
-                    validator: validateName,
                   ),
                   Row(
                     children: [
