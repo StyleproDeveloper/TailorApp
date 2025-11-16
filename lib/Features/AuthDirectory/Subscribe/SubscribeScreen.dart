@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
-import 'package:tailorapp/Core/Widgets/CommonHeader.dart';
 import 'package:tailorapp/Core/Widgets/CustomSnakBar.dart';
 import 'package:tailorapp/GlobalVariables.dart';
 
@@ -20,9 +19,14 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: CommonHeader(
-        title: 'Subscription',
-        showBackButton: false,
+      appBar: AppBar(
+        title: const Text('Subscription'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),

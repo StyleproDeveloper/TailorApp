@@ -145,19 +145,41 @@ const validateOTPService = async (mobileNumber, otp) => {
       }
       
       // Check if trial has expired
-      if (shop.subscriptionType === 'Trial' && shop.trialEndDate) {
+      // For Trial subscriptions, check both trialEndDate and subscriptionEndDate
+      // (older shops might only have subscriptionEndDate)
+      if (shop.subscriptionType === 'Trial') {
         const now = new Date();
-        const endDate = new Date(shop.trialEndDate);
-        isTrialExpired = now > endDate;
-        trialEndDate = shop.trialEndDate;
+        let endDate = null;
         
-        logger.info('Trial status check', {
-          shopId: shop.shop_id,
-          subscriptionType: shop.subscriptionType,
-          trialEndDate: shop.trialEndDate,
-          isTrialExpired,
-          currentDate: now.toISOString(),
-        });
+        // Prefer trialEndDate, but fall back to subscriptionEndDate if trialEndDate is not set
+        if (shop.trialEndDate) {
+          endDate = new Date(shop.trialEndDate);
+          trialEndDate = shop.trialEndDate;
+        } else if (shop.subscriptionEndDate) {
+          endDate = new Date(shop.subscriptionEndDate);
+          trialEndDate = shop.subscriptionEndDate;
+        }
+        
+        if (endDate) {
+          isTrialExpired = now > endDate;
+          
+          logger.info('Trial status check', {
+            shopId: shop.shop_id,
+            subscriptionType: shop.subscriptionType,
+            trialEndDate: shop.trialEndDate,
+            subscriptionEndDate: shop.subscriptionEndDate,
+            endDateUsed: endDate.toISOString(),
+            isTrialExpired,
+            currentDate: now.toISOString(),
+            daysPast: Math.floor((now - endDate) / (1000 * 60 * 60 * 24)),
+          });
+        } else {
+          // If no end date is set, log a warning but don't block login
+          logger.warn('Trial subscription has no end date', {
+            shopId: shop.shop_id,
+            subscriptionType: shop.subscriptionType,
+          });
+        }
       }
     }
 

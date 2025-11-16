@@ -68,19 +68,37 @@ class OtpVerificationController {
             Textstring().branchId, response.data['user']['branchId']);
         await GlobalVariables.loadShopId();
 
+        // Debug: Print full response to check subscription status
+        print('🔍 Full login response: ${response.data}');
+        print('🔍 Subscription Status: ${response.data['subscriptionStatus']}');
+
         CustomSnackbar.showSnackbar(context, response.data['message'],
             duration: Duration(seconds: 1));
 
         // Check if trial has expired and subscription is required
         final subscriptionStatus = response.data['subscriptionStatus'];
+        print('🔍 Subscription Status object: $subscriptionStatus');
+        
+        if (subscriptionStatus != null) {
+          print('🔍 requiresSubscription value: ${subscriptionStatus['requiresSubscription']}');
+          print('🔍 isTrialExpired value: ${subscriptionStatus['isTrialExpired']}');
+          print('🔍 subscriptionType value: ${subscriptionStatus['subscriptionType']}');
+        } else {
+          print('⚠️ Subscription Status is null!');
+        }
+        
         final requiresSubscription = subscriptionStatus != null && 
             subscriptionStatus['requiresSubscription'] == true;
+        
+        print('🔍 Final requiresSubscription check: $requiresSubscription');
 
         Future.delayed(Duration(milliseconds: 500), () {
           if (requiresSubscription) {
+            print('✅ Redirecting to subscribe page');
             // Redirect to subscribe page if trial expired
             Navigator.pushReplacementNamed(context, AppRoutes.subscribe);
           } else {
+            print('✅ Redirecting to home page');
             // Normal login flow
             Navigator.pushReplacementNamed(context, AppRoutes.homeUi);
           }
