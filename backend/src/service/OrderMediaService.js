@@ -61,12 +61,31 @@ const uploadOrderMediaService = async (shopId, orderId, orderItemId, file, media
           contentType: file.mimetype,
         });
 
+        // Determine content type based on media type and file extension
+        let contentType = file.mimetype;
+        if (!contentType) {
+          const ext = path.extname(originalName).toLowerCase();
+          if (mediaType === 'audio') {
+            const audioMimeMap = {
+              '.m4a': 'audio/mp4',
+              '.mp3': 'audio/mpeg',
+              '.wav': 'audio/wav',
+              '.ogg': 'audio/ogg',
+              '.aac': 'audio/aac',
+              '.mp4': 'audio/mp4',
+            };
+            contentType = audioMimeMap[ext] || 'audio/mpeg';
+          } else {
+            contentType = 'image/jpeg';
+          }
+        }
+
         // Upload to S3
         mediaUrl = await uploadToS3(
           shop.s3BucketName,
           s3Key,
           file.buffer,
-          file.mimetype || (mediaType === 'image' ? 'image/jpeg' : 'audio/mpeg'),
+          contentType,
           {
             shopId: shopId.toString(),
             orderId: orderId.toString(),

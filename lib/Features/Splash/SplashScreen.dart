@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tailorapp/Routes/App_route.dart';
 
 import '../../Core/Constants/TextString.dart';
+import '../../GlobalVariables.dart';
 
 class Splashscreen extends StatefulWidget {
   const Splashscreen({super.key});
@@ -46,6 +47,8 @@ class _SplashscreenState extends State<Splashscreen>
 
     // Check if user is logged in
     if (tokenId != null && shopId != null) {
+      // Load permissions before navigating to home
+      await GlobalVariables.loadShopId();
       Navigator.pushReplacementNamed(context, AppRoutes.homeUi);
     } else {
       Navigator.pushReplacementNamed(context, AppRoutes.login);

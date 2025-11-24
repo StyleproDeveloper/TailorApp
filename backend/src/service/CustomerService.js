@@ -33,7 +33,8 @@ const createCustomerService = async (customerData) => {
     if (!shopExists) throw new Error(`Shop with ID ${shop_id} does not exist`);
 
     const CustomerModel = getCustomerModel(shop_id);
-    const customerId = await getNextSequenceValue('customerId');
+    // Pass shop_id to getNextSequenceValue to ensure shop-specific customer IDs
+    const customerId = await getNextSequenceValue('customerId', shop_id);
 
     const newCustomer = new CustomerModel({ customerId, shop_id, ...data });
     return await newCustomer.save();

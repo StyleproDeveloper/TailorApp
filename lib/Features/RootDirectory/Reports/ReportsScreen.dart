@@ -27,6 +27,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Check if user has viewReports permission
+    if (!GlobalVariables.hasPermission('viewReports')) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('You do not have permission to view reports'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      });
+      return;
+    }
+    
     _fetchReportsData();
   }
 

@@ -85,8 +85,9 @@ class PDFService {
         }
       }
 
-      final advanceReceivedDate = order['advanceReceivedDate'] != null
-          ? DateFormat('MMM dd, yyyy').format(DateTime.parse(order['advanceReceivedDate']))
+      final advanceReceivedDateStr = order['advanceReceivedDate']?.toString() ?? '';
+      final advanceReceivedDate = advanceReceivedDateStr.trim().isNotEmpty
+          ? DateFormat('MMM dd, yyyy').format(DateTime.parse(advanceReceivedDateStr))
           : 'Not Received';
 
       // Get stitching type
@@ -216,31 +217,6 @@ class PDFService {
                         ],
                       ],
                     ),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // Order Details Section
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      _buildInfoRow('Order Date:', orderDate),
-                      _buildInfoRow('Delivery Date:', deliveryDate),
-                      _buildInfoRow('Order Type:', stitchingType),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      _buildInfoRow('Order #:', 'ORD${order['orderId']?.toString().padLeft(3, '0') ?? '000'}'),
-                      _buildInfoRow('Status:', order['status']?.toString() ?? 'In Progress'),
-                      if (order['urgent'] == true)
-                        _buildInfoRow('', 'URGENT', color: PdfColors.red),
-                    ],
                   ),
                 ],
               ),

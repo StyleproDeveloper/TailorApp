@@ -112,7 +112,7 @@ const orderSchema = Joi.object({
     .default('received'),
   estimationCost: Joi.number().required(),
   advancereceived: Joi.number().default(0),
-  advanceReceivedDate: dateOnly(),
+  advanceReceivedDate: dateOnly().allow('').optional(),
   gst: Joi.boolean().default(false),
   gst_amount: Joi.number().default(0),
   Courier: Joi.boolean().default(false),

@@ -1,4 +1,4 @@
-const { S3Client, CreateBucketCommand, PutObjectCommand, DeleteObjectCommand, HeadBucketCommand } = require('@aws-sdk/client-s3');
+const { S3Client, CreateBucketCommand, PutObjectCommand, DeleteObjectCommand, HeadBucketCommand, PutBucketCorsCommand, PutBucketPolicyCommand, PutPublicAccessBlockCommand, GetPublicAccessBlockCommand } = require('@aws-sdk/client-s3');
 const logger = require('./logger');
 
 // Lazy initialization of S3 client to ensure env vars are loaded
@@ -103,6 +103,31 @@ const createShopBucket = async (shopName, shopId) => {
     
     await client.send(createCommand);
     
+    // Configure public access block settings to allow public access
+    try {
+      await configurePublicAccessBlock(bucketName);
+      logger.info('Public access block configured for S3 bucket', { bucketName });
+    } catch (publicAccessError) {
+      logger.warn('Failed to configure public access block (non-critical)', { bucketName, error: publicAccessError.message });
+    }
+    
+    // Configure bucket policy to allow public read access
+    try {
+      await configureBucketPublicReadPolicy(bucketName);
+      logger.info('Public read policy configured for S3 bucket', { bucketName });
+    } catch (policyError) {
+      logger.warn('Failed to configure bucket policy (non-critical)', { bucketName, error: policyError.message });
+    }
+    
+    // Configure CORS to allow audio playback from web browsers
+    try {
+      await configureBucketCors(bucketName);
+      logger.info('CORS configured for S3 bucket', { bucketName });
+    } catch (corsError) {
+      logger.warn('Failed to configure CORS for bucket (non-critical)', { bucketName, error: corsError.message });
+      // Don't fail bucket creation if CORS configuration fails
+    }
+    
     logger.info('S3 bucket created successfully', { bucketName, shopId, shopName });
     
     return bucketName;
@@ -144,6 +169,7 @@ const uploadToS3 = async (bucketName, key, fileBuffer, contentType, metadata = {
       Body: fileBuffer,
       ContentType: contentType,
       Metadata: metadata,
+      ACL: 'public-read', // Make objects publicly readable
     });
     
     await client.send(putCommand);
@@ -184,6 +210,98 @@ const deleteFromS3 = async (bucketName, key) => {
 };
 
 /**
+ * Configure public access block settings to allow public access
+ */
+const configurePublicAccessBlock = async (bucketName) => {
+  try {
+    const client = getS3Client();
+    const publicAccessBlockCommand = new PutPublicAccessBlockCommand({
+      Bucket: bucketName,
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: false,
+        IgnorePublicAcls: false,
+        BlockPublicPolicy: false,
+        RestrictPublicBuckets: false,
+      },
+    });
+    
+    await client.send(publicAccessBlockCommand);
+    logger.info('Public access block configured for bucket', { bucketName });
+    return true;
+  } catch (error) {
+    logger.error('Error configuring public access block', error, { bucketName });
+    throw error;
+  }
+};
+
+/**
+ * Configure bucket policy to allow public read access
+ */
+const configureBucketPublicReadPolicy = async (bucketName) => {
+  try {
+    const client = getS3Client();
+    const region = process.env.AWS_REGION || 'ap-south-1';
+    const accountId = process.env.AWS_ACCOUNT_ID || '';
+    
+    // Bucket policy to allow public read access
+    const bucketPolicy = {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Sid: 'PublicReadGetObject',
+          Effect: 'Allow',
+          Principal: '*',
+          Action: 's3:GetObject',
+          Resource: `arn:aws:s3:::${bucketName}/*`,
+        },
+      ],
+    };
+    
+    const policyCommand = new PutBucketPolicyCommand({
+      Bucket: bucketName,
+      Policy: JSON.stringify(bucketPolicy),
+    });
+    
+    await client.send(policyCommand);
+    logger.info('Public read policy configured for bucket', { bucketName });
+    return true;
+  } catch (error) {
+    logger.error('Error configuring bucket policy', error, { bucketName });
+    throw error;
+  }
+};
+
+/**
+ * Configure CORS for an S3 bucket to allow audio playback from web browsers
+ */
+const configureBucketCors = async (bucketName) => {
+  try {
+    const client = getS3Client();
+    const corsCommand = new PutBucketCorsCommand({
+      Bucket: bucketName,
+      CORSConfiguration: {
+        CORSRules: [
+          {
+            AllowedOrigins: ['*'], // Allow all origins - you can restrict this to specific domains
+            AllowedMethods: ['GET', 'HEAD'],
+            AllowedHeaders: ['*'],
+            ExposeHeaders: ['ETag', 'Content-Length', 'Content-Type'],
+            MaxAgeSeconds: 3000,
+          },
+        ],
+      },
+    });
+    
+    await client.send(corsCommand);
+    logger.info('CORS configuration applied to bucket', { bucketName });
+    return true;
+  } catch (error) {
+    logger.error('Error configuring CORS for bucket', error, { bucketName });
+    throw error;
+  }
+};
+
+/**
  * Extract bucket name and key from S3 URL
  */
 const parseS3Url = (s3Url) => {
@@ -213,5 +331,8 @@ module.exports = {
   parseS3Url,
   generateBucketName,
   bucketExists,
+  configureBucketCors,
+  configureBucketPublicReadPolicy,
+  configurePublicAccessBlock,
 };
 

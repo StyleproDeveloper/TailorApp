@@ -252,30 +252,53 @@ void initState() {
             
             // Try different possible response structures
             int? returnedCustomerId;
-            if (response.data['customerId'] != null) {
+            Map<String, dynamic>? customerObject;
+            
+            // Check if customer object exists in response
+            if (response.data['customer'] != null && response.data['customer'] is Map) {
+              customerObject = response.data['customer'] as Map<String, dynamic>;
+              returnedCustomerId = customerObject['customerId'];
+              print('✅ Found customer object in response with customerId: $returnedCustomerId');
+            } else if (response.data['customerId'] != null) {
               returnedCustomerId = response.data['customerId'];
+              print('✅ Found customerId at top level: $returnedCustomerId');
             } else if (response.data['id'] != null) {
               returnedCustomerId = response.data['id'];
-            } else if (response.data['customer'] != null && response.data['customer']['id'] != null) {
-              returnedCustomerId = response.data['customer']['id'];
+              print('✅ Found id at top level: $returnedCustomerId');
+            } else if (response.data['data'] != null && response.data['data'] is Map) {
+              final dataObj = response.data['data'] as Map<String, dynamic>;
+              returnedCustomerId = dataObj['customerId'] ?? dataObj['id'];
+              customerObject = dataObj;
+              print('✅ Found customerId in data object: $returnedCustomerId');
             } else {
               print('⚠️ Could not find customer ID in response');
+              print('⚠️ Response structure: ${response.data.keys.toList()}');
               returnedCustomerId = 0; // Fallback
             }
             
-            // Return the created customer data
-            final customerData = {
-              'customerId': returnedCustomerId,
-              'name': name.text.trim(),
-              'mobile': mobile.text.trim(),
-              'email': email.text.trim(),
-              'address': address.text.trim(),
-              'dateOfBirth': dob.text.trim(),
-              'gender': selectedGender,
-              'secondaryMobile': secondaryMobile.text.trim(),
-              'addressLine1': address.text.trim(),
-              'remark': remark.text.trim(),
-            };
+            // Use customer object from response if available, otherwise build from form data
+            final customerData = customerObject != null && customerObject.isNotEmpty
+                ? Map<String, dynamic>.from(customerObject) // Use full customer object from backend
+                : {
+                    'customerId': returnedCustomerId,
+                    'name': name.text.trim(),
+                    'mobile': mobile.text.trim(),
+                    'email': email.text.trim(),
+                    'address': address.text.trim(),
+                    'dateOfBirth': dob.text.trim(),
+                    'gender': selectedGender,
+                    'secondaryMobile': secondaryMobile.text.trim(),
+                    'addressLine1': address.text.trim(),
+                    'remark': remark.text.trim(),
+                  };
+            
+            // Ensure customerId is set even if using customer object
+            if (customerData['customerId'] == null && returnedCustomerId != null) {
+              customerData['customerId'] = returnedCustomerId;
+            }
+            
+            print('📤 Final customer data to return: $customerData');
+            print('📤 customerId in returned data: ${customerData['customerId']}');
             print('📤 Returning customer data: $customerData');
             
             // Add a small delay to ensure UI is ready, then navigate back

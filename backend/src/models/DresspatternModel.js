@@ -12,7 +12,10 @@ const DressPatternSchema = Schema(
     },
     name: {
       type: String,
-      required: true,
+      maxlength: 100,
+    },
+    DressPattern: {
+      type: String,
       maxlength: 100,
     },
     category: {
@@ -30,6 +33,7 @@ const DressPatternSchema = Schema(
   {
     timestamps: true,
     versionKey: false,
+    strict: false, // Allow fields not defined in schema (like DressPattern from old data)
   }
 );
 

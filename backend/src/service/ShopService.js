@@ -14,15 +14,16 @@ const OrderItemSchema = require('../models/OrderItemModel').schema;
 const OrderSchema = require('../models/OrderModel').schema;
 const OrderItemAdditionalCostSchema = require('../models/OrderItemAdditionalCostModel').schema;
 const OrderMediaSchema = require('../models/OrderMediaModel').schema;
+const GallerySchema = require('../models/GalleryModel').schema;
 const RoleSchema = require('../models/RoleModel').schema;
 const { getDynamicModel } = require('../utils/DynamicModel');
 const { getNextSequenceValue } = require('./sequenceService');
-const { SubscriptionEnumMapping } = require('../utils/CommonEnumValues');
+const { SubscriptionEnum, SubscriptionEnumMapping } = require('../utils/CommonEnumValues');
 const { buildQueryOptions } = require('../utils/buildQuery');
 const { paginate } = require('../utils/commonPagination');
 const { createUserService } = require('./UserService');
 const { getRoleModel } = require('./RoleService');
-const { createShopBucket } = require('../utils/s3Service');
+const { createShopBucket, configureBucketCors, configureBucketPublicReadPolicy, configurePublicAccessBlock } = require('../utils/s3Service');
 const mongoose = require('mongoose');
 const logger = require('../utils/logger');
 
@@ -94,6 +95,8 @@ const createShopService = async (shopData) => {
           const masterData = await db.collection(masterCollectionName).find({}).toArray();
           
           if (masterData && masterData.length > 0) {
+            logger.info(`Found ${masterData.length} ${dataType} in ${masterCollectionName} to copy`, { shopId });
+            
             // Map documents - apply field mapper if provided, otherwise use direct copy
             const documentsToInsert = await Promise.all(masterData.map(async (doc, index) => {
               const { _id, ...rest } = doc;
@@ -107,18 +110,60 @@ const createShopService = async (shopData) => {
               return rest;
             }));
             
-            if (documentsToInsert.length > 0) {
-              await targetModel.insertMany(documentsToInsert);
-              logger.info(`Copied ${dataType} from ${masterCollectionName}`, {
+            // Filter out documents with null required fields (dressTypeId, measurementId, etc.)
+            const validDocuments = documentsToInsert.filter(doc => {
+              // For dressTypeMeasurement, ensure dressTypeId and measurementId are not null
+              if (dataType === 'dress type measurements') {
+                return doc.dressTypeId != null && doc.measurementId != null && doc.name != null && doc.name !== '';
+              }
+              // For other types, just check that the document is not empty
+              return doc && Object.keys(doc).length > 0;
+            });
+            
+            if (validDocuments.length > 0) {
+              // Check if collection already has data to avoid duplicates
+              const existingCount = await targetModel.countDocuments();
+              if (existingCount === 0) {
+                // Use insertMany with ordered: false to continue inserting even if some fail
+                try {
+                  const result = await targetModel.insertMany(validDocuments, { ordered: false });
+                  logger.info(`Successfully copied ${result.length} ${dataType} from ${masterCollectionName}`, {
+                    shopId,
+                    totalInMaster: masterData.length,
+                    validDocuments: validDocuments.length,
+                    inserted: result.length,
+                  });
+                } catch (insertError) {
+                  // If some documents failed, log but continue
+                  if (insertError.writeErrors && insertError.writeErrors.length > 0) {
+                    const successfulInserts = validDocuments.length - insertError.writeErrors.length;
+                    logger.warn(`Partially copied ${dataType}: ${successfulInserts} succeeded, ${insertError.writeErrors.length} failed`, {
+                      shopId,
+                      errors: insertError.writeErrors.slice(0, 5), // Log first 5 errors
+                    });
+                  } else {
+                    throw insertError;
+                  }
+                }
+              } else {
+                logger.info(`Skipping copy of ${dataType} - collection already has ${existingCount} documents`, { shopId });
+              }
+            } else {
+              logger.warn(`No valid ${dataType} documents to insert after filtering`, {
                 shopId,
-                count: documentsToInsert.length,
+                totalInMaster: masterData.length,
+                mapped: documentsToInsert.length,
               });
             }
           } else {
             logger.warn(`No ${dataType} found in ${masterCollectionName} collection`, { shopId });
           }
         } catch (copyError) {
-          logger.error(`Error copying ${dataType} from ${masterCollectionName}`, copyError);
+          logger.error(`Error copying ${dataType} from ${masterCollectionName}`, copyError, {
+            shopId,
+            errorMessage: copyError.message,
+            errorStack: copyError.stack,
+          });
           // Continue even if copy fails - collection is still created
         }
       };
@@ -167,8 +212,7 @@ const createShopService = async (shopData) => {
         DressTypeDresspatternSchema,
         `dressTypeDressPattern_${shopId}`
       );
-      // Map old field names to new schema field names
-      // Note: masterdresstypedresspattern might be empty, but mapping is ready for when data exists
+      // Copy from masterdresstypedresspattern to shop-specific collection
       await copyMasterData('masterdresstypedresspattern', dressTypeDressPatternModel, shopId, 'dress type dress patterns', async (doc, index) => {
         // Map old format to new format if needed
         // dressTypePatternId is required, so we'll generate it if missing
@@ -182,7 +226,7 @@ const createShopService = async (shopData) => {
           dressTypeId: doc.DressType_ID ?? doc.dressTypeId ?? null,
           dressPatternId: doc.DressPattern_ID ?? doc.dressPatternId ?? null,
           dressTypePatternId: dressTypePatternId,
-          category: doc.category ?? null,
+          category: doc.category ?? doc.Category ?? null,
           owner: doc.owner ?? null,
         };
       });
@@ -198,6 +242,7 @@ const createShopService = async (shopData) => {
       await getDynamicModel('Order', OrderSchema, `order_${shopId}`);
       await getDynamicModel('OrderItemAdditionalCost', OrderItemAdditionalCostSchema, `orderitemadditionalcost_${shopId}`);
       await getDynamicModel('OrderMedia', OrderMediaSchema, `ordermedia_${shopId}`);
+      await getDynamicModel('Gallery', GallerySchema, `gallery_${shopId}`);
       // Await Role creation to ensure roles are saved before user creation
       await getDynamicModel('Role', RoleSchema, `role_${shopId}`, defaultRoles);
     };
@@ -347,10 +392,53 @@ const deleteShopService = async (shop_id) => {
   }
 };
 
+const configureShopBucketCorsService = async (shopId) => {
+  try {
+    const shop = await ShopInfo.findOne({ shop_id: Number(shopId) });
+    if (!shop) {
+      throw new Error(`Shop with ID ${shopId} not found`);
+    }
+
+    if (!shop.s3BucketName) {
+      throw new Error(`Shop ${shopId} does not have an S3 bucket configured`);
+    }
+
+    // Configure public access block
+    try {
+      await configurePublicAccessBlock(shop.s3BucketName);
+      logger.info('Public access block configured for shop bucket', { shopId, bucketName: shop.s3BucketName });
+    } catch (error) {
+      logger.warn('Failed to configure public access block (non-critical)', { shopId, error: error.message });
+    }
+
+    // Configure bucket policy for public read
+    try {
+      await configureBucketPublicReadPolicy(shop.s3BucketName);
+      logger.info('Public read policy configured for shop bucket', { shopId, bucketName: shop.s3BucketName });
+    } catch (error) {
+      logger.warn('Failed to configure bucket policy (non-critical)', { shopId, error: error.message });
+    }
+
+    // Configure CORS
+    await configureBucketCors(shop.s3BucketName);
+    logger.info('CORS configured for shop bucket', { shopId, bucketName: shop.s3BucketName });
+
+    return {
+      success: true,
+      message: 'Bucket permissions configured successfully (CORS, public access, and public read policy)',
+      bucketName: shop.s3BucketName,
+    };
+  } catch (error) {
+    logger.error('Error configuring bucket permissions', error, { shopId });
+    throw error;
+  }
+};
+
 module.exports = {
   createShopService,
   getShopsService,
   getShopByIdService,
   updateShopService,
   deleteShopService,
+  configureShopBucketCorsService,
 };

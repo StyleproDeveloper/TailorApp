@@ -44,7 +44,7 @@ const getAllDressPatternService = async (shop_id, queryParams) => {
     const shopExists = await isShopExists(shop_id);
     if (!shopExists) throw new Error(`Shop with ID ${shop_id} does not exist`);
     const DressPatternModel = getDressPatternModel(shop_id);
-    const searchbleFields = ['name', 'category', 'selection', 'owner'];
+    const searchbleFields = ['DressPattern', 'name', 'category', 'selection', 'owner'];
     const numericFields = ['dressPatternId', 'shop_id'];
     // Get the query options
     const options = buildQueryOptions(

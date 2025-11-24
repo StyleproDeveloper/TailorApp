@@ -31,8 +31,58 @@
 
   <title>tailorapp</title>
   <link rel="manifest" href="manifest.json">
+  
+  <!-- FORCE DISABLE SERVICE WORKER CACHE - RUNS IMMEDIATELY -->
+  <script>
+    (function() {
+      console.log('🚨🚨🚨 DISABLING SERVICE WORKER IMMEDIATELY 🚨🚨🚨');
+      
+      // Unregister ALL service workers
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          console.log('Found', registrations.length, 'service workers');
+          for(let registration of registrations) {
+            registration.unregister().then(function(success) {
+              console.log('✅ Service worker unregistered:', success);
+            });
+          }
+        });
+        
+        // Also prevent new registrations
+        navigator.serviceWorker.register = function() {
+          console.log('🚫 Service worker registration blocked');
+          return Promise.reject('Service workers disabled');
+        };
+      }
+      
+      // Clear ALL caches immediately
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          console.log('Found', names.length, 'caches to delete');
+          for (let name of names) {
+            caches.delete(name).then(function(success) {
+              console.log('✅ Cache deleted:', name, success);
+            });
+          }
+        });
+      }
+      
+      // Force reload if service worker was active
+      if (navigator.serviceWorker.controller) {
+        console.log('⚠️ Service worker is controlling page - forcing reload');
+        window.location.reload(true);
+      }
+    })();
+  </script>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Add cache-busting timestamp
+    const timestamp = new Date().getTime();
+    const script = document.createElement('script');
+    script.src = 'flutter_bootstrap.js?v=' + timestamp;
+    script.async = true;
+    document.body.appendChild(script);
+  </script>
 </body>
 </html>

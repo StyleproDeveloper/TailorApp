@@ -6,6 +6,8 @@ import 'package:tailorapp/Core/Services/Services.dart';
 import 'package:tailorapp/Core/Services/Urls.dart';
 import 'package:tailorapp/GlobalVariables.dart';
 import 'package:tailorapp/Routes/App_route.dart';
+import 'package:tailorapp/Core/Services/PermissionService.dart';
+import 'package:tailorapp/Core/Widgets/CustomSnakBar.dart';
 
 class OrderScreen extends StatefulWidget {
   const OrderScreen({super.key});
@@ -28,7 +30,9 @@ class _OrderScreenState extends State<OrderScreen>
   final int pageSize = 10;
   int currentTabIndex = 0;
   String? selectedFilter; // 'deliveryToday', 'deliveryThisWeek', 'createdToday'
-
+  bool _canCreateOrder = false; // Default to false - only true if permission exists
+  bool _permissionCheckComplete = false; // Track if we've checked permissions
+  
   @override
   void initState() {
     super.initState();
@@ -37,8 +41,53 @@ class _OrderScreenState extends State<OrderScreen>
     _scrollController.addListener(_scrollListener);
     searchKeywordController.addListener(_onSearchChanged);
     _tabController.addListener(_onTabChanged);
+    // Check permissions immediately
+    _checkCreateOrderPermission();
     // Fetch initial data
     fetchOrderApi();
+  }
+  
+  // Check permission directly from SharedPreferences - bulletproof check
+  Future<void> _checkCreateOrderPermission() async {
+    try {
+      print('🔍🔍🔍 _checkCreateOrderPermission - STARTING CHECK');
+      
+      // Load permissions directly from SharedPreferences - no caching
+      final permissions = await PermissionService.loadPermissions();
+      
+      print('🔍🔍🔍 Permissions from SharedPreferences: $permissions');
+      print('🔍🔍🔍 createOrder value: ${permissions['createOrder']}');
+      print('🔍🔍🔍 createOrder type: ${permissions['createOrder'].runtimeType}');
+      print('🔍🔍🔍 createOrder == true: ${permissions['createOrder'] == true}');
+      print('🔍🔍🔍 createOrder == false: ${permissions['createOrder'] == false}');
+      
+      // ALWAYS return false unless createOrder is explicitly true
+      final canCreate = permissions['createOrder'] == true;
+      
+      print('🔍🔍🔍 Final canCreate result: $canCreate');
+      
+      if (canCreate) {
+        print('  - ✅✅✅ PERMISSION GRANTED - will show button');
+      } else {
+        print('  - ❌❌❌ NO PERMISSION - will hide button');
+      }
+      
+      if (mounted) {
+        setState(() {
+          _canCreateOrder = canCreate;
+          _permissionCheckComplete = true;
+        });
+      }
+    } catch (e) {
+      print('❌❌❌ ERROR checking permission: $e');
+      print('❌❌❌ Stack trace: ${StackTrace.current}');
+      if (mounted) {
+        setState(() {
+          _canCreateOrder = false; // Always default to false on error
+          _permissionCheckComplete = true;
+        });
+      }
+    }
   }
 
   @override
@@ -238,8 +287,9 @@ class _OrderScreenState extends State<OrderScreen>
       }
       
       // Fallback to advanceReceivedDate or createdAt
-      if (order['advanceReceivedDate'] != null) {
-        return DateTime.parse(order['advanceReceivedDate']);
+      final advanceReceivedDateStr = order['advanceReceivedDate']?.toString() ?? '';
+      if (advanceReceivedDateStr.trim().isNotEmpty) {
+        return DateTime.parse(advanceReceivedDateStr);
       }
       
       if (order['createdAt'] != null) {
@@ -408,30 +458,77 @@ class _OrderScreenState extends State<OrderScreen>
             ),
           ],
         ),
-        Positioned(
-          bottom: 18,
-          right: 18,
-          child: SizedBox(
-            height: 45,
-            width: 45,
-            child: FloatingActionButton(
-              onPressed: () {
-                Navigator.pushNamed(context, AppRoutes.createOrder).then((_) {
-                  setState(() {
-                    orders.clear();
-                    filteredOrders.clear();
-                    pageNumber = 1;
-                    hasMoreData = true;
-                  });
-                  fetchOrderApi();
-                });
-              },
-              backgroundColor: ColorPalatte.primary,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              child: const Icon(Icons.add, size: 20, color: Colors.white),
-            ),
-          ),
+        // Only show create button if user has createOrder permission
+        // Use FutureBuilder to ensure permissions are loaded before checking
+        FutureBuilder<Map<String, bool>>(
+          future: PermissionService.loadPermissions(),
+          builder: (context, snapshot) {
+            // Default to hiding button while loading or if no permission
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              print('🔍🔍🔍 OrderScreen - Loading permissions...');
+              return SizedBox.shrink();
+            }
+            
+            if (!snapshot.hasData || snapshot.data == null) {
+              print('🔍🔍🔍 OrderScreen - No permissions data, hiding button');
+              return SizedBox.shrink();
+            }
+            
+            final permissions = snapshot.data!;
+            final canCreate = permissions['createOrder'] == true;
+            
+            print('🔍🔍🔍 OrderScreen BUILD - Button visibility check:');
+            print('  - Permissions from SharedPreferences: $permissions');
+            print('  - createOrder value: ${permissions['createOrder']}');
+            print('  - createOrder type: ${permissions['createOrder'].runtimeType}');
+            print('  - canCreate: $canCreate');
+            print('  - permissions.isEmpty: ${permissions.isEmpty}');
+            
+            // ALWAYS hide button unless createOrder is explicitly true
+            if (!canCreate || permissions.isEmpty) {
+              print('  - ❌❌❌ HIDING BUTTON - no permission');
+              return SizedBox.shrink();
+            }
+            
+            print('  - ✅✅✅ SHOWING BUTTON - has permission');
+            return Positioned(
+              bottom: 18,
+              right: 18,
+              child: SizedBox(
+                height: 45,
+                width: 45,
+                child: FloatingActionButton(
+                  onPressed: () async {
+                    // Triple-check permission before navigating
+                    final perms = await PermissionService.loadPermissions();
+                    final hasPermission = perms['createOrder'] == true;
+                    
+                    if (hasPermission) {
+                      Navigator.pushNamed(context, AppRoutes.createOrder).then((_) {
+                        setState(() {
+                          orders.clear();
+                          filteredOrders.clear();
+                          pageNumber = 1;
+                          hasMoreData = true;
+                        });
+                        fetchOrderApi();
+                      });
+                    } else {
+                      CustomSnackbar.showSnackbar(
+                        context,
+                        'You do not have permission to create orders',
+                        duration: Duration(seconds: 3),
+                      );
+                    }
+                  },
+                  backgroundColor: ColorPalatte.primary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.add, size: 20, color: Colors.white),
+                ),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -663,14 +760,22 @@ class _OrderScreenState extends State<OrderScreen>
                   ],
                 ),
               ),
+              // Only show price if user has viewPrice permission
+              if (GlobalVariables.hasPermission('viewPrice'))
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      formattedPrice,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                ),
+              // Status badge - always visible
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    formattedPrice,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(

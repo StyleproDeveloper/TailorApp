@@ -381,7 +381,9 @@ class _CustomerscreenState extends State<Customerscreen> {
             Container(
               margin: const EdgeInsets.only(right: 16.0),
               child: TextButton.icon(
-                onPressed: () => _showAddcustomerModal(context),
+                onPressed: GlobalVariables.hasPermission('editCustomer')
+                    ? () => _showAddcustomerModal(context)
+                    : null,
                 icon: const Icon(Icons.add, color: ColorPalatte.primary),
                 label: const Text('Add Customer',
                     style: TextStyle(color: ColorPalatte.primary)),

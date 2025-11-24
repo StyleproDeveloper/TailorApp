@@ -183,20 +183,89 @@ const validateOTPService = async (mobileNumber, otp) => {
       }
     }
 
-    // Fetch role name from Role model
+    // Fetch role name and permissions from Role model
     let roleName = null;
+    let rolePermissions = {};
     if (user.roleId && user.shopId) {
       try {
         const Role = require('../models/RoleModel');
         const roleCollectionName = `role_${user.shopId}`;
         const RoleModel = mongoose.model(roleCollectionName, Role.schema, roleCollectionName);
-        const role = await RoleModel.findOne({ roleId: user.roleId });
+        
+        logger.info('Fetching role', { 
+          roleId: user.roleId, 
+          shopId: user.shopId,
+          collectionName: roleCollectionName 
+        });
+        
+        const role = await RoleModel.findOne({ roleId: user.roleId }).lean();
+        
         if (role) {
           roleName = role.name;
+          // Extract all boolean permissions (exclude non-permission fields)
+          const excludeFields = ['_id', 'roleId', 'name', 'owner', 'createdAt', 'updatedAt', '__v'];
+          rolePermissions = {};
+          for (const [key, value] of Object.entries(role)) {
+            if (!excludeFields.includes(key) && typeof value === 'boolean') {
+              rolePermissions[key] = value;
+            }
+          }
+          
+          // CRITICAL FIX: If role is "Owner", ensure ALL permissions are true
+          if (roleName === 'Owner') {
+            logger.info('Owner role detected - ensuring all permissions are enabled', { 
+              roleId: user.roleId 
+            });
+            // Set all standard permissions to true for Owner
+            const allPermissionKeys = [
+              'viewOrder', 'editOrder', 'createOrder',
+              'viewPrice', 'viewShop', 'editShop',
+              'viewCustomer', 'editCustomer',
+              'administration', 'viewReports',
+              'addDressItem', 'payments', 'assignDressItem',
+              'manageOrderStatus', 'manageWorkShop', 'viewAllBranches'
+            ];
+            allPermissionKeys.forEach(key => {
+              if (!(key in rolePermissions)) {
+                rolePermissions[key] = true;
+                logger.info(`Added missing permission for Owner: ${key} = true`);
+              } else if (rolePermissions[key] !== true) {
+                logger.warn(`Owner permission ${key} was ${rolePermissions[key]}, setting to true`);
+                rolePermissions[key] = true;
+              }
+            });
+          }
+          
+          logger.info('Role permissions fetched successfully', { 
+            roleId: user.roleId, 
+            roleName: roleName,
+            permissionsCount: Object.keys(rolePermissions).length,
+            permissions: rolePermissions 
+          });
+        } else {
+          logger.warn('Role not found in database', { 
+            roleId: user.roleId, 
+            shopId: user.shopId,
+            collectionName: roleCollectionName 
+          });
+          // Set empty permissions if role not found
+          rolePermissions = {};
         }
       } catch (error) {
-        logger.warn('Could not fetch role name', { error: error.message, roleId: user.roleId, shopId: user.shopId });
+        logger.error('Error fetching role name and permissions', { 
+          error: error.message, 
+          stack: error.stack,
+          roleId: user.roleId, 
+          shopId: user.shopId 
+        });
+        // Set empty permissions on error
+        rolePermissions = {};
       }
+    } else {
+      logger.warn('Cannot fetch role - missing roleId or shopId', { 
+        roleId: user.roleId, 
+        shopId: user.shopId 
+      });
     }
 
     return {
@@ -210,6 +279,7 @@ const validateOTPService = async (mobileNumber, otp) => {
         email: user.email,
         roleId: user.roleId,
         roleName: roleName,
+        rolePermissions: rolePermissions,
         branchId: user.branchId,
         secondaryMobile: user.secondaryMobile,
         addressLine1: user.addressLine1,

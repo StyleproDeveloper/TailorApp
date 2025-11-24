@@ -5,6 +5,7 @@ const {
   getShopById,
   updateShop,
   deleteShop,
+  configureShopBucketCors,
 } = require('../controller/ShopController');
 const router = express.Router();
 const ShopValidationSchema = require('../validations/ShopValidation');
@@ -219,5 +220,28 @@ router.put('/:id', validateRequest(ShopValidationSchema), updateShop);
  *         description: Server error
  */
 router.delete('/:id', deleteShop);
+
+/**
+ * @swagger
+ * /shops/{id}/configure-cors:
+ *   post:
+ *     summary: Configure CORS for shop's S3 bucket
+ *     tags: [Shop]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The shop ID
+ *     responses:
+ *       200:
+ *         description: CORS configured successfully
+ *       404:
+ *         description: Shop not found
+ *       500:
+ *         description: Server error
+ */
+router.post('/:id/configure-cors', configureShopBucketCors);
 
 module.exports = router;

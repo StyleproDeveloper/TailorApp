@@ -171,23 +171,47 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
           }
 
           // Process dress-specific patterns
+          print('🎨 Processing ${fetchedPatterns.length} fetched patterns');
           for (var fetchedPattern in fetchedPatterns) {
-            var patternDetails = fetchedPattern["PatternDetails"];
+            print('🎨 Fetched pattern: $fetchedPattern');
+            var patternDetails = fetchedPattern["PatternDetails"] ?? fetchedPattern["patternDetails"];
             
-            if (patternDetails != null) {
-              // Add to dress-specific patterns list using PatternDetails
+            print('🎨 Pattern details: $patternDetails');
+            
+            if (patternDetails != null && patternDetails is Map) {
+              // PatternDetails contains: dressPatternId, name, category, selection, _id
+              // Use dressPatternId as the unique identifier since _id might not be in PatternDetails
+              int dressPatternId = patternDetails["dressPatternId"] ?? 0;
+              String patternName = patternDetails["name"] ?? "Unnamed Pattern";
+              String patternCategory = patternDetails["category"] ?? "";
+              String patternId = patternDetails["_id"]?.toString() ?? 
+                                 dressPatternId.toString(); // Use dressPatternId as fallback ID
+              
+              print('🎨 Adding pattern: dressPatternId=$dressPatternId, name=$patternName, category=$patternCategory');
+              
+              // Find matching pattern in allPatternsList to get the _id
+              var matchingPattern = allPatternsList.firstWhere(
+                (p) => p["dressPatternId"] == dressPatternId,
+                orElse: () => {},
+              );
+              
+              String finalPatternId = matchingPattern["_id"]?.toString() ?? patternId;
+              
               dressPatterns.add({
-                "_id": patternDetails["_id"],
-                "dressPatternId": patternDetails["dressPatternId"],
-                "name": patternDetails["name"],
-                "category": patternDetails["category"],
-                "dressTypePatternId": fetchedPattern["_id"], // Use the relation ID
+                "_id": finalPatternId,
+                "dressPatternId": dressPatternId,
+                "name": patternName,
+                "category": patternCategory,
+                "dressTypePatternId": fetchedPattern["_id"] ?? fetchedPattern["Id"] ?? fetchedPattern["id"], // Use the relation ID
               });
               
               // Mark as selected
-              String id = patternDetails["_id"].toString();
-              selectedPatterns[id] = true;
-              patternTypeIds[id] = fetchedPattern["_id"];
+              selectedPatterns[finalPatternId] = true;
+              patternTypeIds[finalPatternId] = fetchedPattern["_id"] ?? fetchedPattern["Id"] ?? fetchedPattern["id"];
+              
+              print('✅ Pattern added: _id=$finalPatternId, dressPatternId=$dressPatternId, name=$patternName');
+            } else {
+              print('⚠️ Pattern details is null or invalid for: $fetchedPattern');
             }
           }
           
@@ -416,16 +440,31 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
     try {
       final response = await ApiService().get(requestUrl, context);
 
+      print('🎨 Pattern API Response: ${response.data}');
+
       if (response.data is Map<String, dynamic> &&
           response.data.containsKey('data')) {
+        final rawPatterns = response.data['data'];
+        print('🎨 Raw patterns data: $rawPatterns');
+        
         final patterns = List<Map<String, dynamic>>.from(
-          response.data['data'].map((p) => {
-                "_id": p["_id"],
-                "dressPatternId": p["dressPatternId"],
-                "name": p["name"],
-                "category": p["category"],
-              }),
+          (rawPatterns as List).map((p) {
+            print('🎨 Processing pattern from API: $p');
+            // Backend returns: _id, dressPatternId, name, category, selection, owner, createdAt, updatedAt
+            return {
+              "_id": p["_id"]?.toString() ?? "",
+              "dressPatternId": p["dressPatternId"] ?? 0,
+              "name": p["name"] ?? "Unnamed Pattern",
+              "category": p["category"] ?? "",
+              "selection": p["selection"] ?? "",
+            };
+          }),
         );
+        
+        print('🎨 Processed ${patterns.length} patterns');
+        for (var p in patterns) {
+          print('  - Pattern: _id=${p["_id"]}, dressPatternId=${p["dressPatternId"]}, name=${p["name"]}, category=${p["category"]}');
+        }
         
         setState(() {
           allPatternsList = patterns;
@@ -436,18 +475,19 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
         _cachedPatternsList = List.from(patterns);
         _lastCacheTime = DateTime.now();
         
-        print('🎨 Loaded ${allPatternsList.length} patterns');
+        print('🎨 Loaded ${allPatternsList.length} patterns into allPatternsList');
       } else {
         setState(() {
           isLoadingMasterData = false;
         });
-        print('⚠️ No patterns found');
+        print('⚠️ No patterns found in response: ${response.data}');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() {
         isLoadingMasterData = false;
       });
       print('❌ Error loading patterns: $e');
+      print('❌ Stack trace: $stackTrace');
     }
   }
 
@@ -864,7 +904,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                           dense: true,
                           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                           title: Text(
-                            pattern['name'],
+                            pattern['name'] ?? 'Unnamed Pattern',
                             style: TextStyle(
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                               color: isSelected ? ColorPalatte.primary : Colors.black87,
@@ -872,7 +912,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                             ),
                           ),
                           subtitle: Text(
-                            'ID: ${pattern['dressPatternId']}${pattern['category'] != null && pattern['category'].toString().isNotEmpty ? ' • ${pattern['category']}' : ''}',
+                            'ID: ${pattern['dressPatternId'] ?? 'N/A'}${pattern['category'] != null && pattern['category'].toString().isNotEmpty ? ' • ${pattern['category']}' : ''}',
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.grey[600],
@@ -977,8 +1017,14 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                       
                       return ListTile(
                         dense: true,
-                        title: Text(pattern['name'], style: TextStyle(fontSize: 13)),
-                        subtitle: Text('ID: ${pattern['dressPatternId']}${pattern['category'] != null && pattern['category'].toString().isNotEmpty ? ' • ${pattern['category']}' : ''}', style: TextStyle(fontSize: 11)),
+                        title: Text(
+                          pattern['name'] ?? 'Unnamed Pattern', 
+                          style: TextStyle(fontSize: 13)
+                        ),
+                        subtitle: Text(
+                          'ID: ${pattern['dressPatternId'] ?? 'N/A'}${pattern['category'] != null && pattern['category'].toString().isNotEmpty ? ' • ${pattern['category']}' : ''}', 
+                          style: TextStyle(fontSize: 11)
+                        ),
                         trailing: isAlreadyAdded 
                           ? Icon(Icons.check, color: Colors.green, size: 18)
                           : Icon(Icons.add, size: 18),

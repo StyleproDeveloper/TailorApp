@@ -4,6 +4,7 @@ const {
   getShopByIdService,
   updateShopService,
   deleteShopService,
+  configureShopBucketCorsService,
 } = require('../service/ShopService');
 const { asyncHandler, CustomError } = require('../utils/error.handlers');
 
@@ -127,4 +128,9 @@ const deleteShop = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { createShop, getShops, getShopById, updateShop, deleteShop };
+const configureShopBucketCors = asyncHandler(async (req, res) => {
+  const result = await configureShopBucketCorsService(req.params.id);
+  res.status(200).json(result);
+});
+
+module.exports = { createShop, getShops, getShopById, updateShop, deleteShop, configureShopBucketCors };

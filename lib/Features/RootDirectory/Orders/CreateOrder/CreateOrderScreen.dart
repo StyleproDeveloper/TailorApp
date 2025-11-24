@@ -8,6 +8,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:dio/dio.dart' show Dio, DioException, FormData, MultipartFile, Response, Options, DioMediaType;
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
 import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 import 'package:tailorapp/Core/Constants/TextString.dart';
 import 'package:tailorapp/Core/Widgets/CommonHeader.dart';
@@ -52,6 +56,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   int? orderItemPatternId;
   bool isLoading = true;
   final ImagePicker _picker = ImagePicker();
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  bool _isRecording = false;
+  String? _currentRecordingPath;
+  OrderItem? _currentRecordingItem;
+  Timer? _recordingTimer;
+  int _recordingDuration = 0; // Duration in seconds
   final ScrollController _scrollController = ScrollController();
   int pageNumber = 1;
   final int pageSize = 10;
@@ -96,10 +106,81 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   static Map<String, List<Map<String, dynamic>>> _customerCache = {};
   static DateTime? _lastCacheTime;
 
+  bool _permissionChecked = false;
+  bool _hasAccess = false;
+  String? _errorMessage;
+
   @override
   void initState() {
     super.initState();
 
+    // Check permissions IMMEDIATELY - don't wait for post frame callback
+    _checkPermissions();
+  }
+  
+  Future<void> _checkPermissions() async {
+    print('🔍 CreateOrderScreen - Starting permission check');
+    // Force reload permissions with timeout
+    try {
+      await GlobalVariables.loadShopId().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          print('⚠️ loadShopId timed out, continuing anyway');
+        },
+      );
+    } catch (e) {
+      print('⚠️ Error loading shop ID: $e, continuing anyway');
+    }
+    
+    final args = ModalRoute.of(context)?.settings.arguments;
+    final isEditMode = args != null || widget.orderId != null;
+    
+    print('🔍 CreateOrderScreen - Checking permissions');
+    print('🔍 isEditMode: $isEditMode');
+    print('🔍 Current permissions: ${GlobalVariables.permissions}');
+    print('🔍 permissions.isEmpty: ${GlobalVariables.permissions.isEmpty}');
+    print('🔍 permissions count: ${GlobalVariables.permissions.length}');
+    print('🔍 hasPermission(createOrder): ${GlobalVariables.hasPermission('createOrder')}');
+    print('🔍 hasPermission(editOrder): ${GlobalVariables.hasPermission('editOrder')}');
+    
+    bool hasPermission = false;
+    String errorMessage = '';
+    
+    if (isEditMode) {
+      // Editing existing order - requires editOrder permission
+      hasPermission = GlobalVariables.hasPermission('editOrder');
+      errorMessage = 'You do not have permission to edit orders';
+    } else {
+      // Creating new order - requires createOrder permission
+      hasPermission = GlobalVariables.hasPermission('createOrder');
+      errorMessage = 'You do not have permission to create orders';
+    }
+    
+    if (!hasPermission) {
+      print('❌ BLOCKING: No permission - $errorMessage');
+      if (mounted) {
+        setState(() {
+          _permissionChecked = true;
+          _hasAccess = false;
+          _errorMessage = errorMessage;
+        });
+        // Pop after a brief delay to show error screen
+        Future.delayed(Duration(milliseconds: 100), () {
+          if (mounted) {
+            Navigator.pop(context);
+            CustomSnackbar.showSnackbar(
+              context,
+              errorMessage,
+              duration: Duration(seconds: 3),
+            );
+          }
+        });
+      }
+      return;
+    }
+    
+    print('✅ Permission check passed, allowing access');
+    
     // Initialize additional cost controllers
     final initialCost = {
       'description': TextEditingController(),
@@ -112,17 +193,19 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     // Add listeners to cost controllers for automatic total calculation
     _addCostListeners();
 
-    // Optimize loading: Show UI immediately, load data in background
+    // Don't show UI until permission is checked
     setState(() {
-      isLoading = false; // Show UI immediately
+      _permissionChecked = true;
+      _hasAccess = true;
+      isLoading = true; // Keep loading until permission check
     });
 
-    // Fetch data in background without blocking UI
+    // Fetch data in background after permission check
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-await _loadDataInBackground();
+      await _loadDataInBackground();
     });
   }
-
+  
   void _addCostListeners() {
     // Listen to courier cost changes
     courierController.addListener(_updateTotalCost);
@@ -130,8 +213,8 @@ await _loadDataInBackground();
     // Listen to discount changes
     discountController.addListener(_updateTotalCost);
     
-    // Listen to advance amount changes
-    advanceAmountController.addListener(_updateTotalCost);
+    // Advance amount is now handled in payment section, not in order creation
+    // advanceAmountController.addListener(_updateTotalCost);
     
     // Listen to additional cost changes
     for (var cost in additionalCostControllers) {
@@ -155,19 +238,71 @@ await _loadDataInBackground();
         setState(() {
           widget.orderId = args;
         });
-        // For edit mode, load all customers first, then process order
-        await _fetchAllCustomers(GlobalVariables.shopIdGet!);
+        // For edit mode, ensure shop ID is available
+        int? shopId = GlobalVariables.shopIdGet;
+        if (shopId == null) {
+          print('⚠️ Shop ID is null, cannot load order data');
+          if (mounted) {
+            setState(() {
+              isLoading = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Shop ID is missing. Cannot load order.'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+          return;
+        }
+        // For edit mode, load all customers first with larger page size to ensure we get the customer
+        await _fetchAllCustomers(shopId, pageNumber: 1, pageSize: 1000);
         // Load dress types in background (non-blocking) to avoid blocking order processing
         _loadDressTypesInBackground();
         await fetchProductDetail();
       } else {
         // For create mode, load only initial customers for faster loading
-        await _fetchInitialCustomers();
+        print('📋 Create mode: Loading initial customers...');
+        // Add timeout to prevent infinite loading
+        try {
+          await _fetchInitialCustomers().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              print('⚠️ _fetchInitialCustomers timed out after 10 seconds');
+              if (mounted) {
+                setState(() {
+                  customers = [];
+                });
+              }
+            },
+          );
+          print('✅ _fetchInitialCustomers completed');
+        } catch (e) {
+          print('❌ Error in _fetchInitialCustomers: $e');
+          if (mounted) {
+            setState(() {
+              customers = [];
+            });
+          }
+        }
         // Load dress types in background (non-blocking)
         _loadDressTypesInBackground();
+        // Always set loading to false after data is loaded (or failed)
+        print('✅ Setting isLoading = false');
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+        }
       }
     } catch (e) {
       print('Error loading data in background: $e');
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -228,6 +363,12 @@ await _loadDataInBackground();
   @override
   void dispose() {
     _isDisposed = true;
+    // Stop and dispose audio recorder
+    _recordingTimer?.cancel();
+    if (_isRecording) {
+      _audioRecorder.stop().catchError((e) => print('Error stopping recorder on dispose: $e'));
+    }
+    _audioRecorder.dispose();
     for (var item in orderItems) {
       for (var measurement in item.measurements) {
         (measurement['value'] as TextEditingController).dispose();
@@ -254,7 +395,13 @@ await _loadDataInBackground();
   Future<void> _fetchInitialCustomers() async {
     int? id = GlobalVariables.shopIdGet;
     if (id == null) {
-      print("Shop ID is missing");
+      print("⚠️ Shop ID is missing in _fetchInitialCustomers");
+      // Don't return early - set customers to empty and let the caller handle it
+      if (mounted) {
+        setState(() {
+          customers = [];
+        });
+      }
       return;
     }
 
@@ -324,8 +471,31 @@ await _loadDataInBackground();
 
   Future<void> _fetchSpecificCustomer(int customerId) async {
     try {
+      // Validate customerId is not null or 0
+      if (customerId == null || customerId == 0) {
+        print('⚠️ Cannot fetch customer: Invalid customerId ($customerId)');
+        if (mounted) {
+          setState(() {
+            selectedCustomerId = null;
+            selectedCustomer = null;
+            dropdownCustomerController.text = '';
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Invalid customer ID. Please select a customer.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
       int? shopId = GlobalVariables.shopIdGet;
-      if (shopId == null) return;
+      if (shopId == null) {
+        print('⚠️ Cannot fetch customer: Shop ID is null');
+        return;
+      }
 
       // Search for the specific customer
       final String requestUrl = "${Urls.customer}/$shopId?pageNumber=1&pageSize=1000&searchKeyword=";
@@ -341,6 +511,7 @@ await _loadDataInBackground();
         if (foundCustomer != null) {
           setState(() {
             selectedCustomer = foundCustomer;
+            selectedCustomerId = customerId; // Ensure it's set
             dropdownCustomerController.text = foundCustomer['name'] ?? '';
             // Add to customers list if not already there
             if (!customers.any((c) => c['customerId'] == customerId)) {
@@ -349,34 +520,58 @@ await _loadDataInBackground();
           });
           print('✅ Specific customer fetched: ${foundCustomer['name']} (ID: $customerId)');
         } else {
-          // Customer not found anywhere, create placeholder
-          setState(() {
-            selectedCustomer = {
-              'customerId': customerId,
-              'name': 'Customer ID: $customerId',
-            };
-            dropdownCustomerController.text = 'Customer ID: $customerId';
-          });
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Customer ID $customerId not found. Please select the correct customer.'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 4),
-            ),
-          );
+          // Customer not found - this could happen if customer was deleted or shop changed
+          print('⚠️ Customer ID $customerId not found in shop $shopId');
+          if (mounted) {
+            setState(() {
+              selectedCustomerId = customerId; // Keep the ID so user can see it
+              selectedCustomer = {
+                'customerId': customerId,
+                'name': 'Customer ID: $customerId (Not Found)',
+              };
+              dropdownCustomerController.text = 'Customer ID: $customerId (Not Found)';
+            });
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Customer ID $customerId not found. The customer may have been deleted or belongs to a different shop. Please select the correct customer.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
         }
       }
     } catch (e) {
       print('❌ Error fetching specific customer: $e');
-      // Fallback to placeholder
-      setState(() {
-        selectedCustomer = {
-          'customerId': customerId,
-          'name': 'Customer ID: $customerId',
-        };
-        dropdownCustomerController.text = 'Customer ID: $customerId';
-      });
+      // Fallback to placeholder only if customerId is valid
+      if (mounted && customerId != null && customerId != 0) {
+        setState(() {
+          selectedCustomerId = customerId;
+          selectedCustomer = {
+            'customerId': customerId,
+            'name': 'Customer ID: $customerId (Error Loading)',
+          };
+          dropdownCustomerController.text = 'Customer ID: $customerId (Error Loading)';
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading customer ID $customerId. Please select the correct customer.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      } else {
+        // Invalid customerId, clear selection
+        if (mounted) {
+          setState(() {
+            selectedCustomerId = null;
+            selectedCustomer = null;
+            dropdownCustomerController.text = '';
+          });
+        }
+      }
     }
   }
 
@@ -577,41 +772,152 @@ await _loadDataInBackground();
       return [];
     }
 
-    final String requestUrl = "${Urls.orderDressTypeMea}/$id/$dressTypeId";
-    print("Request URL for Patterns: $requestUrl");
+    print("🎨 Fetching patterns for dressTypeId=$dressTypeId, shopId=$id");
 
     try {
+      // Step 1: Fetch ALL patterns from master list to use as fallback
+      final allPatternsResponse = await ApiService().get("${Urls.getDressPattern}/$id", context);
+      Map<int, Map<String, dynamic>> allPatternsMap = {};
+      
+      if (allPatternsResponse.data is Map<String, dynamic> &&
+          allPatternsResponse.data.containsKey('data')) {
+        final allPatterns = allPatternsResponse.data['data'] as List;
+        for (var p in allPatterns) {
+          final dressPatternId = p['dressPatternId'];
+          if (dressPatternId != null) {
+            // Check for DressPattern field first, then fallback to name
+            final patternName = p['DressPattern'] ?? p['dressPattern'] ?? p['name'] ?? 'Pattern $dressPatternId';
+            allPatternsMap[dressPatternId] = {
+              '_id': p['_id']?.toString() ?? '',
+              'dressPatternId': dressPatternId,
+              'DressPattern': patternName?.toString()?.trim(),
+              'name': patternName?.toString()?.trim() ?? 'Pattern $dressPatternId',
+              'category': p['category']?.toString()?.trim() ?? 'Other',
+              'selection': p['selection']?.toString()?.toLowerCase() ?? 'multiple',
+            };
+          }
+        }
+        print('🎨 Loaded ${allPatternsMap.length} patterns from master list');
+      }
+
+      // Step 2: Fetch dress-specific pattern relations
+      final String requestUrl = "${Urls.orderDressTypeMea}/$id/$dressTypeId";
+      print("🎨 Request URL for Patterns: $requestUrl");
       final response = await ApiService().get(requestUrl, context);
-      print('Raw pattern response: ${response.data}');
+      print('🎨 Raw pattern response keys: ${response.data?.keys}');
 
       if (response.data is Map<String, dynamic>) {
         List<dynamic> fetchedPatterns =
             response.data["DressTypeDressPattern"] ?? [];
-        final patterns = fetchedPatterns
-            .map<Map<String, dynamic>>((pattern) {
-              final details = pattern['PatternDetails'] ?? {};
-              final id = pattern['_id']?.toString();
-              if (id == null) {
-                print('Warning: Missing _id for pattern: $pattern');
-                return {};
-              }
-              return {
-                '_id': id,
-                'category': details['category']?.toString() ?? 'Unknown',
-                'name': details['name'] is List
-                    ? (details['name'] as List).cast<String>()
-                    : [details['name']?.toString() ?? ''],
-                'selection': details['selection']?.toString() ?? 'multiple',
-              };
-            })
-            .whereType<Map<String, dynamic>>()
-            .toList();
-        print('Processed patterns: $patterns');
+        print('🎨 Fetched ${fetchedPatterns.length} dress-specific pattern relations');
+        
+        if (fetchedPatterns.isEmpty) {
+          print('⚠️ No patterns found for dressTypeId=$dressTypeId');
+          CustomSnackbar.showSnackbar(
+            context,
+            "No patterns available for this dress type",
+            duration: Duration(seconds: 2),
+          );
+          return [];
+        }
+        
+        final patterns = <Map<String, dynamic>>[];
+        
+        for (var pattern in fetchedPatterns) {
+          print('🎨 Processing pattern relation: $pattern');
+          
+          // Get dressPatternId from the relation
+          final dressPatternId = pattern['dressPatternId'] ?? 0;
+          
+          if (dressPatternId == 0) {
+            print('⚠️ Warning: Missing dressPatternId, skipping: $pattern');
+            continue;
+          }
+          
+          // Try PatternDetails first, then fallback to master list
+          final details = pattern['PatternDetails'] ?? pattern['patternDetails'] ?? {};
+          final masterPattern = allPatternsMap[dressPatternId];
+          
+          // Use PatternDetails - check for DressPattern field first, then name
+          String patternName = '';
+          String patternCategory = '';
+          String patternSelection = 'multiple';
+          String patternId = '';
+          
+          // Check for DressPattern field first (database field name), then fallback to name
+          final dressPatternValue = details['DressPattern'] ?? details['dressPattern'] ?? details['name'];
+          
+          if (dressPatternValue != null && 
+              dressPatternValue.toString().trim().isNotEmpty &&
+              dressPatternValue.toString().toLowerCase() != 'unnamed pattern') {
+            // Use PatternDetails
+            patternName = dressPatternValue.toString().trim();
+            patternCategory = details['category']?.toString()?.trim() ?? '';
+            patternSelection = details['selection']?.toString()?.toLowerCase() ?? 'multiple';
+            patternId = details['_id']?.toString() ?? '';
+            print('🎨 Using PatternDetails: name="$patternName" from DressPattern field');
+          } else if (masterPattern != null) {
+            // Use master pattern - also check for DressPattern field
+            final masterName = masterPattern['DressPattern'] ?? masterPattern['dressPattern'] ?? masterPattern['name'];
+            patternName = masterName?.toString()?.trim() ?? 'Pattern $dressPatternId';
+            patternCategory = masterPattern['category'] ?? 'Other';
+            patternSelection = masterPattern['selection'] ?? 'multiple';
+            patternId = masterPattern['_id'] ?? '';
+            print('🎨 Using master pattern: name="$patternName"');
+          } else {
+            // Last resort: use dressPatternId as name
+            patternName = 'Pattern $dressPatternId';
+            patternCategory = 'Other';
+            patternSelection = 'multiple';
+            patternId = dressPatternId.toString();
+            print('🎨 Using fallback: name="$patternName"');
+          }
+          
+          // Ensure we have a valid name
+          if (patternName.isEmpty) {
+            patternName = 'Pattern $dressPatternId';
+          }
+          
+          // Ensure we have a valid category
+          if (patternCategory.isEmpty) {
+            patternCategory = 'Other';
+          }
+          
+          // Ensure we have a valid ID
+          if (patternId.isEmpty) {
+            patternId = dressPatternId.toString();
+          }
+          
+          print('🎨 ✅ Pattern: id=$patternId, dressPatternId=$dressPatternId, name="$patternName", category="$patternCategory", selection=$patternSelection');
+          
+          patterns.add({
+            '_id': patternId,
+            'dressPatternId': dressPatternId,
+            'category': patternCategory,
+            'name': patternName,
+            'selection': patternSelection == 'single' ? 'single' : 'multiple',
+          });
+        }
+            
+        print('🎨 ✅ Processed ${patterns.length} patterns total');
+        for (var p in patterns) {
+          print('  - Pattern: name="${p['name']}", category="${p['category']}", selection=${p['selection']}');
+        }
+        
+        if (patterns.isEmpty) {
+          CustomSnackbar.showSnackbar(
+            context,
+            "No valid patterns found for this dress type",
+            duration: Duration(seconds: 2),
+          );
+        }
+        
         return patterns;
       }
       return [];
-    } catch (e) {
-      print("Failed to load patterns: $e");
+    } catch (e, stackTrace) {
+      print("❌ Failed to load patterns: $e");
+      print("❌ Stack trace: $stackTrace");
       Future.microtask(() => CustomSnackbar.showSnackbar(
             context,
             "Failed to load patterns: $e",
@@ -651,33 +957,53 @@ await _loadDataInBackground();
         if (!mounted) return;
         setState(() {
           selectedOrderType = _mapOrderType(order['stitchingType']);
-          selectedCustomerId = order['customerId'];
+          // Get customerId from order, but validate it's not null or 0
+          final orderCustomerId = order['customerId'];
+          selectedCustomerId = (orderCustomerId != null && orderCustomerId != 0) ? orderCustomerId : null;
           // Normalize backend status to one of our known keys
           currentOrderStatus = _normalizeStatusKey(order['status']?.toString());
           
-          // Try to find the customer in the loaded customers list
-          try {
-            selectedCustomer = customers.firstWhere(
-              (customer) => customer['customerId'] == selectedCustomerId,
-              orElse: () => <String, dynamic>{},
-            );
-            
-            if (selectedCustomer != null && selectedCustomer!.isNotEmpty) {
-              dropdownCustomerController.text = selectedCustomer!['name'] ?? '';
-              print('✅ Customer found: ${selectedCustomer!['name']} (ID: $selectedCustomerId)');
-            } else {
-              // Customer not found in the list, try to fetch it specifically
-              print('⚠️ Customer ID $selectedCustomerId not found in customers list');
-              print('Available customers: ${customers.map((c) => '${c['name']} (${c['customerId']})').join(', ')}');
+          // Only try to find/fetch customer if we have a valid customerId
+          if (selectedCustomerId != null && selectedCustomerId != 0) {
+            // Try to find the customer in the loaded customers list
+            try {
+              selectedCustomer = customers.firstWhere(
+                (customer) => customer['customerId'] == selectedCustomerId,
+                orElse: () => <String, dynamic>{},
+              );
               
-              // Try to fetch the specific customer (async call)
+              if (selectedCustomer != null && selectedCustomer!.isNotEmpty) {
+                dropdownCustomerController.text = selectedCustomer!['name'] ?? '';
+                print('✅ Customer found: ${selectedCustomer!['name']} (ID: $selectedCustomerId)');
+              } else {
+                // Customer not found in the list, try to fetch it specifically
+                print('⚠️ Customer ID $selectedCustomerId not found in customers list');
+                print('Available customers: ${customers.map((c) => '${c['name']} (${c['customerId']})').join(', ')}');
+                
+                // Try to fetch the specific customer (async call)
+                _fetchSpecificCustomer(selectedCustomerId!);
+              }
+            } catch (e) {
+              print('❌ Error finding customer: $e');
+              // Try to fetch the customer anyway
               _fetchSpecificCustomer(selectedCustomerId!);
             }
-          } catch (e) {
-            print('❌ Error finding customer: $e');
+          } else {
+            // Invalid customerId (null or 0) - show warning and clear customer selection
+            print('⚠️ Invalid customerId in order: $orderCustomerId');
             selectedCustomerId = null;
             selectedCustomer = null;
             dropdownCustomerController.text = '';
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Order has invalid customer ID. Please select a customer.'),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 4),
+                ),
+              );
+            }
           }
 
           isUrgent = order['urgent'] ?? false;
@@ -697,8 +1023,8 @@ await _loadDataInBackground();
                   0.0;
           totalCostController.text = estimationCost.toStringAsFixed(2);
 
-          advanceAmountController.text =
-              order['advancereceived']?.toString() ?? '';
+          // Advance amount is now handled in payment section, not in order creation
+          // advanceAmountController.text = order['advancereceived']?.toString() ?? '';
 
           orderItems = (order['items'] as List<dynamic>).map((item) {
             print("Selected Dress Type::::: ${item['dressTypeId']}");
@@ -1091,25 +1417,407 @@ await _loadDataInBackground();
     );
   }
 
-  void _recordAudio(OrderItem item) {
-    print("🎙 Start Recording Audio for item...");
-    // TODO: Implement audio recording logic
-    // For now, show a message
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Audio recording feature coming soon')),
+  Future<void> _recordAudio(OrderItem item) async {
+    try {
+      // If already recording for this item, stop and save
+      if (_isRecording && _currentRecordingItem == item) {
+        await _stopRecording(item);
+        return;
+      }
+
+      // If recording for a different item, stop that first
+      if (_isRecording && _currentRecordingItem != item) {
+        await _stopRecording(_currentRecordingItem!);
+      }
+
+      // Check and request microphone permission
+      if (!kIsWeb) {
+        final status = await Permission.microphone.request();
+        if (!status.isGranted) {
+          if (mounted) {
+            CustomSnackbar.showSnackbar(
+              context,
+              'Microphone permission is required to record audio',
+              duration: Duration(seconds: 3),
+            );
+          }
+          return;
+        }
+      }
+
+      // Check if recorder is available
+      if (await _audioRecorder.hasPermission() == false) {
+        if (mounted) {
+          CustomSnackbar.showSnackbar(
+            context,
+            'Microphone permission is required to record audio',
+            duration: Duration(seconds: 3),
+          );
+        }
+        return;
+      }
+
+      // Generate file path
+      String filePath;
+      if (kIsWeb) {
+        // For web, we'll use a temporary path
+        filePath = 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      } else {
+        // For mobile, use app directory
+        final directory = await getApplicationDocumentsDirectory();
+        filePath = '${directory.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      }
+
+      // Start recording
+      await _audioRecorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: filePath,
       );
+
+      setState(() {
+        _isRecording = true;
+        _currentRecordingPath = filePath;
+        _currentRecordingItem = item;
+        _recordingDuration = 0;
+      });
+
+      // Start recording timer
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (_isRecording && mounted) {
+          setState(() {
+            _recordingDuration++;
+          });
+        } else {
+          timer.cancel();
+        }
+      });
+
+      // Show recording dialog
+      if (mounted) {
+        _showRecordingDialog(item);
+      }
+    } catch (e) {
+      print('❌ Error starting audio recording: $e');
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Failed to start recording: ${e.toString()}',
+          duration: Duration(seconds: 3),
+        );
+      }
     }
   }
 
-  // Build media grid to display images
+  Future<void> _stopRecording(OrderItem item) async {
+    try {
+      if (!_isRecording) return;
+
+      // Stop the timer
+      _recordingTimer?.cancel();
+      _recordingTimer = null;
+
+      final path = await _audioRecorder.stop();
+      
+      if (path != null && path.isNotEmpty) {
+        if (kIsWeb) {
+          // On web (including mobile browsers), the record package returns a path
+          // that can be used with File(path).readAsBytes()
+          print('📱 Web/Mobile Browser: Processing audio recording from path: $path');
+          
+          try {
+            // On web, File(path) should work with readAsBytes() for blob URLs
+            // The record package handles the conversion internally
+            final audioFile = File(path);
+            
+            // Try to read bytes to verify the file is accessible
+            Uint8List bytes;
+            try {
+              bytes = await audioFile.readAsBytes();
+              print('✅ Web: Successfully read ${bytes.length} bytes from audio file');
+            } catch (readError) {
+              // If direct read fails, it might be a blob URL - try HTTP fetch
+              print('⚠️ Direct read failed, trying HTTP fetch: $readError');
+              if (path.startsWith('blob:') || path.startsWith('http://') || path.startsWith('https://')) {
+                final response = await http.get(Uri.parse(path));
+                if (response.statusCode == 200) {
+                  bytes = response.bodyBytes;
+                  print('✅ Web: Successfully fetched ${bytes.length} bytes via HTTP');
+                } else {
+                  throw Exception('Failed to fetch audio: HTTP ${response.statusCode}');
+                }
+              } else {
+                rethrow;
+              }
+            }
+            
+            final fileSize = bytes.length;
+            final duration = _recordingDuration;
+            
+            setState(() {
+              item.audioFiles.add(audioFile);
+              _isRecording = false;
+              _currentRecordingPath = null;
+              _currentRecordingItem = null;
+              _recordingDuration = 0;
+            });
+
+            if (mounted) {
+              CustomSnackbar.showSnackbar(
+                context,
+                'Audio recorded successfully (${_formatDuration(duration)}, ${_formatFileSize(fileSize)})',
+                duration: Duration(seconds: 3),
+              );
+            }
+          } catch (e) {
+            print('❌ Error processing web audio: $e');
+            // Fallback: store the path anyway, upload will handle it
+            final audioFile = File(path);
+            final duration = _recordingDuration;
+            
+            setState(() {
+              item.audioFiles.add(audioFile);
+              _isRecording = false;
+              _currentRecordingPath = null;
+              _currentRecordingItem = null;
+              _recordingDuration = 0;
+            });
+
+            if (mounted) {
+              CustomSnackbar.showSnackbar(
+                context,
+                'Audio recorded successfully (${_formatDuration(duration)})',
+                duration: Duration(seconds: 3),
+              );
+            }
+          }
+        } else {
+          // On mobile (native), use File directly
+          final audioFile = File(path);
+          if (await audioFile.exists()) {
+            final fileSize = await audioFile.length();
+            final duration = _recordingDuration;
+            
+            setState(() {
+              item.audioFiles.add(audioFile);
+              _isRecording = false;
+              _currentRecordingPath = null;
+              _currentRecordingItem = null;
+              _recordingDuration = 0;
+            });
+
+            if (mounted) {
+              CustomSnackbar.showSnackbar(
+                context,
+                'Audio recorded successfully (${_formatDuration(duration)}, ${_formatFileSize(fileSize)})',
+                duration: Duration(seconds: 3),
+              );
+            }
+          } else {
+            throw Exception('Recorded file does not exist');
+          }
+        }
+      } else {
+        throw Exception('No recording path returned');
+      }
+    } catch (e) {
+      print('❌ Error stopping audio recording: $e');
+      _recordingTimer?.cancel();
+      _recordingTimer = null;
+      setState(() {
+        _isRecording = false;
+        _currentRecordingPath = null;
+        _currentRecordingItem = null;
+        _recordingDuration = 0;
+      });
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Failed to save recording: ${e.toString()}',
+          duration: Duration(seconds: 3),
+        );
+      }
+    }
+  }
+
+  String _formatDuration(int seconds) {
+    final minutes = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  void _showRecordingDialog(OrderItem item) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Update dialog state when recording state changes
+            return StreamBuilder<bool>(
+              stream: Stream.periodic(const Duration(milliseconds: 500), (_) => _isRecording),
+              builder: (context, snapshot) {
+                return AlertDialog(
+                  title: Row(
+                    children: [
+                      Icon(Icons.mic, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Recording Audio'),
+                    ],
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Center(
+                        child: Text(
+                          'Recording audio for this order item',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ),
+                      SizedBox(height: 24),
+                      if (_isRecording) ...[
+                        // Animated recording indicator
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          duration: Duration(milliseconds: 1000),
+                          builder: (context, value, child) {
+                            return Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: Colors.red.withOpacity(0.1 + (value * 0.3)),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.red,
+                                  width: 2 + (value * 2),
+                                ),
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  Icons.mic,
+                                  color: Colors.red,
+                                  size: 40,
+                                ),
+                              ),
+                            );
+                          },
+                          onEnd: () {
+                            if (_isRecording && mounted) {
+                              setDialogState(() {});
+                            }
+                          },
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          _formatDuration(_recordingDuration),
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Recording in progress...',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Tap "Stop & Save" when finished',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                        // Cancel recording
+                        try {
+                          if (_isRecording) {
+                            _recordingTimer?.cancel();
+                            _recordingTimer = null;
+                            await _audioRecorder.stop();
+                            // Delete the recorded file if it exists
+                            if (_currentRecordingPath != null && !kIsWeb) {
+                              try {
+                                final file = File(_currentRecordingPath!);
+                                if (await file.exists()) {
+                                  await file.delete();
+                                }
+                              } catch (e) {
+                                print('Error deleting canceled recording: $e');
+                              }
+                            }
+                            setState(() {
+                              _isRecording = false;
+                              _currentRecordingPath = null;
+                              _currentRecordingItem = null;
+                              _recordingDuration = 0;
+                            });
+                          }
+                        } catch (e) {
+                          print('Error canceling recording: $e');
+                        }
+                      },
+                      child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                        await _stopRecording(item);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text('Stop & Save'),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Build media grid to display images and audio
   Widget _buildMediaGrid(OrderItem item) {
     List<Widget> mediaWidgets = [];
 
-    // Add uploaded media (from server)
+    // Add uploaded media (from server) - images
     for (var media in item.uploadedMedia) {
       if (media['mediaType'] == 'image') {
         mediaWidgets.add(_buildMediaThumbnail(
+          media['mediaUrl'],
+          isUploaded: true,
+          onDelete: () async {
+            // Delete from server (and S3 if applicable)
+            await _deleteOrderItemMedia(media, item);
+          },
+        ));
+      } else if (media['mediaType'] == 'audio') {
+        mediaWidgets.add(_buildAudioThumbnail(
           media['mediaUrl'],
           isUploaded: true,
           onDelete: () async {
@@ -1129,6 +1837,20 @@ await _loadDataInBackground();
         onDelete: () {
           setState(() {
             item.images.removeAt(i);
+          });
+        },
+      ));
+    }
+
+    // Add local audio files (not yet uploaded)
+    for (int i = 0; i < item.audioFiles.length; i++) {
+      final audioFile = item.audioFiles[i];
+      mediaWidgets.add(_buildAudioThumbnail(
+        audioFile,
+        isUploaded: false,
+        onDelete: () {
+          setState(() {
+            item.audioFiles.removeAt(i);
           });
         },
       ));
@@ -1211,6 +1933,107 @@ await _loadDataInBackground();
               ),
             ),
           ),
+      ],
+    );
+  }
+
+  // Build audio thumbnail widget
+  Widget _buildAudioThumbnail(dynamic audioData, {required bool isUploaded, required VoidCallback onDelete}) {
+    return Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+            color: Colors.blue.shade50,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.audiotrack,
+                  size: 32,
+                  color: Colors.blue.shade700,
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Audio',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.blue.shade700,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          top: 4,
+          right: 4,
+          child: GestureDetector(
+            onTap: onDelete,
+            child: Container(
+              padding: EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.close, color: Colors.white, size: 16),
+            ),
+          ),
+        ),
+        if (!isUploaded)
+          Positioned(
+            bottom: 4,
+            left: 4,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'Pending',
+                style: TextStyle(color: Colors.white, fontSize: 10),
+              ),
+            ),
+          ),
+        // Play button overlay
+        Positioned.fill(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                // Play audio - for now just show a message
+                if (isUploaded) {
+                  // For uploaded audio, we'd need to play from URL
+                  CustomSnackbar.showSnackbar(
+                    context,
+                    'Audio playback: ${audioData.toString()}',
+                    duration: Duration(seconds: 2),
+                  );
+                } else {
+                  // For local audio, we'd need to play from file
+                  CustomSnackbar.showSnackbar(
+                    context,
+                    'Audio playback: ${audioData is File ? audioData.path : audioData.toString()}',
+                    duration: Duration(seconds: 2),
+                  );
+                }
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Center(
+                child: Icon(
+                  Icons.play_circle_filled,
+                  color: Colors.white.withOpacity(0.8),
+                  size: 40,
+                ),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -1530,11 +2353,144 @@ await _loadDataInBackground();
         }
       }
 
+      // Upload audio files
+      print('📤 Starting audio upload for orderItemId: $orderItemId, audio files: ${item.audioFiles.length}');
+      for (var audioFile in item.audioFiles) {
+        try {
+          print('📤 Processing audio file: ${audioFile.path}');
+          
+          Response response;
+          
+          if (kIsWeb) {
+            // On web (including mobile browsers), handle audio file upload
+            print('📤 Web/Mobile Browser: Processing audio file upload');
+            print('📤 Audio file path: ${audioFile.path}');
+            
+            Uint8List bytes;
+            try {
+              // Try to read bytes directly (works if path is a blob URL that File can handle)
+              bytes = await audioFile.readAsBytes();
+              print('✅ Web: Successfully read ${bytes.length} bytes from audio file');
+            } catch (e) {
+              // If direct read fails, try fetching from URL (for blob URLs)
+              print('⚠️ Direct read failed, trying HTTP fetch: $e');
+              try {
+                final httpResponse = await http.get(Uri.parse(audioFile.path));
+                if (httpResponse.statusCode == 200) {
+                  bytes = httpResponse.bodyBytes;
+                  print('✅ Web: Successfully fetched ${bytes.length} bytes via HTTP');
+                } else {
+                  throw Exception('Failed to fetch audio: HTTP ${httpResponse.statusCode}');
+                }
+              } catch (httpError) {
+                print('❌ Web: Both methods failed: $httpError');
+                rethrow;
+              }
+            }
+            
+            // Get filename from path
+            String fileName = audioFile.path.split('/').last;
+            // Remove query parameters if present
+            if (fileName.contains('?')) {
+              fileName = fileName.split('?').first;
+            }
+            if (fileName.isEmpty || !fileName.contains('.')) {
+              fileName = 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+            }
+            
+            // Determine MIME type from file extension
+            String mimeType = 'audio/mp4'; // Default for m4a
+            if (fileName.toLowerCase().endsWith('.mp3')) {
+              mimeType = 'audio/mpeg';
+            } else if (fileName.toLowerCase().endsWith('.wav')) {
+              mimeType = 'audio/wav';
+            } else if (fileName.toLowerCase().endsWith('.ogg')) {
+              mimeType = 'audio/ogg';
+            } else if (fileName.toLowerCase().endsWith('.aac')) {
+              mimeType = 'audio/aac';
+            } else if (fileName.toLowerCase().endsWith('.m4a')) {
+              mimeType = 'audio/mp4'; // m4a uses mp4 MIME type
+            }
+            
+            print('📤 Web: Uploading ${bytes.length} bytes as $fileName (MIME: $mimeType)');
+            
+            // Create FormData for audio
+            final formData = FormData.fromMap({
+              'shopId': shopId.toString(),
+              'orderId': orderId.toString(),
+              'orderItemId': orderItemId.toString(),
+              'mediaType': 'audio',
+              'owner': GlobalVariables.userId?.toString() ?? '',
+              'file': MultipartFile.fromBytes(
+                bytes,
+                filename: fileName,
+                contentType: DioMediaType.parse(mimeType),
+              ),
+            });
+            
+            try {
+              print('📤 Web: Calling postFormData for audio...');
+              response = await ApiService().postFormData(
+                '${Urls.orderMedia}/upload',
+                context,
+                formData,
+              );
+              print('✅ Web: Audio upload response received: status=${response.statusCode}');
+              print('✅ Web: Response data: ${response.data}');
+            } catch (e, stackTrace) {
+              print('❌ Web: Audio upload failed with error: $e');
+              print('❌ Web: Error type: ${e.runtimeType}');
+              print('❌ Web: Stack trace: $stackTrace');
+              rethrow;
+            }
+          } else {
+            // On mobile, use File directly
+            print('📤 Mobile: Uploading audio file: ${audioFile.path}');
+            
+            response = await ApiService().uploadMediaFile(
+              '${Urls.orderMedia}/upload',
+              context,
+              file: audioFile,
+              fields: {
+                'shopId': shopId.toString(),
+                'orderId': orderId.toString(),
+                'orderItemId': orderItemId.toString(),
+                'mediaType': 'audio',
+                'owner': GlobalVariables.userId?.toString() ?? '',
+              },
+            );
+          }
+
+          if (response.data != null && response.data['data'] != null) {
+            final uploadedMedia = response.data['data'] as Map<String, dynamic>;
+            print('✅ Audio uploaded successfully: ${uploadedMedia['mediaUrl']}');
+            setState(() {
+              item.uploadedMedia.add(uploadedMedia);
+            });
+          } else {
+            print('⚠️ Audio upload response missing data: ${response.data}');
+            print('⚠️ Full response: ${response.toString()}');
+          }
+        } catch (e, stackTrace) {
+          print('❌ Error uploading audio: $e');
+          print('❌ Stack trace: $stackTrace');
+          // Continue with other audio files even if one fails
+        }
+      }
+
       // Clear local images after successful upload
       if (item.images.isNotEmpty) {
         print('✅ Cleared ${item.images.length} local image(s) after upload');
         setState(() {
           item.images.clear();
+        });
+      }
+
+      // Clear local audio files after successful upload
+      if (item.audioFiles.isNotEmpty) {
+        print('✅ Cleared ${item.audioFiles.length} local audio file(s) after upload');
+        setState(() {
+          item.audioFiles.clear();
         });
       }
     } catch (e) {
@@ -1674,8 +2630,8 @@ await _loadDataInBackground();
       "urgent": isUrgent,
       "status": _toBackendStatusKey(currentOrderStatus),
       "estimationCost": double.tryParse(totalCostController.text) ?? 0.0,
-      "advancereceived": double.tryParse(advanceAmountController.text) ?? 0.0,
-      "advanceReceivedDate": DateFormat("yyyy-MM-dd").format(DateTime.now()),
+      "advancereceived": 0.0, // Advance amount is now handled in payment section
+      "advanceReceivedDate": "", // No advance date when creating order
       "gst": isGstChecked,
       "gst_amount": isGstChecked
           ? (double.tryParse(gstController.text) ?? 0.0)
@@ -1787,9 +2743,13 @@ await _loadDataInBackground();
             }
           }
           
-          // Upload media if we have a valid orderItemId and images to upload
-          if (orderItemId != null && orderItemId > 0 && item.images.isNotEmpty) {
-            print('🚀 UPLOADING ${item.images.length} image(s) for orderItemId: $orderItemId, orderId: $savedOrderId, shopId: $shopId');
+          // Upload media if we have a valid orderItemId and media (images or audio) to upload
+          final hasImages = item.images.isNotEmpty;
+          final hasAudio = item.audioFiles.isNotEmpty;
+          if (orderItemId != null && orderItemId > 0 && (hasImages || hasAudio)) {
+            print('🚀 UPLOADING media for orderItemId: $orderItemId, orderId: $savedOrderId, shopId: $shopId');
+            print('   - Images: ${item.images.length}');
+            print('   - Audio files: ${item.audioFiles.length}');
             try {
               await _uploadOrderItemMedia(shopId, savedOrderId, orderItemId, item);
               print('✅ Upload completed for item $i');
@@ -1799,10 +2759,11 @@ await _loadDataInBackground();
               // Don't throw - continue with other items
             }
           } else {
-            if (item.images.isNotEmpty) {
-              print('❌ SKIPPING upload: orderItemId is invalid (${orderItemId}) for item $i (has ${item.images.length} images)');
+            if (hasImages || hasAudio) {
+              print('❌ SKIPPING upload: orderItemId is invalid (${orderItemId}) for item $i');
+              print('   - Has ${item.images.length} images, ${item.audioFiles.length} audio files');
             } else {
-              print('ℹ️ No images to upload for item $i');
+              print('ℹ️ No media to upload for item $i');
             }
           }
         }
@@ -1906,8 +2867,48 @@ await _loadDataInBackground();
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
+    // Show loading while checking permissions
+    if (!_permissionChecked) {
+      return Scaffold(
+        backgroundColor: ColorPalatte.white,
+        appBar: Commonheader(
+          title: widget.orderId != null
+              ? Textstring().updateOrder
+              : Textstring().createorder,
+          showBackArrow: true,
+        ),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    // Block access if no permission
+    if (!_hasAccess) {
+      return Scaffold(
+        backgroundColor: ColorPalatte.white,
+        appBar: Commonheader(
+          title: 'Access Denied',
+          showBackArrow: true,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.block, size: 64, color: Colors.red),
+              SizedBox(height: 16),
+              Text(
+                _errorMessage ?? 'You do not have permission to ${widget.orderId != null ? 'edit' : 'create'} orders',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       backgroundColor: ColorPalatte.white,
       appBar: Commonheader(
@@ -2220,16 +3221,22 @@ await _loadDataInBackground();
                               Row(
                                 children: [
                                   Expanded(
-                                      child: _buildButton("🎙 Record Audio",
-                                          onPressed: () => _recordAudio(item))),
+                                      child: _buildButton(
+                                          _isRecording && _currentRecordingItem == item
+                                              ? "⏹ Stop Recording"
+                                              : "🎙 Record Audio",
+                                          onPressed: () => _recordAudio(item),
+                                          color: _isRecording && _currentRecordingItem == item
+                                              ? Colors.red
+                                              : null)),
                                   const SizedBox(width: 10),
                                   Expanded(
                                       child: _buildButton("📷 Take Picture",
                                           onPressed: () => _showImagePickerOptions(item))),
                                 ],
                               ),
-                              // Display uploaded and local images
-                              if (item.images.isNotEmpty || item.uploadedMedia.isNotEmpty) ...[
+                              // Display uploaded and local media (images and audio)
+                              if (item.images.isNotEmpty || item.audioFiles.isNotEmpty || item.uploadedMedia.isNotEmpty) ...[
                                 const SizedBox(height: 16),
                                 Row(
                                   children: [
@@ -2278,13 +3285,16 @@ await _loadDataInBackground();
                                   const Text("Urgent"),
                                 ],
                               ),
-                              Text('Cost'),
-                              SizedBox(height: 5),
-                              _buildTextField(
-                                "Enter cost",
-                                keyboardType: TextInputType.number,
-                                controller: item.originalCost,
-                              ),
+                              // Only show cost field if user has viewPrice permission
+                              if (GlobalVariables.hasPermission('viewPrice')) ...[
+                                Text('Cost'),
+                                SizedBox(height: 5),
+                                _buildTextField(
+                                  "Enter cost",
+                                  keyboardType: TextInputType.number,
+                                  controller: item.originalCost,
+                                ),
+                              ],
                             ],
                           ),
                       ],
@@ -2292,92 +3302,100 @@ await _loadDataInBackground();
                   }),
                   SizedBox(height: 15),
                   _buildAddItemButton(),
+                  // Only show additional cost section if user has viewPrice permission
+                  if (GlobalVariables.hasPermission('viewPrice')) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("Additional Cost",
+                            style: Createorderstyle.selecteCustomer),
+                        _buildIconButtonCost(Icons.add_circle, () {
+                          setState(() {
+                            final newCost = {
+                              'description': TextEditingController(),
+                              'amount': TextEditingController(),
+                            };
+                            // Add listener to the new cost controller
+                            newCost['amount']?.addListener(_updateTotalCost);
+                            additionalCostControllers.add(newCost);
+                          });
+                        }),
+                      ],
+                    ),
+                    _buildAdditionalCostFields(),
+                  ],
                   const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text("Additional Cost",
-                          style: Createorderstyle.selecteCustomer),
-                      _buildIconButtonCost(Icons.add_circle, () {
-                        setState(() {
-                          final newCost = {
-                            'description': TextEditingController(),
-                            'amount': TextEditingController(),
-                          };
-                          // Add listener to the new cost controller
-                          newCost['amount']?.addListener(_updateTotalCost);
-                          additionalCostControllers.add(newCost);
-                        });
-                      }),
-                    ],
-                  ),
-                  _buildAdditionalCostFields(),
-                  const SizedBox(height: 12),
-                  Column(
-                    children: [
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: isCourierChecked,
-                            activeColor: Colors.brown,
-                            onChanged: (value) {
-                              setState(() {
-                                isCourierChecked = value!;
-                              });
-                            },
-                          ),
-                          const Text("Courier"),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              controller: courierController,
-                              enabled: isCourierChecked,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                hintText: "Enter Courier amount",
-                                contentPadding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                  // Only show courier field if user has viewPrice permission
+                  if (GlobalVariables.hasPermission('viewPrice'))
+                    Column(
+                      children: [
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: isCourierChecked,
+                              activeColor: Colors.brown,
+                              onChanged: (value) {
+                                setState(() {
+                                  isCourierChecked = value!;
+                                });
+                              },
+                            ),
+                            const Text("Courier"),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: courierController,
+                                enabled: isCourierChecked,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  hintText: "Enter Courier amount",
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(horizontal: 12),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: isGstChecked,
-                            activeColor: Colors.brown,
-                            onChanged: (value) {
-                              setState(() {
-                                isGstChecked = value!;
-                                // Recalculate total when GST checkbox changes
-                                _updateTotalCost();
-                              });
-                            },
-                          ),
-                          const Text("GST"),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              controller: gstController,
-                              enabled: isGstChecked,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                hintText: "Enter GST number",
-                                contentPadding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                          ],
+                        ),
+                      // Only show GST field if user has viewPrice permission
+                      if (GlobalVariables.hasPermission('viewPrice')) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: isGstChecked,
+                              activeColor: Colors.brown,
+                              onChanged: (value) {
+                                setState(() {
+                                  isGstChecked = value!;
+                                  // Recalculate total when GST checkbox changes
+                                  _updateTotalCost();
+                                });
+                              },
+                            ),
+                            const Text("GST"),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: gstController,
+                                enabled: isGstChecked,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  hintText: "Enter GST number",
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(horizontal: 12),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 5),
@@ -2390,57 +3408,52 @@ await _loadDataInBackground();
                               fontSize: 16, fontWeight: FontWeight.bold)),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          "Discount",
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w500),
-                        ),
-                        SizedBox(
-                          width: 100, // Set to desired width
-                          child: _buildTextField(
-                            "INR",
-                            controller: discountController,
-                            keyboardType: TextInputType.number,
+                  // Only show discount, total cost, and advance if user has viewPrice permission
+                  if (GlobalVariables.hasPermission('viewPrice')) ...[
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            "Discount",
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w500),
                           ),
-                        ),
-                      ],
+                          SizedBox(
+                            width: 100, // Set to desired width
+                            child: _buildTextField(
+                              "INR",
+                              controller: discountController,
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 5),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          "Total Cost",
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w500),
-                        ),
-                        Text(
-                          widget.orderId != null
-                              ? "₹ ${totalCostController.text}"
-                              : "₹ ${calculateTotalCosts.toDouble().toString()}",
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ],
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            "Total Cost",
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w500),
+                          ),
+                          Text(
+                            widget.orderId != null
+                                ? "₹ ${totalCostController.text}"
+                                : "₹ ${calculateTotalCosts.toDouble().toString()}",
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text('Advance'),
-                  SizedBox(height: 5),
-                  _buildTextField(
-                    "Enter advance amount",
-                    controller: advanceAmountController,
-                    keyboardType: TextInputType.number,
-                  ),
+                  ],
                   const SizedBox(height: 12),
                   _buildButton(
                     widget.orderId != null
@@ -2795,30 +3808,31 @@ await _loadDataInBackground();
                 ),
               ),
               const SizedBox(height: 12),
-              // Quick Status Update Buttons
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: orderStatuses.map((status) {
-                  final isCurrent = status['key'] == currentOrderStatus;
-                  return ElevatedButton(
-                    onPressed: isCurrent ? null : () => _updateOrderStatus(status['key']),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isCurrent ? status['color'] : Colors.white,
-                      foregroundColor: isCurrent ? Colors.white : status['color'],
-                      side: BorderSide(color: status['color']),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+              // Quick Status Update Buttons - only show if user has manageOrderStatus permission
+              if (GlobalVariables.hasPermission('manageOrderStatus'))
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: orderStatuses.map((status) {
+                    final isCurrent = status['key'] == currentOrderStatus;
+                    return ElevatedButton(
+                      onPressed: isCurrent ? null : () => _updateOrderStatus(status['key']),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isCurrent ? status['color'] : Colors.white,
+                        foregroundColor: isCurrent ? Colors.white : status['color'],
+                        side: BorderSide(color: status['color']),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      status['label'],
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                    ),
-                  );
-                }).toList(),
-              ),
+                      child: Text(
+                        status['label'],
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    );
+                  }).toList(),
+                ),
             ],
           ),
         ),
@@ -2929,8 +3943,8 @@ await _loadDataInBackground();
           "urgent": isUrgent,
           "status": _toBackendStatusKey(status),
           "estimationCost": double.tryParse(totalCostController.text) ?? 0.0,
-          "advancereceived": double.tryParse(advanceAmountController.text) ?? 0.0,
-          "advanceReceivedDate": DateFormat("yyyy-MM-dd").format(DateTime.now()),
+          "advancereceived": 0.0, // Advance amount is now handled in payment section
+          "advanceReceivedDate": "", // No advance date when updating order status
           "gst": isGstChecked,
           "gst_amount": isGstChecked ? (double.tryParse(gstController.text) ?? 0.0) : 0.0,
           "Courier": isCourierChecked,
@@ -3289,12 +4303,12 @@ await _loadDataInBackground();
     );
   }
 
-  Widget _buildButton(String text, {VoidCallback? onPressed}) {
+  Widget _buildButton(String text, {VoidCallback? onPressed, Color? color}) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: ColorPalatte.primary,
+          backgroundColor: color ?? ColorPalatte.primary,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -3319,13 +4333,14 @@ await _loadDataInBackground();
                 child: _buildTextField("Item description",
                     controller: item['description']),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: _buildTextField("Amount",
-                    controller: item['amount'],
-                    keyboardType: TextInputType.number),
-              ),
+              // Only show amount field if user has viewPrice permission
+              if (GlobalVariables.hasPermission('viewPrice'))
+                Expanded(
+                  flex: 2,
+                  child: _buildTextField("Amount",
+                      controller: item['amount'],
+                      keyboardType: TextInputType.number),
+                ),
               const SizedBox(width: 10),
               if (index != 0)
                 IconButton(
@@ -3973,7 +4988,7 @@ class _DressTypeDialogState<T> extends State<_DressTypeDialog<T>> {
             const SizedBox(height: 10),
             Expanded(
               child: filteredItems.isEmpty && !_isLoading
-                  ? const Center(child: Text('No dress types found'))
+                  ? Center(child: Text('No dress types found'))
                   : ListView.builder(
                       controller: _scrollController,
                       itemCount: filteredItems.length +

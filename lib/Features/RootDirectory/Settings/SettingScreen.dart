@@ -6,6 +6,8 @@ import 'package:tailorapp/Core/Constants/TextString.dart';
 import 'package:tailorapp/Routes/App_route.dart';
 import '../../../Core/Widgets/CommonHeader.dart';
 import '../../../Core/Widgets/CustomConfirmationDialog.dart';
+import '../../../GlobalVariables.dart';
+import '../../../Core/Services/PermissionService.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -43,7 +45,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Check if user has administration permission
+    final hasAdminPermission = GlobalVariables.hasPermission('administration');
+    
+    // Filter settings options based on permission
+    final visibleSettingsOptions = hasAdminPermission 
+        ? _settingsOptions 
+        : <Map<String, dynamic>>[]; // Show no settings options if no admin permission
+    
     return Scaffold(
       appBar: Commonheader(
         title: Textstring().settings,
@@ -53,19 +68,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: ColorPalatte.white,
       body: Padding(
         padding: const EdgeInsets.symmetric(vertical: 5.0, horizontal: 10.0),
-        child: ListView.builder(
-          itemCount: _settingsOptions.length + 1, // Extra item for Logout
-          itemBuilder: (context, index) {
-            if (index == _settingsOptions.length) {
-              return _buildLogoutTile(); // Separate logout design
-            }
-            final item = _settingsOptions[index];
-            return _buildSettingsTile(
-              title: item['title'],
-              icon: item['icon'],
-              onTap: () => Navigator.of(context).pushNamed(item['route']),
-            );
-          },
+        child: Column(
+          children: [
+            // Settings options (only if user has admin permission)
+            if (hasAdminPermission)
+              Expanded(
+                child: ListView.builder(
+                  itemCount: visibleSettingsOptions.length,
+                  itemBuilder: (context, index) {
+                    final item = visibleSettingsOptions[index];
+                    return _buildSettingsTile(
+                      title: item['title'],
+                      icon: item['icon'],
+                      onTap: () => Navigator.of(context).pushNamed(item['route']),
+                    );
+                  },
+                ),
+              )
+            else
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.settings_outlined,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Settings',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'You do not have permission to access settings',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            // Logout button - always visible at the bottom for all roles
+            _buildLogoutTile(),
+            const SizedBox(height: 20),
+          ],
         ),
       ),
     );
@@ -120,6 +179,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         },
         onConfirm: () async {
           SharedPreferences pref = await SharedPreferences.getInstance();
+          
+          // Clear permissions before clearing all preferences
+          await PermissionService.clearPermissions();
           await pref.clear();
 
           // Use pushNamedAndRemoveUntil if using named routes
@@ -134,41 +196,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildLogoutTile() {
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: () {
-            _showLogoutDialog(context);
-          },
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(vertical: 18.0, horizontal: 16.0),
-            child: Row(
-              children: [
-                const Icon(Icons.logout, color: Colors.red),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    "Logout",
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontFamily: Fonts.Regular,
-                      color: Colors.red,
-                    ),
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_ios,
-                    size: 18, color: Colors.grey),
-              ],
-            ),
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 10.0),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withOpacity(0.3), width: 1),
+      ),
+      child: ListTile(
+        onTap: () {
+          _showLogoutDialog(context);
+        },
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.red.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.logout, color: Colors.red, size: 24),
+        ),
+        title: const Text(
+          "Logout",
+          style: TextStyle(
+            fontSize: 18,
+            fontFamily: Fonts.Regular,
+            fontWeight: FontWeight.w600,
+            color: Colors.red,
           ),
         ),
-        Divider(
-          thickness: 1, // Line thickness
-          color: ColorPalatte.borderGray, // Light gray color
-          height: 0, // No extra spacing
-        ),
-      ],
+        trailing: const Icon(Icons.arrow_forward_ios, size: 18, color: Colors.red),
+      ),
     );
   }
 }

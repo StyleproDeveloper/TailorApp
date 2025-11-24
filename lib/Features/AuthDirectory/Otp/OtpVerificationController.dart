@@ -8,6 +8,7 @@ import 'package:tailorapp/Routes/App_route.dart';
 import 'package:tailorapp/Core/Constants/TextString.dart';
 
 import '../../../GlobalVariables.dart';
+import 'package:tailorapp/Core/Services/PermissionService.dart';
 
 class OtpVerificationController {
   final List<TextEditingController> controllers =
@@ -66,17 +67,107 @@ class OtpVerificationController {
         await pref.setInt(Textstring().userId, response.data['user']['userId']);
         await pref.setInt(
             Textstring().branchId, response.data['user']['branchId']);
+        
+        // Save role permissions
+        final userData = response.data['user'];
+        print('🔍 User data keys: ${userData.keys.toList()}');
+        print('🔍 roleId: ${userData['roleId']}');
+        print('🔍 roleName: ${userData['roleName']}');
+        print('🔍 rolePermissions: ${userData['rolePermissions']}');
+        print('🔍 Full userData: $userData');
+        
+        // ALWAYS save and load permissions, even if empty
+        print('🔍🔍🔍 LOGIN: Starting permission save process');
+        print('🔍🔍🔍 userData keys: ${userData.keys.toList()}');
+        print('🔍🔍🔍 roleId: ${userData['roleId']}');
+        print('🔍🔍🔍 rolePermissions: ${userData['rolePermissions']}');
+        
+        // CRITICAL: Always save permissions, even if roleId is null (will save empty map)
+        final rolePermissions = userData['rolePermissions'] ?? {};
+        final roleId = userData['roleId'];
+        final roleName = userData['roleName'];
+        
+        print('🔍🔍🔍 LOGIN: Saving permissions');
+        print('🔍🔍🔍 roleId: $roleId');
+        print('🔍🔍🔍 roleName: $roleName');
+        print('🔍🔍🔍 rolePermissions type: ${rolePermissions.runtimeType}');
+        print('🔍🔍🔍 rolePermissions: $rolePermissions');
+        print('🔍🔍🔍 rolePermissions keys: ${rolePermissions.keys.toList()}');
+        
+        // Convert to Map<String, dynamic> to ensure proper type
+        final permissionsMap = <String, dynamic>{};
+        if (rolePermissions is Map) {
+          rolePermissions.forEach((key, value) {
+            permissionsMap[key.toString()] = value;
+          });
+        }
+        
+        print('🔍🔍🔍 Converted permissions map: $permissionsMap');
+        print('🔍🔍🔍 Permissions map count: ${permissionsMap.length}');
+        
+        // CRITICAL: Always save, even if empty - this helps us debug
+        await PermissionService.savePermissions(
+          roleId: roleId ?? 0,
+          roleName: roleName,
+          permissions: permissionsMap,
+        );
+        
+        if (permissionsMap.isEmpty) {
+          print('⚠️⚠️⚠️ WARNING: Permissions map is EMPTY!');
+          print('⚠️⚠️⚠️ This means role-based access will NOT work!');
+          print('⚠️⚠️⚠️ Check backend logs to see if role was found in database');
+        } else {
+          print('✅✅✅ Permissions saved to SharedPreferences');
+        }
+        
+        // Verify permissions were saved - CRITICAL CHECK
+        final savedPermissions = await PermissionService.loadPermissions();
+        print('✅✅✅ Verified saved permissions: $savedPermissions');
+        print('✅✅✅ Saved permissions count: ${savedPermissions.length}');
+        if (savedPermissions.isNotEmpty) {
+          print('✅✅✅ Sample permissions:');
+          savedPermissions.forEach((key, value) {
+            print('  - $key: $value');
+          });
+        } else {
+          print('⚠️⚠️⚠️ WARNING: No permissions were saved!');
+        }
+        
+        // Load into GlobalVariables immediately - CRITICAL
         await GlobalVariables.loadShopId();
+        
+        // Debug: Print loaded permissions
+        print('🔍🔍🔍 GlobalVariables permissions after load: ${GlobalVariables.permissions}');
+        print('🔍🔍🔍 GlobalVariables permissions count: ${GlobalVariables.permissions.length}');
+        print('🔍🔍🔍 GlobalVariables roleId: ${GlobalVariables.roleId}');
+        print('🔍🔍🔍 GlobalVariables roleName: ${GlobalVariables.roleName}');
+        
+        // CRITICAL: Verify permissions are actually in GlobalVariables
+        if (GlobalVariables.permissions.isEmpty) {
+          print('❌❌❌ ERROR: Permissions are empty in GlobalVariables after load!');
+          print('❌❌❌ This means role-based access will NOT work!');
+        } else {
+          print('✅✅✅ SUCCESS: Permissions loaded into GlobalVariables');
+          print('✅✅✅ Role-based access should work correctly');
+        }
 
         // Debug: Print full response to check subscription status
         print('🔍 Full login response: ${response.data}');
         print('🔍 Subscription Status: ${response.data['subscriptionStatus']}');
 
+        // Save subscription data to GlobalVariables
+        final subscriptionStatus = response.data['subscriptionStatus'];
+        if (subscriptionStatus != null) {
+          await GlobalVariables.updateSubscriptionData(
+            subscriptionStatus['subscriptionType']?.toString(),
+            subscriptionStatus['trialEndDate']?.toString(),
+          );
+        }
+
         CustomSnackbar.showSnackbar(context, response.data['message'],
             duration: Duration(seconds: 1));
 
         // Check if trial has expired and subscription is required
-        final subscriptionStatus = response.data['subscriptionStatus'];
         print('🔍 Subscription Status object: $subscriptionStatus');
         
         if (subscriptionStatus != null) {

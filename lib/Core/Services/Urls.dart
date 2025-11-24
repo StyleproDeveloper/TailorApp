@@ -1,38 +1,12 @@
-import 'dart:html' as html;
-
 class Urls {
-  // Backend URL - automatically detects environment
-  static String get baseUrl {
-    // Check if running in browser
-    try {
-      final hostname = html.window.location.hostname;
-      final protocol = html.window.location.protocol;
-      
-      print('🌐 Detected hostname: $hostname');
-      print('🌐 Detected protocol: $protocol');
-      
-      // If running on localhost or 127.0.0.1, use local backend
-      if (hostname == 'localhost' || hostname == '127.0.0.1') {
-        final url = 'http://localhost:5500';
-        print('✅ Using LOCAL backend: $url');
-        return url;
-      }
-      
-      // Otherwise, use production backend (AWS CloudFront with HTTPS)
-      final url = 'https://d3mi5vcvr32isw.cloudfront.net';
-      print('✅ Using PRODUCTION backend: $url');
-      return url;
-    } catch (e) {
-      // Fallback: if window is not available, default to production
-      print('⚠️ Error detecting hostname, using production backend');
-      return 'https://d3mi5vcvr32isw.cloudfront.net';
-    }
-  }
+  // HARDCODED LOCAL BACKEND - NO EXCEPTIONS
+  static const String baseUrl = 'http://localhost:5500';
   
-  // Alternative Vercel URLs (if main URL has issues)
-  // static const String baseUrl = 'https://backend-m5vayhncz-stylepros-projects.vercel.app';
-  // static const String baseUrl = 'https://backend-oh2r1ys5u-stylepros-projects.vercel.app';
-  // static const String baseUrl = 'https://backend-ohnwrg4uj-stylepros-projects.vercel.app';
+  // Log on first access
+  static String get baseUrlGetter {
+    print('🚨🚨🚨 URLS.BASEURL = http://localhost:5500 🚨🚨🚨');
+    return baseUrl;
+  }
   
   static const String shopName = '/shops';
   static const String customer = '/customer';
@@ -54,4 +28,5 @@ class Urls {
   static const String shopSetupComplete = '/shops/setup-complete';
   static const String orderMedia = '/order-media';
   static const String payments = '/payments';
+  static const String gallery = '/gallery';
 }

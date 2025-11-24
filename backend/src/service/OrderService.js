@@ -4,11 +4,13 @@ const OrderItemMeasurement = require('../models/OrderItemMeasurementModel');
 const OrderItemPattern = require('../models/OrderItemPatternModel');
 const OrderItemAdditionalCost = require('../models/OrderItemAdditionalCostModel');
 const Customer = require('../models/CustomerModel');
+const ShopInfo = require('../models/ShopModel');
 const { getNextSequenceValue } = require('./sequenceService');
 const { isShopExists } = require('../utils/Helper');
 const { default: mongoose } = require('mongoose');
 const { buildQueryOptions } = require('../utils/buildQuery');
 const { paginate } = require('../utils/commonPagination');
+const { createShopBucket, bucketExists, uploadToS3 } = require('../utils/s3Service');
 const logger = require('../utils/logger');
 
 //Order Table Based on Shop
@@ -225,6 +227,67 @@ const createOrderService = async (orderData, shop_id) => {
     // Commit transaction
     await session.commitTransaction();
     session.endSession();
+
+    // Ensure S3 bucket exists and create order folder structure
+    try {
+      const shop = await ShopInfo.findOne({ shop_id: Number(shop_id) });
+      if (shop) {
+        let bucketName = shop.s3BucketName;
+        
+        // Create bucket if it doesn't exist
+        if (!bucketName || !(await bucketExists(bucketName))) {
+          logger.info('S3 bucket does not exist for shop, creating it...', { shop_id, shopName: shop.shopName });
+          bucketName = await createShopBucket(shop.shopName || shop.yourName, shop_id);
+          
+          // Update shop with bucket name
+          shop.s3BucketName = bucketName;
+          await shop.save();
+          logger.info('S3 bucket created and saved to shop', { shop_id, bucketName });
+        }
+        
+        // Create a placeholder file in the order folder to make it visible in S3
+        // This ensures the folder structure exists even before media is uploaded
+        if (bucketName && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+          try {
+            const orderFolderKey = `order_${orderId}/.folder`;
+            const placeholderContent = Buffer.from(`Order ${orderId} created on ${new Date().toISOString()}`);
+            
+            await uploadToS3(
+              bucketName,
+              orderFolderKey,
+              placeholderContent,
+              'text/plain',
+              {
+                shopId: shop_id.toString(),
+                orderId: orderId.toString(),
+                type: 'folder-marker',
+              }
+            );
+            
+            logger.info('Order folder structure created in S3', {
+              shop_id,
+              orderId,
+              bucketName,
+              folderKey: orderFolderKey,
+            });
+          } catch (s3Error) {
+            // Log error but don't fail order creation if S3 folder creation fails
+            logger.warn('Failed to create order folder in S3 (non-critical)', {
+              shop_id,
+              orderId,
+              error: s3Error.message,
+            });
+          }
+        }
+      }
+    } catch (s3SetupError) {
+      // Log error but don't fail order creation if S3 setup fails
+      logger.warn('S3 bucket setup failed (non-critical)', {
+        shop_id,
+        orderId,
+        error: s3SetupError.message,
+      });
+    }
 
     // Fetch the created order items to return with orderItemIds
     const createdOrderItems = await OrderItemModel.find({ orderId }).select('orderItemId dressTypeId').lean();

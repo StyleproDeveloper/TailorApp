@@ -1,5 +1,13 @@
+import 'dart:typed_data';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:audioplayers/audioplayers.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:http/http.dart' as http;
 import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
 import 'package:tailorapp/Core/Constants/TextString.dart';
 import 'package:tailorapp/Core/Services/Services.dart';
@@ -32,6 +40,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   @override
   void initState() {
     super.initState();
+    // Load permissions first
+    GlobalVariables.loadShopId();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args != null) {
@@ -90,32 +100,47 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       final items = order?['items'] as List<dynamic>? ?? [];
       Map<int, List<Map<String, dynamic>>> mediaMap = {};
 
+      print('🔍 Fetching media for ${items.length} order items');
+
       // Fetch media for each order item
       for (var item in items) {
         final orderItemId = item['orderItemId'];
         if (orderItemId != null) {
           try {
             final String requestUrl = "${Urls.orderMedia}/$shopId/$orderId/$orderItemId";
+            print('🔍 Fetching media from: $requestUrl');
             final response = await ApiService().get(requestUrl, context);
             
             if (response.data != null && response.data['data'] != null) {
               final mediaList = response.data['data'] as List<dynamic>;
-              mediaMap[orderItemId] = mediaList.cast<Map<String, dynamic>>();
+              final mediaListMap = mediaList.cast<Map<String, dynamic>>();
+              mediaMap[orderItemId] = mediaListMap;
+              
+              // Debug: Log what media was found
+              final images = mediaListMap.where((m) => m['mediaType'] == 'image').toList();
+              final audioFiles = mediaListMap.where((m) => m['mediaType'] == 'audio').toList();
+              print('✅ OrderItem $orderItemId: ${images.length} images, ${audioFiles.length} audio files');
+              if (audioFiles.isNotEmpty) {
+                print('   🎵 Audio files: ${audioFiles.map((a) => a['fileName'] ?? 'unknown').join(', ')}');
+              }
+            } else {
+              print('⚠️ No media data returned for orderItemId $orderItemId');
             }
           } catch (e) {
-            print('Error fetching media for orderItemId $orderItemId: $e');
+            print('❌ Error fetching media for orderItemId $orderItemId: $e');
             // Continue with other items even if one fails
           }
         }
       }
 
+      print('🔍 Total media fetched: ${mediaMap.length} order items have media');
       if (mounted) {
         setState(() {
           orderItemMedia = mediaMap;
         });
       }
     } catch (e) {
-      print('Error fetching order item media: $e');
+      print('❌ Error fetching order item media: $e');
     }
   }
 
@@ -207,7 +232,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: _generatePDF,
+                  onTap: () => _showPrintMenu(context),
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
                     padding: const EdgeInsets.all(8),
@@ -242,27 +267,29 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           ),
         ),
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16.0),
-            child: TextButton.icon(
-              onPressed: () {
-                Navigator.pushNamed(
-                  context,
-                  AppRoutes.createOrder,
-                  arguments: orderId,
-                );
-              },
-              icon: const Icon(
-                Icons.edit,
-                color: ColorPalatte.primary,
-                size: 25,
-              ),
-              label: Text(
-                Textstring().edit,
-                style: Orderdetailstyles.editBtn,
+          // Only show edit button if user has editOrder permission
+          if (GlobalVariables.hasPermission('editOrder'))
+            Container(
+              margin: const EdgeInsets.only(right: 16.0),
+              child: TextButton.icon(
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.createOrder,
+                    arguments: orderId,
+                  );
+                },
+                icon: const Icon(
+                  Icons.edit,
+                  color: ColorPalatte.primary,
+                  size: 25,
+                ),
+                label: Text(
+                  Textstring().edit,
+                  style: Orderdetailstyles.editBtn,
+                ),
               ),
             ),
-          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -354,9 +381,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     final formattedDate = DateFormat('MMM dd, yyyy').format(createdAt);
     final status = order?['status'] ?? 'In Progress';
     final isUrgent = order?['urgent'] == true;
-    final advanceReceivedDate = order?['advanceReceivedDate'] != null
-        ? DateFormat('MMM dd, yyyy').format(DateTime.parse(
-            order?['advanceReceivedDate'] ?? DateTime.now().toString()))
+    final advanceReceivedDateStr = order?['advanceReceivedDate']?.toString() ?? '';
+    final advanceReceivedDate = advanceReceivedDateStr.trim().isNotEmpty
+        ? DateFormat('MMM dd, yyyy').format(DateTime.parse(advanceReceivedDateStr))
         : 'Not Received';
 
     return Column(
@@ -447,6 +474,17 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         final orderItemId = item['orderItemId'];
         final itemMedia = orderItemId != null ? orderItemMedia[orderItemId] : null;
         
+        // Debug logging
+        if (orderItemId != null) {
+          print('🔍 Building item #${index + 1} with orderItemId: $orderItemId');
+          print('   - itemMedia: ${itemMedia != null ? itemMedia.length : 'null'} items');
+          if (itemMedia != null && itemMedia.isNotEmpty) {
+            final images = itemMedia.where((m) => m['mediaType'] == 'image').toList();
+            final audioFiles = itemMedia.where((m) => m['mediaType'] == 'audio').toList();
+            print('   - Images: ${images.length}, Audio: ${audioFiles.length}');
+          }
+        }
+        
         return Column(
           children: [
             _buildItemCard(
@@ -490,6 +528,11 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   // Build additional cost items display
   List<Widget> _buildAdditionalCostItems() {
+    // If user doesn't have viewPrice permission, don't show additional costs
+    if (!GlobalVariables.hasPermission('viewPrice')) {
+      return [];
+    }
+    
     final additionalCosts = order?['additionalCosts'] as List<dynamic>? ?? [];
     
     if (additionalCosts.isEmpty) {
@@ -536,14 +579,16 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                     ],
                   ),
                 ),
-                Text(
-                  '₹${NumberFormat('#,##0').format(double.tryParse(amount) ?? 0)}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
+                // Only show amount if user has viewPrice permission
+                if (GlobalVariables.hasPermission('viewPrice'))
+                  Text(
+                    '₹${NumberFormat('#,##0').format(double.tryParse(amount) ?? 0)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -580,10 +625,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            Text(
-              '₹$cost',
-              style: Orderdetailstyles.subTitles,
-            ),
+            // Only show cost if user has viewPrice permission
+            if (GlobalVariables.hasPermission('viewPrice'))
+              Text(
+                '₹$cost',
+                style: Orderdetailstyles.subTitles,
+              ),
           ],
         ),
         children: [
@@ -711,6 +758,11 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   Widget _buildCostSummary() {
+    // If user doesn't have viewPrice permission, don't show cost summary
+    if (!GlobalVariables.hasPermission('viewPrice')) {
+      return const SizedBox.shrink();
+    }
+    
     // Calculate subtotal by summing all item amounts
     final items = order?['items'] as List<dynamic>? ?? [];
     double itemsTotal = 0.0;
@@ -793,36 +845,39 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         _buildSummaryRow('Total Paid', paidAmount.toStringAsFixed(0), isBold: true),
         _buildSummaryRow('Balance Due', balance,
             isBold: true, isNegative: double.parse(balance) > 0),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () => _showAddPaymentDialog(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: ColorPalatte.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+        // Only show payment buttons if user has viewPrice permission
+        if (GlobalVariables.hasPermission('viewPrice')) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _showAddPaymentDialog(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: ColorPalatte.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.payment, size: 20),
+                  label: const Text('Add Payment'),
                 ),
-                icon: const Icon(Icons.payment, size: 20),
-                label: const Text('Add Payment'),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => _showPaymentHistoryDialog(),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: ColorPalatte.primary,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: BorderSide(color: ColorPalatte.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showPaymentHistoryDialog(),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: ColorPalatte.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(color: ColorPalatte.primary),
+                  ),
+                  icon: const Icon(Icons.history, size: 20),
+                  label: const Text('Payment History'),
                 ),
-                icon: const Icon(Icons.history, size: 20),
-                label: const Text('Payment History'),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
         const Divider(),
       ],
     );
@@ -1029,6 +1084,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     // Separate images and audio
     final images = mediaList.where((m) => m['mediaType'] == 'image').toList();
     final audioFiles = mediaList.where((m) => m['mediaType'] == 'audio').toList();
+    
+    // Debug logging
+    print('🔍 _buildItemMedia called with ${mediaList.length} total media items');
+    print('   - Images: ${images.length}');
+    print('   - Audio: ${audioFiles.length}');
+    if (audioFiles.isNotEmpty) {
+      print('   - Audio files: ${audioFiles.map((a) => a['fileName'] ?? 'unknown').join(', ')}');
+    }
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1117,59 +1180,120 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           ],
           if (audioFiles.isNotEmpty) ...[
             const SizedBox(height: 12),
-            ...audioFiles.map((audio) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.audiotrack, color: ColorPalatte.primary),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            audio['fileName']?.toString() ?? 'Audio File',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (audio['fileSize'] != null)
-                            Text(
-                              '${(audio['fileSize'] / 1024).toStringAsFixed(1)} KB',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                        ],
+            Text(
+              'Audio Recordings:',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: audioFiles.length,
+              itemBuilder: (context, index) {
+                final audio = audioFiles[index];
+                final mediaUrl = audio['mediaUrl']?.toString() ?? '';
+                final fileName = audio['fileName']?.toString() ?? 'Audio Recording';
+                final fileSize = audio['fileSize'] != null ? (audio['fileSize'] / 1024).toStringAsFixed(1) : '0';
+                final duration = audio['duration'] != null ? (audio['duration'] as num).toDouble() : 0.0;
+                
+                // Check if URL is already a full URL (S3 URLs start with https://)
+                final audioUrl = mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')
+                    ? mediaUrl
+                    : '${Urls.baseUrl}$mediaUrl';
+                
+                // Format duration
+                String durationText = '';
+                if (duration > 0) {
+                  final minutes = (duration / 60).floor();
+                  final seconds = (duration % 60).floor();
+                  durationText = '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+                }
+                
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                    color: Colors.white,
+                  ),
+                  child: ListTile(
+                    leading: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.audiotrack,
+                        color: Colors.blue.shade700,
+                        size: 24,
                       ),
                     ),
-                    IconButton(
-                      icon: Icon(Icons.play_circle_outline, color: ColorPalatte.primary),
-                      onPressed: () {
-                        // TODO: Play audio
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Audio playback coming soon')),
-                        );
-                      },
+                    title: Text(
+                      fileName,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade800,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                ),
-              );
-            }).toList(),
+                    subtitle: Row(
+                      children: [
+                        if (durationText.isNotEmpty) ...[
+                          Icon(Icons.timer, size: 14, color: Colors.grey.shade600),
+                          const SizedBox(width: 4),
+                          Text(
+                            durationText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                        Icon(Icons.storage, size: 14, color: Colors.grey.shade600),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$fileSize KB',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: IconButton(
+                      icon: Icon(
+                        Icons.play_circle_filled,
+                        color: ColorPalatte.primary,
+                        size: 36,
+                      ),
+                      onPressed: () => _playAudio(audioUrl),
+                      tooltip: 'Play audio',
+                    ),
+                    onTap: () => _playAudio(audioUrl),
+                  ),
+                );
+              },
+            ),
           ],
         ],
       ),
+    );
+  }
+
+  // Play audio file
+  void _playAudio(String audioUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => _AudioPlayerDialog(audioUrl: audioUrl),
     );
   }
 
@@ -1519,6 +1643,16 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   // Show Edit Payment Dialog
   void _showEditPaymentDialog(Map<String, dynamic> payment) {
+    // Check if user has viewPrice permission
+    if (!GlobalVariables.hasPermission('viewPrice')) {
+      CustomSnackbar.showSnackbar(
+        context,
+        'You do not have permission to view or edit payments',
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+    
     final amountController = TextEditingController(
       text: (payment['paidAmount'] ?? 0).toString(),
     );
@@ -1709,6 +1843,16 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   // Show Payment History Dialog
   void _showPaymentHistoryDialog() {
+    // Check if user has viewPrice permission
+    if (!GlobalVariables.hasPermission('viewPrice')) {
+      CustomSnackbar.showSnackbar(
+        context,
+        'You do not have permission to view payment history',
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+    
     int? shopId = GlobalVariables.shopIdGet;
     if (shopId == null || orderId == null) return;
 
@@ -1767,27 +1911,30 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       ...payments.map((payment) => _buildPaymentHistoryRow(
                             payment, // Pass full payment object
                           )),
-                    const Divider(),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Total Paid:',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          Text(
-                            '₹${((order?['paidAmount'] ?? 0).toDouble()).toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: Colors.green,
+                    // Only show total paid if user has viewPrice permission
+                    if (GlobalVariables.hasPermission('viewPrice')) ...[
+                      const Divider(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Total Paid:',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             ),
-                          ),
-                        ],
+                            Text(
+                              '₹${((order?['paidAmount'] ?? 0).toDouble()).toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -1850,15 +1997,17 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               ),
               Row(
                 children: [
-                  Text(
-                    '₹${amount.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
+                  // Only show amount if user has viewPrice permission
+                  if (GlobalVariables.hasPermission('viewPrice'))
+                    Text(
+                      '₹${amount.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
                     ),
-                  ),
-                  // Show edit icon only for non-advance payments (advance is stored in order, not as separate payment)
-                  if (!isAdvance && paymentId != null) ...[
+                  // Show edit icon only for non-advance payments and if user has viewPrice permission
+                  if (!isAdvance && paymentId != null && GlobalVariables.hasPermission('viewPrice')) ...[
                     const SizedBox(width: 8),
                     IconButton(
                       icon: Icon(Icons.edit, size: 18, color: ColorPalatte.primary),
@@ -1917,5 +2066,925 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       default:
         return 'Payment';
     }
+  }
+
+  // Show print menu
+  void _showPrintMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.receipt, color: ColorPalatte.primary),
+                title: Text('Print Invoice'),
+                subtitle: Text('Print complete order invoice with payments'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _generatePDF();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.description, color: ColorPalatte.primary),
+                title: Text('Print Order Details'),
+                subtitle: Text('Print customer, dress type, pattern & measurements'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _printOrderDetails();
+                },
+              ),
+              SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Print order details (customer, dress type, pattern, measurements)
+  Future<void> _printOrderDetails() async {
+    try {
+      if (order == null) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Order data not available',
+          duration: Duration(seconds: 2),
+        );
+        return;
+      }
+
+      showLoader(context);
+
+      // Fetch all images first
+      final items = order!['items'] as List<dynamic>? ?? [];
+      Map<int, List<pw.MemoryImage>> itemImages = {};
+      
+      for (var item in items) {
+        final orderItemId = item['orderItemId'];
+        if (orderItemId != null) {
+          final media = orderItemMedia[orderItemId];
+          if (media != null) {
+            final images = media.where((m) => m['mediaType'] == 'image').toList();
+            List<pw.MemoryImage> pdfImages = [];
+            
+            for (var imageMedia in images) {
+              try {
+                final mediaUrl = imageMedia['mediaUrl']?.toString() ?? '';
+                if (mediaUrl.isNotEmpty) {
+                  final imageUrl = mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')
+                      ? mediaUrl
+                      : '${Urls.baseUrl}$mediaUrl';
+                  
+                  final response = await http.get(Uri.parse(imageUrl));
+                  if (response.statusCode == 200) {
+                    pdfImages.add(pw.MemoryImage(response.bodyBytes));
+                  }
+                }
+              } catch (e) {
+                print('Error loading image for PDF: $e');
+              }
+            }
+            
+            if (pdfImages.isNotEmpty) {
+              itemImages[orderItemId] = pdfImages;
+            }
+          }
+        }
+      }
+
+      hideLoader(context);
+
+      // Validate we have items to print
+      if (items.isEmpty) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'No order items to print',
+          duration: Duration(seconds: 2),
+        );
+        return;
+      }
+
+      print('📄 Creating PDF with ${items.length} items...');
+
+      // Create PDF document
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (pw.Context context) {
+            try {
+              return [
+                // Header
+                pw.Text(
+                  'Order Details',
+                  style: pw.TextStyle(
+                    fontSize: 24,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blueGrey900,
+                  ),
+                ),
+                pw.SizedBox(height: 20),
+
+                // Customer Details Section
+                pw.Text(
+                  'Customer Details',
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blueGrey800,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                _buildCustomerDetailsSectionPDF(),
+                pw.SizedBox(height: 20),
+
+                // Order Items Section
+                pw.Text(
+                  'Order Items',
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blueGrey800,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                ...items.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final item = entry.value as Map<String, dynamic>;
+                  final orderItemId = item['orderItemId'];
+                  final images = orderItemId != null ? itemImages[orderItemId] : null;
+                  return _buildOrderItemSectionPDF(item, index + 1, images);
+                }).toList(),
+              ];
+            } catch (e) {
+              print('❌ Error building PDF content: $e');
+              return [
+                pw.Text(
+                  'Error generating PDF content: $e',
+                  style: pw.TextStyle(color: PdfColors.red),
+                ),
+              ];
+            }
+          },
+        ),
+      );
+
+      // Print or share PDF
+      print('📄 Generating PDF for printing...');
+      final pdfBytes = await pdf.save();
+      print('✅ PDF generated successfully, size: ${pdfBytes.length} bytes');
+      
+      if (pdfBytes.isEmpty) {
+        throw Exception('PDF generation failed: empty PDF bytes');
+      }
+      
+      try {
+        if (kIsWeb) {
+          // On web, use sharePdf which works better
+          print('🌐 Web platform detected, using sharePdf...');
+          await Printing.sharePdf(
+            bytes: pdfBytes,
+            filename: 'order_details_${orderId}_${DateTime.now().millisecondsSinceEpoch}.pdf',
+          );
+          print('✅ PDF shared successfully on web');
+        } else {
+          // On mobile, try print dialog first
+          print('📱 Mobile platform detected, using layoutPdf...');
+          await Printing.layoutPdf(
+            onLayout: (PdfPageFormat format) async => pdfBytes,
+          );
+          print('✅ Print dialog opened successfully');
+        }
+      } catch (printError) {
+        print('⚠️ Print/share failed, trying alternative: $printError');
+        // Fallback: try the other method
+        try {
+          if (kIsWeb) {
+            // If share failed on web, try layoutPdf
+            await Printing.layoutPdf(
+              onLayout: (PdfPageFormat format) async => pdfBytes,
+            );
+          } else {
+            // If print failed on mobile, try share
+            await Printing.sharePdf(
+              bytes: pdfBytes,
+              filename: 'order_details_${orderId}_${DateTime.now().millisecondsSinceEpoch}.pdf',
+            );
+          }
+          print('✅ Alternative method succeeded');
+        } catch (shareError) {
+          print('❌ Both print and share failed: $shareError');
+          throw Exception('Failed to print or share PDF: $shareError');
+        }
+      }
+    } catch (e, stackTrace) {
+      hideLoader(context);
+      print('❌ Error printing order details: $e');
+      print('❌ Stack trace: $stackTrace');
+      CustomSnackbar.showSnackbar(
+        context,
+        'Failed to print order details: ${e.toString()}',
+        duration: Duration(seconds: 3),
+      );
+    }
+  }
+
+  // Build customer details section for PDF
+  pw.Widget _buildCustomerDetailsSectionPDF() {
+    final customerName = order?['customer_name']?.toString() ?? 'N/A';
+    final customerMobile = order?['customer_mobile']?.toString();
+    final customerId = order?['customerId']?.toString();
+    
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          _buildInfoRowPDF('Name:', customerName),
+          if (customerMobile != null && customerMobile.isNotEmpty)
+            _buildInfoRowPDF('Mobile:', customerMobile),
+          if (customerId != null)
+            _buildInfoRowPDF('Customer ID:', customerId),
+        ],
+      ),
+    );
+  }
+
+  // Build order item section for PDF (dress type, pattern, measurements, images)
+  pw.Widget _buildOrderItemSectionPDF(
+    Map<String, dynamic> item,
+    int itemNumber,
+    List<pw.MemoryImage>? images,
+  ) {
+    final dressTypeId = item['dressTypeId'];
+    final dressTypeName = dressTypeNames[dressTypeId] ?? 'Dress Type $dressTypeId';
+    final measurementList = item['measurement'] as List<dynamic>? ?? [];
+    final measurement = measurementList.isNotEmpty
+        ? measurementList[0] as Map<String, dynamic>
+        : <String, dynamic>{};
+    
+    // Get patterns - check both 'pattern' and 'Pattern' keys, and handle nested structure
+    List<dynamic> patternList = [];
+    print('🔍 Extracting patterns for item $itemNumber');
+    print('🔍 Item keys: ${item.keys.toList()}');
+    
+    if (item['Pattern'] != null) {
+      // Backend returns Pattern with capital P, which is an array of pattern objects
+      final patternData = item['Pattern'];
+      print('🔍 Found Pattern (capital P): $patternData');
+      print('🔍 Pattern data type: ${patternData.runtimeType}');
+      
+      if (patternData is List && patternData.isNotEmpty) {
+        // Check if it's a list of pattern objects with 'patterns' array inside
+        final firstPattern = patternData[0];
+        print('🔍 First pattern object: $firstPattern');
+        
+        if (firstPattern is Map && firstPattern['patterns'] != null) {
+          // Extract the patterns array from the pattern object
+          patternList = firstPattern['patterns'] as List<dynamic>? ?? [];
+          print('🔍 Extracted patterns from nested structure: ${patternList.length} patterns');
+        } else if (firstPattern is Map && firstPattern['category'] != null) {
+          // Direct list of pattern objects
+          patternList = patternData;
+          print('🔍 Using direct pattern list: ${patternList.length} patterns');
+        }
+      }
+    } else if (item['pattern'] != null) {
+      // Fallback to lowercase 'pattern'
+      final patternData = item['pattern'];
+      print('🔍 Found pattern (lowercase): $patternData');
+      
+      if (patternData is List) {
+        patternList = patternData;
+        print('🔍 Using lowercase pattern list: ${patternList.length} patterns');
+      } else if (patternData is Map && patternData['patterns'] != null) {
+        patternList = patternData['patterns'] as List<dynamic>? ?? [];
+        print('🔍 Extracted from lowercase pattern patterns array: ${patternList.length} patterns');
+      }
+    } else {
+      print('⚠️ No pattern data found in item');
+    }
+    
+    print('🔍 Final pattern list: $patternList');
+    
+    final specialInstructions = item['special_instructions']?.toString() ?? '';
+    final deliveryDate = item['delivery_date']?.toString() ?? '';
+
+    // Build image widgets from pre-loaded images
+    List<pw.Widget> imageWidgets = [];
+    if (images != null && images.isNotEmpty) {
+      for (var pdfImage in images) {
+        imageWidgets.add(
+          pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 8, right: 8),
+            child: pw.Image(
+              pdfImage,
+              fit: pw.BoxFit.cover,
+              width: 100,
+              height: 100,
+            ),
+          ),
+        );
+      }
+    }
+
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 20),
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          // Item Number
+          pw.Text(
+            'Item #$itemNumber',
+            style: pw.TextStyle(
+              fontSize: 16,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.blueGrey800,
+            ),
+          ),
+          pw.SizedBox(height: 10),
+
+          // Dress Type
+          pw.Text(
+            'Dress Type:',
+            style: pw.TextStyle(
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.grey700,
+            ),
+          ),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            dressTypeName,
+            style: const pw.TextStyle(fontSize: 11),
+          ),
+          pw.SizedBox(height: 10),
+
+          // Dress Pattern
+          pw.Text(
+            'Pattern:',
+            style: pw.TextStyle(
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.grey700,
+            ),
+          ),
+          pw.SizedBox(height: 4),
+          if (patternList.isNotEmpty) ...[
+            ...patternList.where((pattern) => pattern is Map<String, dynamic>).map((pattern) {
+              final category = pattern['category']?.toString() ?? 'Unknown';
+              final names = pattern['name'];
+              String patternNames = '';
+              if (names is List) {
+                patternNames = names.where((n) => n != null).join(', ');
+              } else if (names != null) {
+                patternNames = names.toString();
+              }
+              return pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 4),
+                child: pw.Text(
+                  patternNames.isNotEmpty ? '$category: $patternNames' : category,
+                  style: const pw.TextStyle(fontSize: 11),
+                ),
+              );
+            }).toList(),
+          ] else ...[
+            pw.Text(
+              'No pattern selected',
+              style: pw.TextStyle(
+                fontSize: 11,
+                fontStyle: pw.FontStyle.italic,
+                color: PdfColors.grey600,
+              ),
+            ),
+          ],
+          pw.SizedBox(height: 10),
+
+          // Images
+          if (imageWidgets.isNotEmpty) ...[
+            pw.Text(
+              'Images:',
+              style: pw.TextStyle(
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.grey700,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: imageWidgets,
+            ),
+            pw.SizedBox(height: 10),
+          ],
+
+          // Measurements
+          if (measurement.isNotEmpty) ...[
+            pw.Text(
+              'Measurements:',
+              style: pw.TextStyle(
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.grey700,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2),
+                1: const pw.FlexColumnWidth(1),
+              },
+              children: [
+                // Header
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  children: [
+                    _buildTableCellPDF('Measurement', isHeader: true),
+                    _buildTableCellPDF('Value', isHeader: true, align: pw.TextAlign.right),
+                  ],
+                ),
+                // Measurement rows
+                ...measurement.entries
+                    .where((e) => ![
+                          '_id',
+                          'orderItemId',
+                          'orderItemMeasurementId',
+                          'dressTypeId',
+                          'customerId',
+                          'orderId',
+                          'owner',
+                          'createdAt',
+                          'updatedAt'
+                        ].contains(e.key))
+                    .map((entry) {
+                  final key = _beautifyKey(entry.key);
+                  final value = entry.value?.toString() ?? '';
+                  return pw.TableRow(
+                    children: [
+                      _buildTableCellPDF(key),
+                      _buildTableCellPDF(value, align: pw.TextAlign.right),
+                    ],
+                  );
+                }).toList(),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+          ],
+
+          // Special Instructions
+          if (specialInstructions.isNotEmpty) ...[
+            pw.Text(
+              'Special Instructions:',
+              style: pw.TextStyle(
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.grey700,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              specialInstructions,
+              style: const pw.TextStyle(fontSize: 11),
+            ),
+            pw.SizedBox(height: 10),
+          ],
+
+          // Delivery Date
+          if (deliveryDate.isNotEmpty) ...[
+            pw.Text(
+              'Delivery Date:',
+              style: pw.TextStyle(
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.grey700,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              deliveryDate,
+              style: const pw.TextStyle(fontSize: 11),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Helper to build info row for PDF
+  pw.Widget _buildInfoRowPDF(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 6),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.SizedBox(
+            width: 100,
+            child: pw.Text(
+              label,
+              style: pw.TextStyle(
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.grey700,
+              ),
+            ),
+          ),
+          pw.Expanded(
+            child: pw.Text(
+              value,
+              style: const pw.TextStyle(fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper to build table cell for PDF
+  pw.Widget _buildTableCellPDF(
+    String text, {
+    bool isHeader = false,
+    pw.TextAlign align = pw.TextAlign.left,
+  }) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 10,
+          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+        textAlign: align,
+      ),
+    );
+  }
+}
+
+// Audio Player Dialog Widget
+class _AudioPlayerDialog extends StatefulWidget {
+  final String audioUrl;
+
+  const _AudioPlayerDialog({required this.audioUrl});
+
+  @override
+  State<_AudioPlayerDialog> createState() => _AudioPlayerDialogState();
+}
+
+class _AudioPlayerDialogState extends State<_AudioPlayerDialog> {
+  late AudioPlayer _audioPlayer;
+  bool _isPlaying = false;
+  bool _isLoading = false;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _audioPlayer = AudioPlayer();
+    _setupAudioPlayer();
+    _preloadAudio();
+  }
+
+  void _setupAudioPlayer() {
+    // Listen to player state changes
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      print('🎵 AudioPlayer state changed: $state');
+      if (mounted) {
+        setState(() {
+          _isPlaying = state == PlayerState.playing;
+          // Set loading to false when playing starts
+          if (state == PlayerState.playing) {
+            _isLoading = false;
+          }
+        });
+      }
+    });
+
+    // Listen to duration changes
+    _audioPlayer.onDurationChanged.listen((duration) {
+      print('🎵 AudioPlayer duration: ${duration.inSeconds}s');
+      if (mounted) {
+        setState(() {
+          _duration = duration;
+          // Once duration is loaded, we're no longer loading
+          if (duration.inSeconds > 0) {
+            _isLoading = false;
+          }
+        });
+      }
+    });
+
+    // Listen to position changes
+    _audioPlayer.onPositionChanged.listen((position) {
+      if (mounted) {
+        setState(() {
+          _position = position;
+        });
+      }
+    });
+
+    // Listen to errors
+    _audioPlayer.onLog.listen((log) {
+      print('🎵 AudioPlayer log: $log');
+    });
+
+    // Listen to completion
+    _audioPlayer.onPlayerComplete.listen((_) {
+      print('🎵 AudioPlayer completed');
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _position = Duration.zero;
+        });
+      }
+    });
+  }
+
+  Future<void> _preloadAudio() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      // Ensure URL is full URL
+      final fullUrl = widget.audioUrl.startsWith('http://') || widget.audioUrl.startsWith('https://')
+          ? widget.audioUrl
+          : '${Urls.baseUrl}${widget.audioUrl}';
+      
+      print('🎵 Preloading audio from: $fullUrl');
+      
+      // Preload the audio source
+      await _audioPlayer.setSource(UrlSource(fullUrl));
+      
+      print('🎵 Audio preloaded successfully');
+      
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e, stackTrace) {
+      print('❌ Error preloading audio: $e');
+      print('❌ Stack trace: $stackTrace');
+      if (mounted) {
+        String errorMessage = 'Failed to load audio: ${e.toString()}';
+        
+        // Check if it's a CORS or format error
+        if (e.toString().contains('CORS') || 
+            e.toString().contains('Format error') ||
+            e.toString().contains('MEDIA_ELEMENT_ERROR')) {
+          errorMessage = 'Audio playback failed. This may be due to:\n'
+              '1. CORS configuration on S3 bucket\n'
+              '2. Audio format not supported by browser\n'
+              '3. Network connectivity issues\n\n'
+              'Please check S3 bucket CORS settings or contact support.';
+        }
+        
+        setState(() {
+          _error = errorMessage;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _playPause() async {
+    try {
+      print('🎵 Play/Pause clicked. Current state: isPlaying=$_isPlaying, duration=${_duration.inSeconds}s');
+      
+      if (_isPlaying) {
+        print('🎵 Pausing audio...');
+        await _audioPlayer.pause();
+      } else {
+        print('🎵 Playing audio...');
+        
+        setState(() {
+          _isLoading = true;
+          _error = null;
+        });
+        
+        // Ensure URL is full URL
+        final fullUrl = widget.audioUrl.startsWith('http://') || widget.audioUrl.startsWith('https://')
+            ? widget.audioUrl
+            : '${Urls.baseUrl}${widget.audioUrl}';
+        
+        print('🎵 Loading audio from: $fullUrl');
+        
+        // If duration is zero, source might not be loaded, so set it and play
+        // Otherwise, just resume from current position
+        if (_duration == Duration.zero) {
+          print('🎵 Source not loaded, setting source and playing...');
+          await _audioPlayer.play(UrlSource(fullUrl));
+        } else {
+          print('🎵 Source already loaded, resuming...');
+          await _audioPlayer.resume();
+        }
+        
+        print('🎵 Audio play/resume called successfully');
+      }
+    } catch (e, stackTrace) {
+      print('❌ Error playing audio: $e');
+      print('❌ Stack trace: $stackTrace');
+      if (mounted) {
+        setState(() {
+          _error = 'Error playing audio: ${e.toString()}';
+          _isLoading = false;
+          _isPlaying = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _seek(Duration position) async {
+    await _audioPlayer.seek(position);
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        width: kIsWeb ? 400 : 300,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Audio Player',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close),
+                  onPressed: () {
+                    _audioPlayer.stop();
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Icon(
+              Icons.audiotrack,
+              size: 64,
+              color: ColorPalatte.primary,
+            ),
+            const SizedBox(height: 20),
+            // Show audio URL for debugging (can be removed later)
+            Text(
+              widget.audioUrl.length > 50 
+                  ? '${widget.audioUrl.substring(0, 50)}...'
+                  : widget.audioUrl,
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 16),
+            if (_error != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade300),
+                ),
+                child: Column(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red, size: 32),
+                    const SizedBox(height: 8),
+                    Text(
+                      _error!,
+                      style: TextStyle(color: Colors.red, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _preloadAudio,
+                icon: Icon(Icons.refresh),
+                label: Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ColorPalatte.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ] else ...[
+              // Progress indicator
+              if (_duration.inSeconds > 0) ...[
+                Slider(
+                  value: _position.inSeconds.toDouble().clamp(0.0, _duration.inSeconds.toDouble()),
+                  min: 0,
+                  max: _duration.inSeconds.toDouble(),
+                  onChanged: (value) {
+                    _seek(Duration(seconds: value.toInt()));
+                  },
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _formatDuration(_position),
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                      Text(
+                        _formatDuration(_duration),
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ] else if (!_isLoading && _duration == Duration.zero) ...[
+                Text(
+                  'Duration: Unknown',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+              ],
+              // Play/Pause button - always show if duration is loaded, or show loading indicator
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_isLoading && _duration == Duration.zero)
+                    Column(
+                      children: [
+                        CircularProgressIndicator(color: ColorPalatte.primary),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Loading audio...',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    )
+                  else
+                    Container(
+                      decoration: BoxDecoration(
+                        color: ColorPalatte.primary.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: ColorPalatte.primary,
+                          width: 2,
+                        ),
+                      ),
+                      child: IconButton(
+                        iconSize: 80,
+                        padding: const EdgeInsets.all(8),
+                        icon: Icon(
+                          _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                          color: ColorPalatte.primary,
+                          size: 80,
+                        ),
+                        onPressed: _playPause,
+                        tooltip: _isPlaying ? 'Pause' : 'Play',
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -29,12 +29,37 @@ class _PatternSelectionmodalState extends State<PatternSelectionmodal> {
     print('Patterns List: $patternsListArr');
     print('Selected Patterns: ${widget.selectedPatterns}');
 
-    // Extract unique categories
-    List<String> categories = patternsListArr
-        .map((item) => item['category']?.toString() ?? "")
-        .toSet()
-        .where((category) => category.isNotEmpty)
-        .toList();
+    // Extract unique categories - group all patterns by category
+    Set<String> categorySet = {};
+    for (var item in patternsListArr) {
+      // Handle name as array or string
+      dynamic rawName = item['name'];
+      String name = '';
+      if (rawName is List) {
+        name = rawName.isNotEmpty ? rawName[0].toString().trim() : '';
+      } else if (rawName != null) {
+        name = rawName.toString().trim();
+      }
+      
+      // Handle category - if empty, use "Other"
+      dynamic rawCategory = item['category'];
+      String cat = '';
+      if (rawCategory is List) {
+        cat = rawCategory.isNotEmpty ? rawCategory[0].toString().trim() : '';
+      } else if (rawCategory != null) {
+        cat = rawCategory.toString().trim();
+      }
+      
+      // Include if name is valid (category can be empty, we'll use "Other")
+      if (name.isNotEmpty && name.toLowerCase() != 'unnamed pattern') {
+        categorySet.add(cat.isNotEmpty ? cat : 'Other');
+      }
+    }
+    
+    List<String> categories = categorySet.toList()..sort();
+    
+    print('🎨 Extracted ${categories.length} categories: $categories');
+    print('🎨 Total valid patterns: ${patternsListArr.length}');
 
     // Initialize selection state
     for (var category in categories) {
@@ -97,13 +122,31 @@ class _PatternSelectionmodalState extends State<PatternSelectionmodal> {
     List<String> categories = [];
 
     try {
-      categories = patternsListArr
-          .map((item) => item['category']?.toString() ?? "")
-          .toSet()
-          .where((category) => category.isNotEmpty)
-          .toList();
+      Set<String> categorySet = {};
+      for (var item in patternsListArr) {
+        // Handle category as array or string
+        dynamic rawCategory = item['category'];
+        String cat = '';
+        if (rawCategory is List) {
+          cat = rawCategory.isNotEmpty ? rawCategory[0].toString().trim() : '';
+        } else if (rawCategory != null) {
+          cat = rawCategory.toString().trim();
+        }
+        
+        // If category is empty, use "Other"
+        if (cat.isEmpty) {
+          cat = 'Other';
+        }
+        
+        if (cat.isNotEmpty) {
+          categorySet.add(cat);
+        }
+      }
+      categories = categorySet.toList()..sort();
+      print('🎨 Categories extracted: $categories');
     } catch (e) {
       print("Error extracting categories: $e");
+      categories = ['Other']; // Fallback
     }
 
     return Scaffold(
@@ -165,20 +208,43 @@ class _PatternSelectionmodalState extends State<PatternSelectionmodal> {
                                 ),
                                 const SizedBox(height: 4),
                                 ...patternsListArr.map((item) {
-                                  if (item['category'] != category ||
-                                      item['category']?.toString() == "") {
+                                  final itemCategory = item['category']?.toString()?.trim() ?? "";
+                                  final itemName = item['name'];
+                                  
+                                  // Normalize category (empty becomes "Other")
+                                  final normalizedCategory = itemCategory.isNotEmpty ? itemCategory : 'Other';
+                                  
+                                  // Must match the current category being displayed
+                                  if (normalizedCategory != category) {
                                     return SizedBox.shrink();
                                   }
-                                  bool isSingleSelection =
-                                      item['selection']?.toString() == 'single';
-                                  final name = item['name'];
-                                  final displayName = name is List
-                                      ? (name as List).join(', ')
-                                      : name?.toString() ?? '';
-                                  final patternId = item['_id']?.toString();
+                                  
+                                  // Extract name - handle both string and list
+                                  String displayName = '';
+                                  if (itemName is List) {
+                                    displayName = (itemName as List)
+                                        .map((n) => n?.toString()?.trim() ?? '')
+                                        .where((n) => n.isNotEmpty)
+                                        .join(', ');
+                                  } else {
+                                    displayName = itemName?.toString()?.trim() ?? '';
+                                  }
+                                  
+                                  // Skip if name is empty or invalid
+                                  if (displayName.isEmpty || 
+                                      displayName.toLowerCase() == 'unnamed pattern' ||
+                                      displayName.toLowerCase() == '[unnamed pattern]') {
+                                    return SizedBox.shrink();
+                                  }
+                                  
+                                  // Get selection type - check if it's 'single' (case-insensitive)
+                                  final selectionType = item['selection']?.toString()?.toLowerCase() ?? 'multiple';
+                                  bool isSingleSelection = selectionType == 'single';
+                                  
+                                  final patternId = item['_id']?.toString() ?? item['dressPatternId']?.toString();
                                   if (patternId == null) {
                                     print(
-                                        'Warning: Missing _id for pattern: category=$category, name=$displayName');
+                                        '⚠️ Warning: Missing _id for pattern: category=$category, name=$displayName');
                                     return SizedBox.shrink();
                                   }
                                   return Padding(

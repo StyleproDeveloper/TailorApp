@@ -30,6 +30,8 @@ const upload = multer({
       'audio/ogg',
       'audio/aac',
       'audio/m4a',
+      'audio/mp4', // m4a files use audio/mp4 MIME type
+      'audio/x-m4a', // Alternative MIME type for m4a
     ];
 
     // Log for debugging
@@ -49,7 +51,8 @@ const upload = multer({
         'wav': 'audio/wav',
         'ogg': 'audio/ogg',
         'aac': 'audio/aac',
-        'm4a': 'audio/m4a',
+        'm4a': 'audio/mp4', // m4a files use audio/mp4 MIME type
+        'mp4': 'audio/mp4', // For audio mp4 files
       };
       mimetype = mimeMap[ext] || 'image/jpeg'; // Default to jpeg if unknown
       console.log('📤 Inferred mimetype from extension:', mimetype);

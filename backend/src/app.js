@@ -22,6 +22,7 @@ const OrderRoutes = require('./routes/OrderRoutes');
 const OrderMediaRoutes = require('./routes/OrderMediaRoutes');
 const UserBarnchRoutes = require('./routes/UserBranchRoutes');
 const PaymentRoutes = require('./routes/PaymentRoutes');
+const GalleryRoutes = require('./routes/GalleryRoutes');
 const swaggerConfig = require('./config/swagger');
 const envConfig = require('./config/env.config');
 const logger = require('./utils/logger');
@@ -41,12 +42,22 @@ app.use(
 );
 
 // Handle OPTIONS preflight requests FIRST - before any other middleware
+// CRITICAL: This must be FIRST to handle CORS preflight
 app.options('*', (req, res) => {
+  logger.info('CORS Preflight Request', { 
+    origin: req.headers.origin,
+    method: req.method,
+    url: req.url 
+  });
+  
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
   res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader('Access-Control-Allow-Credentials', 'false');
   res.status(200).end();
+  
+  logger.info('CORS Preflight Response Sent');
 });
 
 // Security Middleware - DISABLE helmet CORS blocking
@@ -204,6 +215,7 @@ app.use('/orders', OrderRoutes);
 app.use('/order-media', OrderMediaRoutes);
 app.use('/user-branch', UserBarnchRoutes);
 app.use('/payments', PaymentRoutes);
+app.use('/gallery', GalleryRoutes);
 
 // Handle 404 (Not Found)
 app.use(notFound);
