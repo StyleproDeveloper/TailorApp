@@ -29,6 +29,11 @@ const logger = require('./utils/logger');
 const path = require('path');
 
 const app = express();
+
+// Trust proxy - REQUIRED for AWS Elastic Beanstalk load balancer
+// This allows Express to correctly identify client IPs from X-Forwarded-For headers
+app.set('trust proxy', true);
+
 app.use(
   '/api-docs',
   swaggerConfig.swaggerUi.serve,

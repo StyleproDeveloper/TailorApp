@@ -9,14 +9,13 @@ import '../Widgets/CustomSnakBar.dart';
 class ApiService {
   final Dio _dio = Dio();
 
-  // HARDCODED LOCAL BACKEND - NO EXCEPTIONS
-  final String baseUrl = 'http://localhost:5500';
+  // Dynamic baseUrl - detects environment automatically
+  final String baseUrl = Urls.baseUrl;
 
   ApiService() {
     // CRITICAL LOGS
     print('🚨🚨🚨 API SERVICE INITIALIZED 🚨🚨🚨');
-    print('🚨🚨🚨 BASE URL HARDCODED: $baseUrl 🚨🚨🚨');
-    print('🚨🚨🚨 If you see Vercel URL, browser is using OLD CACHED CODE 🚨🚨🚨');
+    print('🚨🚨🚨 BASE URL: $baseUrl 🚨🚨🚨');
     
     _dio.options = BaseOptions(
       baseUrl: baseUrl,

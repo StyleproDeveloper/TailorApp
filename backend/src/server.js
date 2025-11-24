@@ -83,10 +83,12 @@ const startServer = async () => {
   try {
     await connectDB();
     
-    app.listen(PORT, () => {
+    // Bind to 0.0.0.0 to accept connections from Elastic Beanstalk load balancer
+    app.listen(PORT, '0.0.0.0', () => {
       logger.info(`🚀 Server running on port ${PORT}`, {
         environment: envConfig.NODE_ENV,
         nodeVersion: process.version,
+        host: '0.0.0.0',
       });
     });
   } catch (error) {

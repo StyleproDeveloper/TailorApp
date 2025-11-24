@@ -1,11 +1,45 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+// Conditional import for web
+import 'Urls_web.dart' if (dart.library.io) 'Urls_stub.dart';
+
 class Urls {
-  // HARDCODED LOCAL BACKEND - NO EXCEPTIONS
-  static const String baseUrl = 'http://localhost:5500';
+  // Detect environment and set backend URL accordingly
+  static String get baseUrl {
+    if (kIsWeb) {
+      // Web platform - detect production vs localhost
+      try {
+        final hostname = getWebHostname();
+        final isLocalhost = hostname == 'localhost' || 
+                           hostname == '127.0.0.1' || 
+                           hostname.isEmpty;
+        
+        if (isLocalhost) {
+          print('🏠 LOCALHOST detected - Using local backend: http://localhost:5500');
+          return 'http://localhost:5500';
+        } else {
+          // Production - use AWS Elastic Beanstalk backend
+          // TODO: Replace with your actual AWS EB URL after deployment
+          final prodUrl = 'https://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com';
+          print('🌐 PRODUCTION detected (hostname: $hostname) - Using AWS EB backend: $prodUrl');
+          return prodUrl;
+        }
+      } catch (e) {
+        // Fallback to localhost if detection fails
+        print('⚠️ Error detecting environment, using localhost: $e');
+        return 'http://localhost:5500';
+      }
+    } else {
+      // Mobile platform - use localhost for development
+      return 'http://localhost:5500';
+    }
+  }
   
   // Log on first access
   static String get baseUrlGetter {
-    print('🚨🚨🚨 URLS.BASEURL = http://localhost:5500 🚨🚨🚨');
-    return baseUrl;
+    final url = baseUrl;
+    print('🚨🚨🚨 URLS.BASEURL = $url 🚨🚨🚨');
+    return url;
   }
   
   static const String shopName = '/shops';
