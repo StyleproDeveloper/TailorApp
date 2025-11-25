@@ -169,7 +169,8 @@ const uploadToS3 = async (bucketName, key, fileBuffer, contentType, metadata = {
       Body: fileBuffer,
       ContentType: contentType,
       Metadata: metadata,
-      ACL: 'public-read', // Make objects publicly readable
+      // Note: ACL removed - bucket policy handles public access
+      // Some buckets have ACLs disabled for security
     });
     
     await client.send(putCommand);
