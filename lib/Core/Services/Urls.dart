@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 
 // Conditional import for web
 import 'Urls_web.dart' if (dart.library.io) 'Urls_stub.dart';
@@ -36,10 +36,13 @@ class Urls {
     }
   }
   
-  // Log on first access
+  // Log on first access (only in debug mode)
   static String get baseUrlGetter {
     final url = baseUrl;
-    print('🚨🚨🚨 URLS.BASEURL = $url 🚨🚨🚨');
+    // Only log in debug mode for production readiness
+    if (kDebugMode) {
+      print('URLs.baseUrl = $url');
+    }
     return url;
   }
   

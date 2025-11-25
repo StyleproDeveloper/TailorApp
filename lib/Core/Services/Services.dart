@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:tailorapp/Core/Services/Urls.dart';
 import '../Widgets/CustomSnakBar.dart';
 
@@ -13,9 +13,10 @@ class ApiService {
   final String baseUrl = Urls.baseUrl;
 
   ApiService() {
-    // CRITICAL LOGS
-    print('🚨🚨🚨 API SERVICE INITIALIZED 🚨🚨🚨');
-    print('🚨🚨🚨 BASE URL: $baseUrl 🚨🚨🚨');
+    // Production-ready: Only log in debug mode
+    if (kDebugMode) {
+      print('API Service initialized with base URL: $baseUrl');
+    }
     
     _dio.options = BaseOptions(
       baseUrl: baseUrl,
@@ -27,19 +28,19 @@ class ApiService {
       receiveTimeout: const Duration(seconds: 60),
     );
 
-    // Enable Logging Interceptor for better debugging
-    _dio.interceptors.add(
-      LogInterceptor(
-        request: true,
-        requestBody: true,
-        responseBody: true,
-        error: true,
-        requestHeader: true,
-        responseHeader: true,
-      ),
-    );
-    
-    print('🚨🚨🚨 DIO CONFIGURED WITH BASE URL: ${_dio.options.baseUrl} 🚨🚨🚨');
+    // Enable Logging Interceptor only in debug mode
+    if (kDebugMode) {
+      _dio.interceptors.add(
+        LogInterceptor(
+          request: true,
+          requestBody: true,
+          responseBody: true,
+          error: true,
+          requestHeader: true,
+          responseHeader: true,
+        ),
+      );
+    }
   }
 
   // Update headers dynamically (for tokens, etc.)
@@ -50,9 +51,11 @@ class ApiService {
   // Common error handling
   void _handleDioError(DioException e, BuildContext context) {
     if (e.response != null) {
-      print("⚠️ Status Code: ${e.response!.statusCode}");
-      print("🔹 Response Data: ${e.response!.data['error']}");
-      print("🌐 Request URL: ${e.requestOptions.uri}");
+      if (kDebugMode) {
+        print("Error Status: ${e.response!.statusCode}");
+        print("Error Data: ${e.response!.data['error']}");
+        print("Request URL: ${e.requestOptions.uri}");
+      }
 
       // Show error in Snackbar or Toast
       CustomSnackbar.showSnackbar(
@@ -61,8 +64,10 @@ class ApiService {
         duration: Duration(seconds: 2),
       );
     } else {
-      print("🌐 Request URL: ${e.requestOptions.uri}");
-      print("🛑 Error Message: ${e.message}");
+      if (kDebugMode) {
+        print("Request URL: ${e.requestOptions.uri}");
+        print("Error Message: ${e.message}");
+      }
 
       // Check if it's a CORS issue
       if (e.type == DioExceptionType.connectionError || 
@@ -87,7 +92,9 @@ class ApiService {
   // GET Request
   Future<Response> get(String endpoint, BuildContext context, {Map<String, dynamic>? queryParameters}) async {
     try {
-      print('🌐🌐🌐 GET REQUEST TO: $baseUrl$endpoint 🌐🌐🌐');
+      if (kDebugMode) {
+        print('GET: $baseUrl$endpoint');
+      }
       final response = await _dio.get(endpoint, queryParameters: queryParameters);
       return response;
     } on DioException catch (e) {
@@ -99,7 +106,9 @@ class ApiService {
   // POST Request
   Future<Response> post(String endpoint, BuildContext context, {dynamic data}) async {
     try {
-      print('🌐🌐🌐 POST REQUEST TO: $baseUrl$endpoint 🌐🌐🌐');
+      if (kDebugMode) {
+        print('POST: $baseUrl$endpoint');
+      }
       final response = await _dio.post(endpoint, data: data);
       return response;
     } on DioException catch (e) {
@@ -111,7 +120,9 @@ class ApiService {
   // PATCH Request
   Future<Response> patch(String endpoint, BuildContext context, {dynamic data}) async {
     try {
-      print('🌐🌐🌐 PATCH REQUEST TO: $baseUrl$endpoint 🌐🌐🌐');
+      if (kDebugMode) {
+        print('PATCH: $baseUrl$endpoint');
+      }
       final response = await _dio.patch(endpoint, data: data);
       return response;
     } on DioException catch (e) {
@@ -123,7 +134,9 @@ class ApiService {
   // DELETE Request
   Future<Response> delete(String endpoint, BuildContext context) async {
     try {
-      print('🌐🌐🌐 DELETE REQUEST TO: $baseUrl$endpoint 🌐🌐🌐');
+      if (kDebugMode) {
+        print('DELETE: $baseUrl$endpoint');
+      }
       final response = await _dio.delete(endpoint);
       return response;
     } on DioException catch (e) {
@@ -135,7 +148,9 @@ class ApiService {
   // PUT Request
   Future<Response> put(String endpoint, BuildContext context, {dynamic data}) async {
     try {
-      print('🌐🌐🌐 PUT REQUEST TO: $baseUrl$endpoint 🌐🌐🌐');
+      if (kDebugMode) {
+        print('PUT: $baseUrl$endpoint');
+      }
       final response = await _dio.put(endpoint, data: data);
       return response;
     } on DioException catch (e) {
@@ -153,7 +168,9 @@ class ApiService {
     Map<String, dynamic>? additionalData,
   }) async {
     try {
-      print('🌐🌐🌐 UPLOAD REQUEST TO: $baseUrl$endpoint 🌐🌐🌐');
+      if (kDebugMode) {
+        print('UPLOAD: $baseUrl$endpoint');
+      }
       
       final formData = FormData();
       
@@ -194,7 +211,9 @@ class ApiService {
     FormData formData,
   ) async {
     try {
-      print('🌐🌐🌐 POST FORMDATA REQUEST TO: $baseUrl$endpoint 🌐🌐🌐');
+      if (kDebugMode) {
+        print('POST FORMDATA: $baseUrl$endpoint');
+      }
       final response = await _dio.post(endpoint, data: formData);
       return response;
     } on DioException catch (e) {
@@ -211,7 +230,9 @@ class ApiService {
     Map<String, dynamic>? fields,
   }) async {
     try {
-      print('🌐🌐🌐 UPLOAD MEDIA FILE REQUEST TO: $baseUrl$endpoint 🌐🌐🌐');
+      if (kDebugMode) {
+        print('UPLOAD MEDIA: $baseUrl$endpoint');
+      }
       
       final formData = FormData();
       
