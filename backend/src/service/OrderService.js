@@ -835,70 +835,124 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
     // }
 
     for (const item of Item) {
-      console.log('item', item);
+      // Check if this is a new item (no orderItemId or orderItemId is 0/null)
+      const isNewItem = !item?.orderItemId || item.orderItemId === 0;
       
-      // Require IDs for update of regular items
-      if (
-        !item?.orderItemId ||
-        !item?.Measurement?.orderItemMeasurementId ||
-        !item.Pattern?.map((p) => p?.orderItemPatternId)
-      ) {
-        throw new Error('Missing IDs for update. Cannot update without IDs.');
+      if (isNewItem) {
+        // Create new item (similar to createOrderService)
+        const orderItemId = await getNextSequenceValue('orderItemId');
+        const orderItemMeasurementId = await getNextSequenceValue('orderItemMeasurementId');
+        const orderItemPatternId = await getNextSequenceValue('orderItemPatternId');
+
+        // Create Order Item
+        await OrderItemModel.create([{
+          orderItemId,
+          orderId,
+          dressTypeId: item?.dressTypeId ?? null,
+          special_instructions: item?.special_instructions,
+          recording: item?.recording,
+          videoLink: item?.videoLink,
+          Pictures: item?.Pictures,
+          delivery_date: item?.delivery_date,
+          amount: item?.amount,
+          status: item?.status,
+          owner: item?.owner,
+          orderItemMeasurementId,
+          orderItemPatternId,
+          isAdditionalCost: item?.isAdditionalCost ?? false,
+          additionalCostDescription: item?.additionalCostDescription ?? null,
+        }], { session });
+
+        // Create Measurement
+        const measurement = {
+          orderItemMeasurementId,
+          orderId,
+          orderItemId,
+          customerId: orderDetails?.customerId,
+          dressTypeId: item?.dressTypeId,
+          owner: item?.owner,
+          ...item?.Measurement,
+        };
+        await OrderItemMeasurementModel.create([measurement], { session });
+
+        // Create Pattern
+        const pattern = {
+          orderItemPatternId,
+          orderId,
+          orderItemId,
+          owner: item?.owner,
+          patterns: Array.isArray(item?.Pattern)
+            ? item?.Pattern.map((p) => ({
+                category: p?.category,
+                name: Array.isArray(p?.name) ? p?.name : [p?.name],
+              }))
+            : [],
+        };
+        await OrderItemPatternModel.create([pattern], { session });
+      } else {
+        // Update existing item (requires IDs)
+        if (
+          !item?.Measurement?.orderItemMeasurementId ||
+          !item.Pattern?.length ||
+          !item.Pattern[0]?.orderItemPatternId
+        ) {
+          throw new Error('Missing IDs for update. Existing items require orderItemMeasurementId and orderItemPatternId.');
+        }
+
+        const orderItemId = item.orderItemId;
+        const orderItemMeasurementId = item.Measurement.orderItemMeasurementId;
+        const orderItemPatternId = item.Pattern[0].orderItemPatternId;
+
+        // Update Order Item
+        await OrderItemModel.updateOne(
+          { orderItemId, orderId },
+          {
+            $set: {
+              dressTypeId: item.dressTypeId,
+              special_instructions: item.special_instructions,
+              recording: item.recording,
+              videoLink: item.videoLink,
+              Pictures: item.Pictures,
+              delivery_date: item.delivery_date,
+              amount: item.amount,
+              status: item.status,
+              owner: item.owner,
+              isAdditionalCost: item?.isAdditionalCost ?? false,
+              additionalCostDescription: item?.additionalCostDescription ?? null,
+            },
+          },
+          { session }
+        );
+
+        // Update Measurement
+        await OrderItemMeasurementModel.updateOne(
+          { orderItemMeasurementId, orderId, orderItemId },
+          {
+            $set: {
+              owner: item.owner,
+              ...item.Measurement,
+            },
+          },
+          { session }
+        );
+
+        // Update Pattern
+        await OrderItemPatternModel.updateOne(
+          { orderItemPatternId, orderId, orderItemId },
+          {
+            $set: {
+              owner: item.owner,
+              patterns: Array.isArray(item?.Pattern)
+                ? item?.Pattern.map((p) => ({
+                    category: p?.category,
+                    name: Array.isArray(p?.name) ? p?.name : [p?.name],
+                  }))
+                : [],
+            },
+          },
+          { session }
+        );
       }
-
-      const orderItemId = item.orderItemId;
-      const orderItemMeasurementId = item.Measurement.orderItemMeasurementId;
-      const orderItemPatternId = item.Pattern[0].orderItemPatternId;
-
-      // Update Order Item
-      await OrderItemModel.updateOne(
-        { orderItemId, orderId },
-        {
-          $set: {
-            dressTypeId: item.dressTypeId,
-            special_instructions: item.special_instructions,
-            recording: item.recording,
-            videoLink: item.videoLink,
-            Pictures: item.Pictures,
-            delivery_date: item.delivery_date, // Use delivery_date (with underscore) to match frontend
-            amount: item.amount,
-            status: item.status,
-            owner: item.owner,
-            isAdditionalCost: item?.isAdditionalCost ?? false,
-            additionalCostDescription: item?.additionalCostDescription ?? null,
-          },
-        },
-        { session }
-      );
-
-      // Update Measurement
-      await OrderItemMeasurementModel.updateOne(
-        { orderItemMeasurementId, orderId, orderItemId },
-        {
-          $set: {
-            owner: item.owner,
-            ...item.Measurement,
-          },
-        },
-        { session }
-      );
-
-      // Update Pattern
-      await OrderItemPatternModel.updateOne(
-        { orderItemPatternId, orderId, orderItemId },
-        {
-          $set: {
-            owner: item.owner,
-            patterns: Array.isArray(item?.Pattern)
-              ? item?.Pattern.map((p) => ({
-                  category: p?.category,
-                  name: Array.isArray(p?.name) ? p?.name : [p?.name],
-                }))
-              : [],
-          },
-        },
-        { session }
-      );
     }
 
     // Handle additional costs - delete existing and recreate

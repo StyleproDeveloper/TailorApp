@@ -2559,8 +2559,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
 
     // Construct the Item map
+    // Check if this is a new item (no orderItemId or orderItemId is 0/null)
+    final isNewItem = widget.orderId == null || item.orderItemId == null || item.orderItemId == 0;
+    
     Map<String, dynamic> itemMap = {
-      if(widget.orderId != null) "orderItemId": item.orderItemId ?? null,
       "dressTypeId": item.selectedDressTypeId,
       "Measurement": measurementMap,
       "Pattern": item.selectedPatterns.isNotEmpty
@@ -2571,8 +2573,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                     ? pattern['name']
                     : [pattern['name'].toString()],
               };
-              // Include orderItemPatternId only for update
-              if (widget.orderId != null) {
+              // Include orderItemPatternId only for existing items (not new items)
+              if (!isNewItem && item.orderItemPatternId != null) {
                 patternMap["orderItemPatternId"] = item.orderItemPatternId;
               }
               return patternMap;
@@ -2595,9 +2597,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       "owner": userId.toString(),
     };
 
-    // Conditionally add orderItemId if updating an existing order
-    if (widget.orderId != null) {
-      itemMap["orderItemId"] = item.orderItemId ?? 0;
+    // Add orderItemId only for existing items (not new items)
+    if (!isNewItem && item.orderItemId != null && item.orderItemId! > 0) {
+      itemMap["orderItemId"] = item.orderItemId;
     }
 
     return itemMap;
