@@ -2546,9 +2546,15 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         String textValue = '';
         if (m['value'] is TextEditingController) {
           final controller = m['value'] as TextEditingController;
-          textValue = controller.text;
+          textValue = controller.text.trim();
         }
-        measurementMap[key] = double.tryParse(textValue) ?? 0.0;
+        // Convert empty strings to null, valid numbers to double, invalid to null
+        if (textValue.isEmpty) {
+          measurementMap[key] = null;
+        } else {
+          final parsedValue = double.tryParse(textValue);
+          measurementMap[key] = parsedValue; // null if parsing fails, which is acceptable
+        }
       }
     }
 
@@ -3880,9 +3886,15 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           final String key = m['name'].toString().toLowerCase().replaceAll(' ', '_');
           String textValue = '';
           if (m['value'] is TextEditingController) {
-            textValue = (m['value'] as TextEditingController).text;
+            textValue = (m['value'] as TextEditingController).text.trim();
           }
-          measurementMap[key] = double.tryParse(textValue) ?? 0.0;
+          // Convert empty strings to null, valid numbers to double, invalid to null
+          if (textValue.isEmpty) {
+            measurementMap[key] = null;
+          } else {
+            final parsedValue = double.tryParse(textValue);
+            measurementMap[key] = parsedValue; // null if parsing fails, which is acceptable
+          }
         }
 
         // Pattern list must include orderItemPatternId for update
