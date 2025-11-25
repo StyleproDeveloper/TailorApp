@@ -231,61 +231,101 @@ const createOrderService = async (orderData, shop_id) => {
     // Ensure S3 bucket exists and create order folder structure
     try {
       const shop = await ShopInfo.findOne({ shop_id: Number(shop_id) });
-      if (shop) {
+      if (!shop) {
+        logger.warn('Shop not found for S3 bucket setup', { shop_id, orderId });
+      } else {
         let bucketName = shop.s3BucketName;
         
-        // Create bucket if it doesn't exist
-        if (!bucketName || !(await bucketExists(bucketName))) {
-          logger.info('S3 bucket does not exist for shop, creating it...', { shop_id, shopName: shop.shopName });
-          bucketName = await createShopBucket(shop.shopName || shop.yourName, shop_id);
-          
-          // Update shop with bucket name
-          shop.s3BucketName = bucketName;
-          await shop.save();
-          logger.info('S3 bucket created and saved to shop', { shop_id, bucketName });
-        }
-        
-        // Create a placeholder file in the order folder to make it visible in S3
-        // This ensures the folder structure exists even before media is uploaded
-        if (bucketName && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-          try {
-            const orderFolderKey = `order_${orderId}/.folder`;
-            const placeholderContent = Buffer.from(`Order ${orderId} created on ${new Date().toISOString()}`);
+        // Check AWS credentials
+        const hasAwsCredentials = process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY;
+        if (!hasAwsCredentials) {
+          logger.warn('AWS credentials not configured, skipping S3 folder creation', { shop_id, orderId });
+        } else {
+          // Create bucket if it doesn't exist or verify it exists
+          if (!bucketName) {
+            logger.info('S3 bucket name not found in shop, creating new bucket...', { shop_id, shopName: shop.shopName });
+            bucketName = await createShopBucket(shop.shopName || shop.yourName, shop_id);
             
-            await uploadToS3(
-              bucketName,
-              orderFolderKey,
-              placeholderContent,
-              'text/plain',
-              {
-                shopId: shop_id.toString(),
-                orderId: orderId.toString(),
-                type: 'folder-marker',
+            // Update shop with bucket name
+            shop.s3BucketName = bucketName;
+            await shop.save();
+            logger.info('S3 bucket created and saved to shop', { shop_id, bucketName });
+          } else {
+            // Verify bucket exists
+            const exists = await bucketExists(bucketName);
+            if (!exists) {
+              logger.warn('S3 bucket name exists in shop but bucket not found in AWS, attempting to create...', { shop_id, bucketName });
+              try {
+                bucketName = await createShopBucket(shop.shopName || shop.yourName, shop_id);
+                shop.s3BucketName = bucketName;
+                await shop.save();
+                logger.info('S3 bucket recreated and saved to shop', { shop_id, bucketName });
+              } catch (createError) {
+                logger.error('Failed to recreate S3 bucket', {
+                  shop_id,
+                  orderId,
+                  bucketName,
+                  error: createError.message,
+                  stack: createError.stack,
+                });
+                // Continue - will try to create folder anyway
               }
-            );
-            
-            logger.info('Order folder structure created in S3', {
-              shop_id,
-              orderId,
-              bucketName,
-              folderKey: orderFolderKey,
-            });
-          } catch (s3Error) {
-            // Log error but don't fail order creation if S3 folder creation fails
-            logger.warn('Failed to create order folder in S3 (non-critical)', {
-              shop_id,
-              orderId,
-              error: s3Error.message,
-            });
+            } else {
+              logger.debug('S3 bucket verified to exist', { shop_id, bucketName });
+            }
+          }
+          
+          // Create a placeholder file in the order folder to make it visible in S3
+          // This ensures the folder structure exists even before media is uploaded
+          if (bucketName) {
+            try {
+              const orderFolderKey = `order_${orderId}/.folder`;
+              const placeholderContent = Buffer.from(`Order ${orderId} created on ${new Date().toISOString()}`);
+              
+              await uploadToS3(
+                bucketName,
+                orderFolderKey,
+                placeholderContent,
+                'text/plain',
+                {
+                  shopId: shop_id.toString(),
+                  orderId: orderId.toString(),
+                  type: 'folder-marker',
+                }
+              );
+              
+              logger.info('Order folder structure created in S3', {
+                shop_id,
+                orderId,
+                bucketName,
+                folderKey: orderFolderKey,
+              });
+            } catch (s3Error) {
+              // Log error with full details but don't fail order creation
+              logger.error('Failed to create order folder in S3', {
+                shop_id,
+                orderId,
+                bucketName,
+                folderKey: `order_${orderId}/.folder`,
+                error: s3Error.message,
+                errorName: s3Error.name,
+                errorCode: s3Error.code,
+                stack: s3Error.stack,
+              });
+            }
+          } else {
+            logger.warn('Bucket name is empty, cannot create order folder', { shop_id, orderId });
           }
         }
       }
     } catch (s3SetupError) {
-      // Log error but don't fail order creation if S3 setup fails
-      logger.warn('S3 bucket setup failed (non-critical)', {
+      // Log error with full details but don't fail order creation if S3 setup fails
+      logger.error('S3 bucket setup failed', {
         shop_id,
         orderId,
         error: s3SetupError.message,
+        errorName: s3SetupError.name,
+        stack: s3SetupError.stack,
       });
     }
 
