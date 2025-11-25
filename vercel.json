@@ -6,6 +6,86 @@
   "installCommand": "echo 'Install handled in build script'",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/:path*"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/auth/:path*"
+    },
+    {
+      "source": "/shops/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/shops/:path*"
+    },
+    {
+      "source": "/customer/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/customer/:path*"
+    },
+    {
+      "source": "/orders/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/orders/:path*"
+    },
+    {
+      "source": "/users/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/users/:path*"
+    },
+    {
+      "source": "/roles/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/roles/:path*"
+    },
+    {
+      "source": "/dress-type/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/dress-type/:path*"
+    },
+    {
+      "source": "/dresstype-measurement/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/dresstype-measurement/:path*"
+    },
+    {
+      "source": "/measurement/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/measurement/:path*"
+    },
+    {
+      "source": "/dress-type-pattern/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/dress-type-pattern/:path*"
+    },
+    {
+      "source": "/dress-pattern/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/dress-pattern/:path*"
+    },
+    {
+      "source": "/order-dressType-mea/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/order-dressType-mea/:path*"
+    },
+    {
+      "source": "/billing-term/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/billing-term/:path*"
+    },
+    {
+      "source": "/user-branch/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/user-branch/:path*"
+    },
+    {
+      "source": "/order-media/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/order-media/:path*"
+    },
+    {
+      "source": "/payments/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/payments/:path*"
+    },
+    {
+      "source": "/gallery/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/gallery/:path*"
+    },
+    {
+      "source": "/expense/:path*",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/expense/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com/health"
+    },
+    {
       "source": "/manifest.json",
       "destination": "/manifest.json"
     },

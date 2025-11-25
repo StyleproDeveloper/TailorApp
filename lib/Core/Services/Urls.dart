@@ -18,10 +18,11 @@ class Urls {
           print('🏠 LOCALHOST detected - Using local backend: http://localhost:5500');
           return 'http://localhost:5500';
         } else {
-          // Production - use AWS Elastic Beanstalk backend
-          // TODO: Replace with your actual AWS EB URL after deployment
-          final prodUrl = 'https://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com';
-          print('🌐 PRODUCTION detected (hostname: $hostname) - Using AWS EB backend: $prodUrl');
+          // Production - use Vercel proxy to avoid mixed content issues
+          // Vercel rewrites will proxy API requests to AWS EB backend
+          // This allows HTTPS frontend to communicate with HTTP backend
+          final prodUrl = ''; // Empty string means use same origin (Vercel will proxy)
+          print('🌐 PRODUCTION detected (hostname: $hostname) - Using Vercel proxy to AWS EB backend');
           return prodUrl;
         }
       } catch (e) {
