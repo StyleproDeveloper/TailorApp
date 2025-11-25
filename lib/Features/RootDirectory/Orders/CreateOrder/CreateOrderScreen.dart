@@ -1061,6 +1061,36 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
             print("Updated dropdownDressController with selected dress type: $selectedDressTypeName");
 
+            // Extract IDs from measurement and pattern objects
+            final measurementList = (item['measurement'] as List<dynamic>?) ?? [];
+            final patternList = (item['pattern'] as List<dynamic>?) ?? [];
+            
+            // Extract orderItemMeasurementId from the first measurement object
+            int? extractedOrderItemMeasurementId;
+            if (measurementList.isNotEmpty && measurementList[0] is Map<String, dynamic>) {
+              final firstMeasurement = measurementList[0] as Map<String, dynamic>;
+              extractedOrderItemMeasurementId = firstMeasurement['orderItemMeasurementId'] != null && firstMeasurement['orderItemMeasurementId'] > 0
+                  ? firstMeasurement['orderItemMeasurementId'] as int?
+                  : null;
+            }
+            // Fallback to item level if not found in measurement
+            if (extractedOrderItemMeasurementId == null && item['orderItemMeasurementId'] != null && item['orderItemMeasurementId'] > 0) {
+              extractedOrderItemMeasurementId = item['orderItemMeasurementId'] as int?;
+            }
+            
+            // Extract orderItemPatternId from the first pattern object
+            int? extractedOrderItemPatternId;
+            if (patternList.isNotEmpty && patternList[0] is Map<String, dynamic>) {
+              final firstPattern = patternList[0] as Map<String, dynamic>;
+              extractedOrderItemPatternId = firstPattern['orderItemPatternId'] != null && firstPattern['orderItemPatternId'] > 0
+                  ? firstPattern['orderItemPatternId'] as int?
+                  : null;
+            }
+            // Fallback to item level if not found in pattern
+            if (extractedOrderItemPatternId == null && item['orderItemPatternId'] != null && item['orderItemPatternId'] > 0) {
+              extractedOrderItemPatternId = item['orderItemPatternId'] as int?;
+            }
+            
             final orderItem = OrderItem(
               selectedDressType: selectedDressType.isNotEmpty ? selectedDressType : null,
               selectedDressTypeId: item['dressTypeId'],
@@ -1068,14 +1098,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
               orderItemId: widget.orderId != null && item['orderItemId'] != null && item['orderItemId'] > 0 
                   ? item['orderItemId'] 
                   : null,
-              orderItemMeasurementId: widget.orderId != null && item['orderItemMeasurementId'] != null && item['orderItemMeasurementId'] > 0
-                  ? item['orderItemMeasurementId']
-                  : null,
-              orderItemPatternId: widget.orderId != null && item['orderItemPatternId'] != null && item['orderItemPatternId'] > 0
-                  ? item['orderItemPatternId']
-                  : null,
-              measurements: (item['measurement'] as List<dynamic>?)
-                      ?.expand<Map<String, dynamic>>((m) {
+              orderItemMeasurementId: widget.orderId != null ? extractedOrderItemMeasurementId : null,
+              orderItemPatternId: widget.orderId != null ? extractedOrderItemPatternId : null,
+              measurements: measurementList
+                      .expand<Map<String, dynamic>>((m) {
                     return (m as Map<String, dynamic>)
                         .entries
                         .where((entry) =>
@@ -1101,17 +1127,23 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                         'value': controller,
                       };
                     });
-                  }).toList() ??
-                  [],
-              selectedPatterns: (item['pattern'] as List<dynamic>?)
-                      ?.expand<Map<String, dynamic>>((pattern) {
+                  }).toList(),
+              selectedPatterns: patternList
+                      .expand<Map<String, dynamic>>((pattern) {
                     return (pattern['patterns'] as List<dynamic>?)?.map((p) {
                           print(
                               'Pattern: category=${p['category']}, name=${p['name']}');
+                          // Use the extracted orderItemPatternId or fallback to pattern's _id
+                          int? patternId;
+                          if (widget.orderId != null) {
+                            patternId = extractedOrderItemPatternId ?? 
+                                       (pattern['orderItemPatternId'] != null && pattern['orderItemPatternId'] > 0 
+                                         ? pattern['orderItemPatternId'] as int? 
+                                         : null) ??
+                                       (p['_id'] != null ? int.tryParse(p['_id'].toString()) : null);
+                          }
                           return {
-                            'orderItemPatternId': p['_id'] != null && widget.orderId != null
-                                ? item['orderItemPatternId'] ?? 0
-                                : 0,
+                            'orderItemPatternId': patternId ?? 0,
                             'category': p['category'] ?? 'Unknown',
                             'name': p['name'] is List
                                 ? p['name']
@@ -1119,8 +1151,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                           };
                         }) ??
                         [];
-                  }).toList() ??
-                  [],
+                  }).toList(),
               specialInstructions: TextEditingController(
                   text: item['special_instructions'] ?? ''),
               deliveryDate: TextEditingController(
@@ -2574,8 +2605,16 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                     : [pattern['name'].toString()],
               };
               // Include orderItemPatternId only for existing items (not new items)
-              if (!isNewItem && item.orderItemPatternId != null) {
-                patternMap["orderItemPatternId"] = item.orderItemPatternId;
+              // Use pattern's own ID if available, otherwise fall back to item's ID
+              if (!isNewItem) {
+                final patternId = pattern['orderItemPatternId'] != null && pattern['orderItemPatternId'] > 0
+                    ? pattern['orderItemPatternId'] as int?
+                    : (item.orderItemPatternId != null && item.orderItemPatternId! > 0
+                        ? item.orderItemPatternId
+                        : null);
+                if (patternId != null) {
+                  patternMap["orderItemPatternId"] = patternId;
+                }
               }
               return patternMap;
             }).toList()
