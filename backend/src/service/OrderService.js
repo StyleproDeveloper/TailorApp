@@ -63,7 +63,7 @@ const getOrderItemAdditionalCostModel = (shop_id) => {
 };
 
 const createOrderService = async (orderData, shop_id) => {
-  const session = await Order.startSession();
+  const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
@@ -669,8 +669,8 @@ const getAllOrdersService = async (shop_id, queryParams) => {
 };
 
 const updateOrderService = async (orderId, orderData, shop_id) => {
-  const session = await Order.startSession();
-  session.startTransaction();
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
   try {
     const { Order: orderDetails, Item, AdditionalCosts } = orderData || {};
