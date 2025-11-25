@@ -15,19 +15,25 @@ class Urls {
                            hostname.isEmpty;
         
         if (isLocalhost) {
-          print('🏠 LOCALHOST detected - Using local backend: http://localhost:5500');
+          if (kDebugMode) {
+            print('Localhost detected - Using local backend');
+          }
           return 'http://localhost:5500';
         } else {
           // Production - use Vercel proxy to avoid mixed content issues
           // Vercel rewrites will proxy API requests to AWS EB backend
           // This allows HTTPS frontend to communicate with HTTP backend
           final prodUrl = ''; // Empty string means use same origin (Vercel will proxy)
-          print('🌐 PRODUCTION detected (hostname: $hostname) - Using Vercel proxy to AWS EB backend');
+          if (kDebugMode) {
+            print('Production detected - Using Vercel proxy to AWS EB backend');
+          }
           return prodUrl;
         }
       } catch (e) {
         // Fallback to localhost if detection fails
-        print('⚠️ Error detecting environment, using localhost: $e');
+        if (kDebugMode) {
+          print('Error detecting environment, using localhost: $e');
+        }
         return 'http://localhost:5500';
       }
     } else {
