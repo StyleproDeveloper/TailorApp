@@ -56,6 +56,10 @@ const errorHandler = (err, req, res, next) => {
     } else {
       err.message = `Duplicate entry: ${duplicateField} "${duplicateValue}" already exists.`;
     }
+  } else if (err.name === 'MongoServerError' && err.message && err.message.includes('already using') && err.message.includes('collections')) {
+    // MongoDB Atlas collection limit exceeded
+    statusCode = 507; // 507 Insufficient Storage
+    err.message = 'Database collection limit exceeded. MongoDB Atlas free tier allows 500 collections. Please upgrade your MongoDB Atlas plan or contact support to clean up unused collections.';
   }
 
   // Prepare error response
@@ -65,8 +69,14 @@ const errorHandler = (err, req, res, next) => {
     message: err.message || 'Internal Server Error',
   };
 
-  // Only include stack trace in development
-  if (process.env.NODE_ENV !== 'production') {
+  // Include error details in production for debugging (can be removed later)
+  if (process.env.NODE_ENV === 'production') {
+    // Include basic error info in production
+    errorResponse.error = err.message || 'Internal Server Error';
+    if (err.details) {
+      errorResponse.details = err.details;
+    }
+  } else {
     errorResponse.stack = err.stack;
     errorResponse.details = err.details || null;
   }
