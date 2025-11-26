@@ -1,3 +1,5 @@
+const { CustomError } = require('../utils/error.handlers');
+
 const validateRequest = (schema) => (req, res, next) => {
     const { error } = schema.validate(req.body, { 
       abortEarly: false,
@@ -6,9 +8,9 @@ const validateRequest = (schema) => (req, res, next) => {
     });
   
     if (error) {
-      return res.status(400).json({
-        error: error.details.map((detail) => detail.message),
-      });
+      const errorMessages = error.details.map((detail) => detail.message).join(', ');
+      const validationError = new CustomError(`Validation failed: ${errorMessages}`, 400, error.details);
+      return next(validationError);
     }
     
     next();

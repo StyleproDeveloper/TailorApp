@@ -1055,8 +1055,20 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
       orderId,
       shop_id,
       error: err.message,
-      stack: err.stack
+      stack: err.stack,
+      errorName: err.name,
+      errorCode: err.code,
+      validationDetails: err.details
     });
+    
+    // Provide more specific error messages
+    if (err.name === 'ValidationError' || err.isJoi) {
+      const errorMessage = err.details 
+        ? err.details.map(d => d.message).join(', ')
+        : err.message || 'Validation error';
+      throw new Error(`Validation failed: ${errorMessage}`);
+    }
+    
     throw err;
   }
 };
