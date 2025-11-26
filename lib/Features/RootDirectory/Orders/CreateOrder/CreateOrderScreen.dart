@@ -2695,8 +2695,14 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     };
 
     // Add orderItemId only for existing items (not new items)
+    // CRITICAL: For existing items, orderItemId MUST be included at the item level
     if (!isNewItem && item.orderItemId != null && item.orderItemId! > 0) {
       itemMap["orderItemId"] = item.orderItemId;
+      print('✅ Adding orderItemId=${item.orderItemId} to item payload (existing item)');
+    } else if (widget.orderId != null) {
+      // If we're editing an order but orderItemId is missing, log a warning
+      print('⚠️ WARNING: Editing order ${widget.orderId} but item.orderItemId is ${item.orderItemId}');
+      print('   isNewItem=$isNewItem, widget.orderId=${widget.orderId}');
     }
 
     return itemMap;

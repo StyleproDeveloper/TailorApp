@@ -852,21 +852,40 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
     for (const item of Item) {
       // Check if this is a new item (no orderItemId or orderItemId is 0/null)
       // Handle both undefined and null cases, as well as 0
-      const isNewItem = item?.orderItemId === undefined || item?.orderItemId === null || item?.orderItemId === 0;
+      // Also check if orderItemId exists in Measurement or Pattern as fallback
+      let itemOrderItemId = item?.orderItemId;
+      
+      // Fallback: Try to get orderItemId from Measurement or Pattern if not at item level
+      if ((itemOrderItemId === undefined || itemOrderItemId === null || itemOrderItemId === 0) && item?.Measurement) {
+        // Check if there's an orderItemId in the measurement (though this shouldn't happen)
+        const measurementOrderItemId = item.Measurement.orderItemId;
+        if (measurementOrderItemId && measurementOrderItemId > 0) {
+          logger.warn('Found orderItemId in Measurement instead of item level', { 
+            measurementOrderItemId,
+            itemKeys: Object.keys(item)
+          });
+          itemOrderItemId = measurementOrderItemId;
+        }
+      }
+      
+      const isNewItem = itemOrderItemId === undefined || itemOrderItemId === null || itemOrderItemId === 0;
       
       logger.debug('Processing item', { 
         isNewItem, 
-        orderItemId: item?.orderItemId,
-        orderItemIdType: typeof item?.orderItemId,
+        orderItemId: itemOrderItemId,
+        orderItemIdType: typeof itemOrderItemId,
+        itemOrderItemIdSource: item?.orderItemId ? 'item level' : 'not found',
         hasMeasurement: !!item?.Measurement,
         hasPattern: !!item?.Pattern,
         patternLength: item?.Pattern?.length || 0,
         dressTypeId: item?.dressTypeId,
         measurementKeys: item?.Measurement ? Object.keys(item.Measurement) : [],
+        itemKeys: Object.keys(item || {}),
       });
       
       if (isNewItem) {
         // Create new item (similar to createOrderService)
+        logger.info('Creating new item', { dressTypeId: item?.dressTypeId });
         const orderItemId = await getNextSequenceValue('orderItemId');
         const orderItemMeasurementId = await getNextSequenceValue('orderItemMeasurementId');
         const orderItemPatternId = await getNextSequenceValue('orderItemPatternId');
@@ -936,12 +955,14 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         await OrderItemPatternModel.create([pattern], { session });
       } else {
         // Update existing item (requires IDs)
+        // Use the resolved itemOrderItemId
+        const orderItemIdForUpdate = itemOrderItemId;
         const hasMeasurementId = item?.Measurement?.orderItemMeasurementId;
         const hasPattern = item.Pattern?.length > 0;
         const hasPatternId = item.Pattern?.[0]?.orderItemPatternId;
         
         logger.debug('Validating existing item IDs', {
-          orderItemId: item.orderItemId,
+          orderItemId: orderItemIdForUpdate,
           hasMeasurementId: !!hasMeasurementId,
           hasPattern,
           hasPatternId: !!hasPatternId,
@@ -956,15 +977,19 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
           if (!hasPatternId) missingFields.push('orderItemPatternId in Pattern[0]');
           
           logger.error('Missing IDs for update', {
-            orderItemId: item.orderItemId,
+            orderItemId: orderItemIdForUpdate,
             missingFields,
+            itemOrderItemId: item?.orderItemId,
+            itemKeys: Object.keys(item || {}),
+            measurementKeys: item?.Measurement ? Object.keys(item.Measurement) : [],
+            patternKeys: item?.Pattern?.[0] ? Object.keys(item.Pattern[0]) : [],
             item: JSON.stringify(item, null, 2)
           });
           
           throw new Error(`Missing IDs for update. Existing items require orderItemMeasurementId and orderItemPatternId. Missing: ${missingFields.join(', ')}`);
         }
 
-        const orderItemId = item.orderItemId;
+        const orderItemId = orderItemIdForUpdate;
         const orderItemMeasurementId = item.Measurement.orderItemMeasurementId;
         const orderItemPatternId = item.Pattern[0].orderItemPatternId;
 
