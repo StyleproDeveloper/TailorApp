@@ -3268,165 +3268,167 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 15, vertical: 12),
                                     child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(height: 5),
-                              Text('Dress Type',
-                                  style: Createorderstyle.selecteCustomer),
-                              SizedBox(height: 10),
-                                _buildDropdown(
-                                  "Select Dress Type",
-                                  item.selectedDressType,
-                                  dressTypes,
-                                  (selectedValue) {
-                                    setState(() {
-                                      item.selectedDressType = selectedValue;
-                                      item.selectedDressTypeId =
-                                          selectedValue?['id'];
-                                      item.dropdownDressController.text =
-                                          selectedValue?['name'] ?? '';
-                                      item.measurements = [];
-                                      item.selectedPatterns = [];
-                                      fetchMeasurements(
-                                          item.selectedDressTypeId, item);
-                                    });
-                                  },
-                                ),
-                              if (item.selectedDressTypeId != null) ...[
-                                SizedBox(height: 10),
-                                Text('Measurements'),
-                                SizedBox(height: 10),
-                                item.measurements.isNotEmpty
-                                    ? _buildMeasurementGrid(item)
-                                    : Text(
-                                        "No measurements available for this dress type."),
-                                SizedBox(height: 10),
-                                if (item.selectedPatterns.isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  const Text('Selected Patterns'),
-                                  const SizedBox(height: 10),
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children:
-                                        item.selectedPatterns.map((pattern) {
-                                      final category =
-                                          pattern['category'] ?? 'Unknown';
-                                      final names = pattern['name'];
-                                      final nameList = names is List
-                                          ? names
-                                          : names is String
-                                              ? [names]
-                                              : [];
-                                      return Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 4.0),
-                                        child: Text(
-                                          "$category: ${nameList.join(', ')}",
-                                          style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.black87),
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        SizedBox(height: 5),
+                                        Text('Dress Type',
+                                            style: Createorderstyle.selecteCustomer),
+                                        SizedBox(height: 10),
+                                        _buildDropdown(
+                                          "Select Dress Type",
+                                          item.selectedDressType,
+                                          dressTypes,
+                                          (selectedValue) {
+                                            setState(() {
+                                              item.selectedDressType = selectedValue;
+                                              item.selectedDressTypeId =
+                                                  selectedValue?['id'];
+                                              item.dropdownDressController.text =
+                                                  selectedValue?['name'] ?? '';
+                                              item.measurements = [];
+                                              item.selectedPatterns = [];
+                                              fetchMeasurements(
+                                                  item.selectedDressTypeId, item);
+                                            });
+                                          },
                                         ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ],
-                                SizedBox(height: 10),
-                                _buildButton('Add Pattern', onPressed: () {
-                                  handlePatternModal(context, item);
-                                }),
-                              ],
-                              SizedBox(height: 10),
-                              Text('Special Instructions'),
-                              SizedBox(height: 10),
-                              _buildTextField(
-                                "Add any special instructions here...",
-                                minLines: 4,
-                                controller: item.specialInstructions,
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                      child: _buildButton(
-                                          _isRecording && _currentRecordingItem == item
-                                              ? "⏹ Stop Recording"
-                                              : "🎙 Record Audio",
-                                          onPressed: () => _recordAudio(item),
-                                          color: _isRecording && _currentRecordingItem == item
-                                              ? Colors.red
-                                              : null)),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                      child: _buildButton("📷 Take Picture",
-                                          onPressed: () => _showImagePickerOptions(item))),
-                                ],
-                              ),
-                              // Display uploaded and local media (images and audio)
-                              if (item.images.isNotEmpty || item.audioFiles.isNotEmpty || item.uploadedMedia.isNotEmpty) ...[
-                                const SizedBox(height: 16),
-                                Row(
-                                  children: [
-                                    Icon(Icons.photo_library, size: 18, color: ColorPalatte.primary),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Pictures',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: ColorPalatte.primary,
-                                      ),
+                                        if (item.selectedDressTypeId != null) ...[
+                                          SizedBox(height: 10),
+                                          Text('Measurements'),
+                                          SizedBox(height: 10),
+                                          item.measurements.isNotEmpty
+                                              ? _buildMeasurementGrid(item)
+                                              : Text(
+                                                  "No measurements available for this dress type."),
+                                          SizedBox(height: 10),
+                                          if (item.selectedPatterns.isNotEmpty) ...[
+                                            const SizedBox(height: 10),
+                                            const Text('Selected Patterns'),
+                                            const SizedBox(height: 10),
+                                            Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children:
+                                                  item.selectedPatterns.map((pattern) {
+                                                final category =
+                                                    pattern['category'] ?? 'Unknown';
+                                                final names = pattern['name'];
+                                                final nameList = names is List
+                                                    ? names
+                                                    : names is String
+                                                        ? [names]
+                                                        : [];
+                                                return Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(bottom: 4.0),
+                                                  child: Text(
+                                                    "$category: ${nameList.join(', ')}",
+                                                    style: const TextStyle(
+                                                        fontSize: 14,
+                                                        color: Colors.black87),
+                                                  ),
+                                                );
+                                              }).toList(),
+                                            ),
+                                          ],
+                                          SizedBox(height: 10),
+                                          _buildButton('Add Pattern', onPressed: () {
+                                            handlePatternModal(context, item);
+                                          }),
+                                        ],
+                                        SizedBox(height: 10),
+                                        Text('Special Instructions'),
+                                        SizedBox(height: 10),
+                                        _buildTextField(
+                                          "Add any special instructions here...",
+                                          minLines: 4,
+                                          controller: item.specialInstructions,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                                child: _buildButton(
+                                                    _isRecording && _currentRecordingItem == item
+                                                        ? "⏹ Stop Recording"
+                                                        : "🎙 Record Audio",
+                                                    onPressed: () => _recordAudio(item),
+                                                    color: _isRecording && _currentRecordingItem == item
+                                                        ? Colors.red
+                                                        : null)),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                                child: _buildButton("📷 Take Picture",
+                                                    onPressed: () => _showImagePickerOptions(item))),
+                                          ],
+                                        ),
+                                        // Display uploaded and local media (images and audio)
+                                        if (item.images.isNotEmpty || item.audioFiles.isNotEmpty || item.uploadedMedia.isNotEmpty) ...[
+                                          const SizedBox(height: 16),
+                                          Row(
+                                            children: [
+                                              Icon(Icons.photo_library, size: 18, color: ColorPalatte.primary),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'Pictures',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: ColorPalatte.primary,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                '(${(item.images.length + item.uploadedMedia.length)} ${(item.images.length + item.uploadedMedia.length) == 1 ? 'picture' : 'pictures'})',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey[600],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          _buildMediaGrid(item),
+                                        ],
+                                        const SizedBox(height: 18),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: CustomDatePicker(
+                                                label: Textstring().deliveryDate,
+                                                controller: item.deliveryDate!,
+                                                allowFutureOnly: true,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Checkbox(
+                                              value: isUrgent,
+                                              onChanged: (value) {
+                                                setState(() {
+                                                  isUrgent = value!;
+                                                });
+                                              },
+                                            ),
+                                            const Text("Urgent"),
+                                          ],
+                                        ),
+                                        // Only show cost field if user has viewPrice permission
+                                        if (GlobalVariables.hasPermission('viewPrice')) ...[
+                                          Text('Cost'),
+                                          SizedBox(height: 5),
+                                          _buildTextField(
+                                            "Enter cost",
+                                            keyboardType: TextInputType.number,
+                                            controller: item.originalCost,
+                                          ),
+                                        ],
+                                      ],
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '(${(item.images.length + item.uploadedMedia.length)} ${(item.images.length + item.uploadedMedia.length) == 1 ? 'picture' : 'pictures'})',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                _buildMediaGrid(item),
-                              ],
-                              const SizedBox(height: 18),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: CustomDatePicker(
-                                      label: Textstring().deliveryDate,
-                                      controller: item.deliveryDate!,
-                                      allowFutureOnly: true,
-                                    ),
                                   ),
-                                  const SizedBox(width: 10),
-                                  Checkbox(
-                                    value: isUrgent,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        isUrgent = value!;
-                                      });
-                                    },
-                                  ),
-                                  const Text("Urgent"),
-                                ],
-                              ),
-                              // Only show cost field if user has viewPrice permission
-                              if (GlobalVariables.hasPermission('viewPrice')) ...[
-                                Text('Cost'),
-                                SizedBox(height: 5),
-                                _buildTextField(
-                                  "Enter cost",
-                                  keyboardType: TextInputType.number,
-                                  controller: item.originalCost,
-                                ),
                               ],
-                            ],
+                            ),
                           ),
-                                    ],
-                                  ),
-                                  ),
+                        ),
                       ],
                     );
                   }),
