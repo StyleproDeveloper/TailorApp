@@ -1,27 +1,25 @@
 # 📊 Production Deployment Status
 
-**Last Updated:** 2025-11-16 12:37 UTC
+**Last Updated:** 2025-11-26 10:45 UTC
 
 ## ✅ Frontend - DEPLOYED
 
 - **Platform:** Vercel
-- **Status:** ✅ Live
+- **Status:** ✅ Live (Auto-deploys on GitHub push)
 - **URL:** https://tailor-ctj5s10t3-stylepros-projects.vercel.app
 - **Build:** Successful
 - **Inspect:** https://vercel.com/stylepros-projects/tailor-app/Bgc56kJ7EG8aSt6MRRv9Q1w9uZmC
+- **Last Commit:** f5d8c99 - Fix: Allow adding new items in edit mode + highlight item headers
 
-## ⚠️ Backend - DEPLOYMENT IN PROGRESS
+## ✅ Backend - DEPLOYED
 
 - **Platform:** AWS Elastic Beanstalk
-- **Status:** ⚠️ Deployment Failed (IAM Permissions)
+- **Status:** ✅ Deployed Successfully
 - **Environment:** `tailorapp-env`
 - **Current URL:** http://tailorapp-env.eba-trkapp28.ap-south-1.elasticbeanstalk.com
-- **Issue:** Service role permissions need time to propagate (up to 2 hours)
-
-### Current Status:
-- Environment: Ready
-- Health: Grey (Suspended)
-- Last Deployed: v-20251114-163456 (Nov 14, 2025)
+- **Health:** Green
+- **Last Deployed:** app-251126_104452625524 (Nov 26, 2025 05:15 UTC)
+- **Deployment Status:** ✅ Environment update completed successfully
 
 ### Error:
 ```
@@ -74,3 +72,5 @@ eb deploy
 - ✅ Payment edit functionality
 - ✅ Subscribe page
 - ✅ Trial expiration check (supports older shops with subscriptionEndDate)
+- ✅ **NEW:** Fixed adding new items in edit mode (validation now allows null dressTypeId)
+- ✅ **NEW:** Highlighted item headers in order creation and detail screens
