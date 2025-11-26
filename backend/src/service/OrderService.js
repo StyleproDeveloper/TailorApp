@@ -715,24 +715,35 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
     session.startTransaction();
 
   try {
+    // Ensure orderId and shop_id are numbers
+    const numericOrderId = typeof orderId === 'string' ? parseInt(orderId, 10) : orderId;
+    const numericShopId = typeof shop_id === 'string' ? parseInt(shop_id, 10) : shop_id;
+    
+    if (isNaN(numericOrderId)) {
+      throw new Error(`Invalid orderId: ${orderId}`);
+    }
+    if (isNaN(numericShopId)) {
+      throw new Error(`Invalid shop_id: ${shop_id}`);
+    }
+    
     const { Order: orderDetails, Item, AdditionalCosts } = orderData || {};
 
-    logger.info('Updating order', { orderId, shop_id, itemCount: Item?.length || 0 });
+    logger.info('Updating order', { orderId: numericOrderId, shop_id: numericShopId, itemCount: Item?.length || 0 });
 
     // Check if shop exists
-    const shopExists = await isShopExists(shop_id);
-    if (!shopExists) throw new Error(`Shop with ID ${shop_id} does not exist`);
+    const shopExists = await isShopExists(numericShopId);
+    if (!shopExists) throw new Error(`Shop with ID ${numericShopId} does not exist`);
 
     // Initialize models
-    const OrderModel = getOrderModel(shop_id);
-    const OrderItemModel = getOrderItemModel(shop_id);
-    const OrderItemMeasurementModel = getOrderItemMeasurementModel(shop_id);
-    const OrderItemPatternModel = getOrderItemPatternModel(shop_id);
-    const OrderItemAdditionalCostModel = getOrderItemAdditionalCostModel(shop_id);
+    const OrderModel = getOrderModel(numericShopId);
+    const OrderItemModel = getOrderItemModel(numericShopId);
+    const OrderItemMeasurementModel = getOrderItemMeasurementModel(numericShopId);
+    const OrderItemPatternModel = getOrderItemPatternModel(numericShopId);
+    const OrderItemAdditionalCostModel = getOrderItemAdditionalCostModel(numericShopId);
 
     // Check if order exists
-    const existingOrder = await OrderModel.findOne({ orderId });
-    if (!existingOrder) throw new Error(`Order with ID ${orderId} not found`);
+    const existingOrder = await OrderModel.findOne({ orderId: numericOrderId });
+    if (!existingOrder) throw new Error(`Order with ID ${numericOrderId} not found`);
 
     // Calculate earliest delivery date from all items
     let earliestDeliveryDate = null;
@@ -865,7 +876,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         const pictures = item?.pictures || item?.Pictures || [];
         await OrderItemModel.create([{
           orderItemId,
-          orderId,
+          orderId: numericOrderId,
           dressTypeId: item?.dressTypeId ?? null,
           special_instructions: item?.special_instructions,
           recording: item?.recording,
@@ -886,7 +897,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         const { orderItemMeasurementId: _, orderId: __, orderItemId: ___, ...measurementData } = item?.Measurement || {};
         const measurement = {
           orderItemMeasurementId,
-          orderId,
+          orderId: numericOrderId,
           orderItemId,
           customerId: orderDetails?.customerId,
           dressTypeId: item?.dressTypeId,
@@ -910,7 +921,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         
         const pattern = {
           orderItemPatternId,
-          orderId,
+          orderId: numericOrderId,
           orderItemId,
           owner: item?.owner,
           patterns: validPatterns.length > 0 ? validPatterns : [{ category: 'Unknown', name: ['None'] }],
@@ -961,7 +972,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         // Handle both Pictures and pictures field names for backward compatibility
         const pictures = item?.pictures || item?.Pictures || [];
         await OrderItemModel.updateOne(
-          { orderItemId, orderId },
+          { orderItemId, orderId: numericOrderId },
           {
             $set: {
               dressTypeId: item.dressTypeId,
@@ -984,7 +995,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         // Exclude orderItemMeasurementId, orderId, and orderItemId from spread to prevent overwriting
         const { orderItemMeasurementId: _, orderId: __, orderItemId: ___, ...measurementUpdateData } = item.Measurement || {};
         await OrderItemMeasurementModel.updateOne(
-          { orderItemMeasurementId, orderId, orderItemId },
+          { orderItemMeasurementId, orderId: numericOrderId, orderItemId },
           {
             $set: {
               owner: item.owner,
@@ -996,7 +1007,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
 
         // Update Pattern
         await OrderItemPatternModel.updateOne(
-          { orderItemPatternId, orderId, orderItemId },
+          { orderItemPatternId, orderId: numericOrderId, orderItemId },
           {
             $set: {
               owner: item.owner,
@@ -1016,10 +1027,10 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
     // Handle additional costs - delete existing and recreate
     if (AdditionalCosts !== undefined) {
       // Delete all existing additional costs for this order
-      await OrderItemAdditionalCostModel.deleteMany({ orderId }, { session });
+      await OrderItemAdditionalCostModel.deleteMany({ orderId: numericOrderId }, { session });
       
       // Get the first order item ID to link additional costs to
-      const firstOrderItem = await OrderItemModel.findOne({ orderId }).sort({ orderItemId: 1 });
+      const firstOrderItem = await OrderItemModel.findOne({ orderId: numericOrderId }).sort({ orderItemId: 1 });
       const firstOrderItemId = firstOrderItem?.orderItemId;
       
       if (firstOrderItemId && Array.isArray(AdditionalCosts) && AdditionalCosts.length > 0) {
@@ -1052,8 +1063,8 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
     await session.abortTransaction();
     session.endSession();
     logger.error('Error updating order', {
-      orderId,
-      shop_id,
+      orderId: numericOrderId,
+      shop_id: numericShopId,
       error: err.message,
       stack: err.stack,
       errorName: err.name,

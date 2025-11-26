@@ -40,7 +40,13 @@ const updateOrder = asyncHandler(async (req, res) => {
     throw new CustomError('Shop ID is required', 400);
   }
   
-  const response = await updateOrderService(id, req.body, shop_id);
+  // Parse orderId to number
+  const orderId = parseInt(id, 10);
+  if (isNaN(orderId)) {
+    throw new CustomError('Invalid order ID', 400);
+  }
+  
+  const response = await updateOrderService(orderId, req.body, parseInt(shop_id, 10));
   if (!response) {
     throw new CustomError('Order not found', 404);
   }
