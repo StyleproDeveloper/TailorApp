@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tailorapp/Core/Constants/ColorPalatte.dart';
@@ -364,20 +365,70 @@ void initState() {
 
   Future<void> _pickContact() async {
     try {
-      // Request permission
-      final permission = await Permission.contacts.request();
-      
-      if (permission.isDenied || permission.isPermanentlyDenied) {
+      // Check if running on web - contact picker only works on mobile
+      if (kIsWeb) {
         CustomSnackbar.showSnackbar(
           context,
-          'Contact permission is required to select a contact',
+          'Contact picker is only available on mobile devices',
           duration: Duration(seconds: 2),
         );
         return;
       }
 
+      // Check current permission status first
+      print('📱 Checking contact permission status...');
+      var permissionStatus = await Permission.contacts.status;
+      print('📱 Current permission status: $permissionStatus');
+      
+      // Request permission if not already granted
+      if (!permissionStatus.isGranted) {
+        print('📱 Requesting contact permission...');
+        permissionStatus = await Permission.contacts.request();
+        print('📱 Permission request result: $permissionStatus');
+      }
+      
+      // Handle different permission states
+      if (permissionStatus.isDenied) {
+        print('❌ Contact permission denied');
+        CustomSnackbar.showSnackbar(
+          context,
+          'Contact permission is required to select a contact. Please grant permission when prompted.',
+          duration: Duration(seconds: 3),
+        );
+        return;
+      }
+      
+      if (permissionStatus.isPermanentlyDenied) {
+        print('❌ Contact permission permanently denied');
+        CustomSnackbar.showSnackbar(
+          context,
+          'Contact permission is permanently denied. Please enable it in app settings.',
+          duration: Duration(seconds: 3),
+        );
+        // Open app settings to allow user to enable permission
+        final opened = await openAppSettings();
+        if (opened) {
+          print('✅ App settings opened');
+        }
+        return;
+      }
+
+      if (!permissionStatus.isGranted) {
+        print('❌ Contact permission not granted: $permissionStatus');
+        CustomSnackbar.showSnackbar(
+          context,
+          'Contact permission was not granted. Status: $permissionStatus',
+          duration: Duration(seconds: 3),
+        );
+        return;
+      }
+      
+      print('✅ Contact permission granted, opening contact picker...');
+      
       // Open contact picker
       final contact = await FlutterContacts.openExternalPick();
+      
+      print('📱 Contact picker returned: ${contact != null ? "Contact selected" : "No contact selected"}');
       
       if (contact != null) {
         setState(() {
@@ -432,12 +483,13 @@ void initState() {
           duration: Duration(seconds: 2),
         );
       }
-    } catch (e) {
-      print('Error picking contact: $e');
+    } catch (e, stackTrace) {
+      print('❌ Error picking contact: $e');
+      print('Stack trace: $stackTrace');
       CustomSnackbar.showSnackbar(
         context,
-        'Failed to pick contact. Please try again.',
-        duration: Duration(seconds: 2),
+        'Failed to pick contact: ${e.toString()}. Please ensure contact permission is granted and try again.',
+        duration: Duration(seconds: 3),
       );
     }
   }
@@ -474,7 +526,7 @@ void initState() {
                         ),
                       ),
                       SizedBox(width: 8),
-                      if (customerId == null) // Only show for new customers
+                      if (customerId == null && !kIsWeb) // Only show for new customers and on mobile
                         Container(
                           height: 50,
                           width: 50,
@@ -487,7 +539,10 @@ void initState() {
                             ),
                           ),
                           child: IconButton(
-                            onPressed: _pickContact,
+                            onPressed: () {
+                              print('📱 Contact picker button pressed');
+                              _pickContact();
+                            },
                             icon: Icon(
                               Icons.contacts,
                               color: ColorPalatte.primary,

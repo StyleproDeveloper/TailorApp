@@ -66,10 +66,10 @@ const patternSchema = Joi.array()
 
 // Item Schema
 const itemSchema = Joi.object({
-  orderItemId: Joi.number().messages({
+  orderItemId: Joi.number().allow(null).optional().messages({
     'any.required': 'Item ID is required',
   }),
-  dressTypeId: Joi.number().required().messages({
+  dressTypeId: Joi.number().allow(null).optional().messages({
     'any.required': 'Dress Type is required!',
   }),
   Measurement: measurementSchema.required(),

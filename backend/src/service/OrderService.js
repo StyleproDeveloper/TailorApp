@@ -138,6 +138,8 @@ const createOrderService = async (orderData, shop_id) => {
         await getNextSequenceValue('orderItemPatternId');
 
       // Order Item
+      // Handle both Pictures and pictures field names for backward compatibility
+      const pictures = item?.pictures || item?.Pictures || [];
       orderItems.push({
         orderItemId,
         orderId,
@@ -145,7 +147,7 @@ const createOrderService = async (orderData, shop_id) => {
         special_instructions: item?.special_instructions,
         recording: item?.recording,
         videoLink: item?.videoLink,
-        Pictures: item?.Pictures,
+        pictures: pictures,
         delivery_date: item?.delivery_date, // Use delivery_date (with underscore) to match frontend
         amount: item?.amount,
         status: item?.status,
@@ -715,6 +717,8 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
   try {
     const { Order: orderDetails, Item, AdditionalCosts } = orderData || {};
 
+    logger.info('Updating order', { orderId, shop_id, itemCount: Item?.length || 0 });
+
     // Check if shop exists
     const shopExists = await isShopExists(shop_id);
     if (!shopExists) throw new Error(`Shop with ID ${shop_id} does not exist`);
@@ -836,7 +840,19 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
 
     for (const item of Item) {
       // Check if this is a new item (no orderItemId or orderItemId is 0/null)
-      const isNewItem = !item?.orderItemId || item.orderItemId === 0;
+      // Handle both undefined and null cases, as well as 0
+      const isNewItem = item?.orderItemId === undefined || item?.orderItemId === null || item?.orderItemId === 0;
+      
+      logger.debug('Processing item', { 
+        isNewItem, 
+        orderItemId: item?.orderItemId,
+        orderItemIdType: typeof item?.orderItemId,
+        hasMeasurement: !!item?.Measurement,
+        hasPattern: !!item?.Pattern,
+        patternLength: item?.Pattern?.length || 0,
+        dressTypeId: item?.dressTypeId,
+        measurementKeys: item?.Measurement ? Object.keys(item.Measurement) : [],
+      });
       
       if (isNewItem) {
         // Create new item (similar to createOrderService)
@@ -845,6 +861,8 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         const orderItemPatternId = await getNextSequenceValue('orderItemPatternId');
 
         // Create Order Item
+        // Handle both Pictures and pictures field names for backward compatibility
+        const pictures = item?.pictures || item?.Pictures || [];
         await OrderItemModel.create([{
           orderItemId,
           orderId,
@@ -852,7 +870,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
           special_instructions: item?.special_instructions,
           recording: item?.recording,
           videoLink: item?.videoLink,
-          Pictures: item?.Pictures,
+          pictures: pictures,
           delivery_date: item?.delivery_date,
           amount: item?.amount,
           status: item?.status,
@@ -864,6 +882,8 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         }], { session });
 
         // Create Measurement
+        // Exclude orderItemMeasurementId, orderId, and orderItemId from spread to prevent overwriting generated IDs
+        const { orderItemMeasurementId: _, orderId: __, orderItemId: ___, ...measurementData } = item?.Measurement || {};
         const measurement = {
           orderItemMeasurementId,
           orderId,
@@ -871,7 +891,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
           customerId: orderDetails?.customerId,
           dressTypeId: item?.dressTypeId,
           owner: item?.owner,
-          ...item?.Measurement,
+          ...measurementData,
         };
         await OrderItemMeasurementModel.create([measurement], { session });
 
@@ -891,12 +911,32 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         await OrderItemPatternModel.create([pattern], { session });
       } else {
         // Update existing item (requires IDs)
-        if (
-          !item?.Measurement?.orderItemMeasurementId ||
-          !item.Pattern?.length ||
-          !item.Pattern[0]?.orderItemPatternId
-        ) {
-          throw new Error('Missing IDs for update. Existing items require orderItemMeasurementId and orderItemPatternId.');
+        const hasMeasurementId = item?.Measurement?.orderItemMeasurementId;
+        const hasPattern = item.Pattern?.length > 0;
+        const hasPatternId = item.Pattern?.[0]?.orderItemPatternId;
+        
+        logger.debug('Validating existing item IDs', {
+          orderItemId: item.orderItemId,
+          hasMeasurementId: !!hasMeasurementId,
+          hasPattern,
+          hasPatternId: !!hasPatternId,
+          measurementId: hasMeasurementId,
+          patternId: hasPatternId
+        });
+        
+        if (!hasMeasurementId || !hasPattern || !hasPatternId) {
+          const missingFields = [];
+          if (!hasMeasurementId) missingFields.push('orderItemMeasurementId in Measurement');
+          if (!hasPattern) missingFields.push('Pattern array (empty or missing)');
+          if (!hasPatternId) missingFields.push('orderItemPatternId in Pattern[0]');
+          
+          logger.error('Missing IDs for update', {
+            orderItemId: item.orderItemId,
+            missingFields,
+            item: JSON.stringify(item, null, 2)
+          });
+          
+          throw new Error(`Missing IDs for update. Existing items require orderItemMeasurementId and orderItemPatternId. Missing: ${missingFields.join(', ')}`);
         }
 
         const orderItemId = item.orderItemId;
@@ -904,6 +944,8 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         const orderItemPatternId = item.Pattern[0].orderItemPatternId;
 
         // Update Order Item
+        // Handle both Pictures and pictures field names for backward compatibility
+        const pictures = item?.pictures || item?.Pictures || [];
         await OrderItemModel.updateOne(
           { orderItemId, orderId },
           {
@@ -912,7 +954,7 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
               special_instructions: item.special_instructions,
               recording: item.recording,
               videoLink: item.videoLink,
-              Pictures: item.Pictures,
+              pictures: pictures,
               delivery_date: item.delivery_date,
               amount: item.amount,
               status: item.status,
@@ -925,12 +967,14 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         );
 
         // Update Measurement
+        // Exclude orderItemMeasurementId, orderId, and orderItemId from spread to prevent overwriting
+        const { orderItemMeasurementId: _, orderId: __, orderItemId: ___, ...measurementUpdateData } = item.Measurement || {};
         await OrderItemMeasurementModel.updateOne(
           { orderItemMeasurementId, orderId, orderItemId },
           {
             $set: {
               owner: item.owner,
-              ...item.Measurement,
+              ...measurementUpdateData,
             },
           },
           { session }
@@ -993,6 +1037,12 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
+    logger.error('Error updating order', {
+      orderId,
+      shop_id,
+      error: err.message,
+      stack: err.stack
+    });
     throw err;
   }
 };

@@ -614,24 +614,60 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       elevation: 3,
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
-        // mark is here...!!!
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: Orderdetailstyles.titleHeadersSide,
-                overflow: TextOverflow.ellipsis,
+        // Highlighted header section
+        tilePadding: EdgeInsets.zero,
+        title: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: ColorPalatte.primary.withOpacity(0.1),
+            border: Border(
+              bottom: BorderSide(
+                color: ColorPalatte.primary.withOpacity(0.3),
+                width: 2,
               ),
             ),
-            // Only show cost if user has viewPrice permission
-            if (GlobalVariables.hasPermission('viewPrice'))
-              Text(
-                '₹$cost',
-                style: Orderdetailstyles.subTitles,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: ColorPalatte.primary,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        title.split(' - ')[0], // Extract "Item #1" part
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: Orderdetailstyles.titleHeadersSide,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-          ],
+              // Only show cost if user has viewPrice permission
+              if (GlobalVariables.hasPermission('viewPrice'))
+                Text(
+                  '₹$cost',
+                  style: Orderdetailstyles.subTitles,
+                ),
+            ],
+          ),
         ),
         children: [
           Padding(
@@ -724,18 +760,47 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              title,
-              style: Orderdetailstyles.subTitles,
+        tilePadding: EdgeInsets.zero,
+        title: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: ColorPalatte.primary.withOpacity(0.1),
+            border: Border(
+              bottom: BorderSide(
+                color: ColorPalatte.primary.withOpacity(0.3),
+                width: 2,
+              ),
             ),
-            Text(
-              '₹$cost',
-              style: Orderdetailstyles.subTitles,
-            ),
-          ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: ColorPalatte.primary,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                '₹$cost',
+                style: Orderdetailstyles.subTitles,
+              ),
+            ],
+          ),
         ),
         children: [
           Padding(

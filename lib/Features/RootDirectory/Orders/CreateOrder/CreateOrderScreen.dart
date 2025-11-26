@@ -1062,8 +1062,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
             print("Updated dropdownDressController with selected dress type: $selectedDressTypeName");
 
             // Extract IDs from measurement and pattern objects
+            // Backend returns 'measurement' (lowercase) and 'Pattern' (uppercase)
             final measurementList = (item['measurement'] as List<dynamic>?) ?? [];
-            final patternList = (item['pattern'] as List<dynamic>?) ?? [];
+            // Check both 'Pattern' (uppercase - from backend) and 'pattern' (lowercase - fallback)
+            final patternData = item['Pattern'] ?? item['pattern'];
+            final patternList = (patternData as List<dynamic>?) ?? [];
             
             // Extract orderItemMeasurementId from the first measurement object
             int? extractedOrderItemMeasurementId;
@@ -1078,17 +1081,31 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
               extractedOrderItemMeasurementId = item['orderItemMeasurementId'] as int?;
             }
             
-            // Extract orderItemPatternId from the first pattern object
+            // Extract orderItemPatternId from the pattern document wrapper (not from inner patterns array)
+            // The backend returns Pattern as an array of pattern documents, each with orderItemPatternId at the document level
             int? extractedOrderItemPatternId;
             if (patternList.isNotEmpty && patternList[0] is Map<String, dynamic>) {
-              final firstPattern = patternList[0] as Map<String, dynamic>;
-              extractedOrderItemPatternId = firstPattern['orderItemPatternId'] != null && firstPattern['orderItemPatternId'] > 0
-                  ? firstPattern['orderItemPatternId'] as int?
+              final firstPatternDoc = patternList[0] as Map<String, dynamic>;
+              // orderItemPatternId is at the pattern document level, not in the inner patterns array
+              extractedOrderItemPatternId = firstPatternDoc['orderItemPatternId'] != null && firstPatternDoc['orderItemPatternId'] > 0
+                  ? firstPatternDoc['orderItemPatternId'] as int?
                   : null;
+              print('🔍 Extracted orderItemPatternId from pattern document: $extractedOrderItemPatternId');
             }
-            // Fallback to item level if not found in pattern
+            // Fallback to item level if not found in pattern document
             if (extractedOrderItemPatternId == null && item['orderItemPatternId'] != null && item['orderItemPatternId'] > 0) {
               extractedOrderItemPatternId = item['orderItemPatternId'] as int?;
+              print('🔍 Using orderItemPatternId from item level: $extractedOrderItemPatternId');
+            }
+            
+            // If still null, this is a problem - log it
+            if (extractedOrderItemPatternId == null && widget.orderId != null) {
+              print('⚠️ WARNING: Could not extract orderItemPatternId for item ${item['orderItemId']}');
+              print('   Pattern data: $patternData');
+              print('   Pattern list length: ${patternList.length}');
+              if (patternList.isNotEmpty) {
+                print('   First pattern doc keys: ${(patternList[0] as Map).keys.toList()}');
+              }
             }
             
             final orderItem = OrderItem(
@@ -1134,16 +1151,20 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                           print(
                               'Pattern: category=${p['category']}, name=${p['name']}');
                           // Use the extracted orderItemPatternId or fallback to pattern's _id
+                          // For existing orders, we MUST have orderItemPatternId
                           int? patternId;
                           if (widget.orderId != null) {
                             patternId = extractedOrderItemPatternId ?? 
                                        (pattern['orderItemPatternId'] != null && pattern['orderItemPatternId'] > 0 
                                          ? pattern['orderItemPatternId'] as int? 
-                                         : null) ??
-                                       (p['_id'] != null ? int.tryParse(p['_id'].toString()) : null);
+                                         : null);
+                            // Don't use _id as fallback - it's not the same as orderItemPatternId
+                            if (patternId == null) {
+                              print('⚠️ WARNING: Could not find orderItemPatternId for pattern, extractedOrderItemPatternId=$extractedOrderItemPatternId');
+                            }
                           }
                           return {
-                            'orderItemPatternId': patternId ?? 0,
+                            'orderItemPatternId': patternId, // Use null instead of 0 - we'll check for null/0 separately
                             'category': p['category'] ?? 'Unknown',
                             'name': p['name'] is List
                                 ? p['name']
@@ -2558,14 +2579,17 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   showLoader(context);
 
   List<Map<String, dynamic>> items = orderItems.map((item) {
-    // Extract orderItemMeasurementId from measurements (only for update)
-    int? orderItemMeasurementId = widget.orderId != null ? item.orderItemMeasurementId : null;
+    // Check if this is a new item (no orderItemId or orderItemId is 0/null)
+    final isNewItem = widget.orderId == null || item.orderItemId == null || item.orderItemId == 0;
+    
+    // Extract orderItemMeasurementId from measurements (only for existing items, not new ones)
+    int? orderItemMeasurementId = (!isNewItem && widget.orderId != null) ? item.orderItemMeasurementId : null;
 
     // Dynamically construct Measurement object based on available measurements
     Map<String, dynamic> measurementMap = {};
     
-    // Include orderItemMeasurementId only for update
-    if (widget.orderId != null && orderItemMeasurementId != null) {
+    // Include orderItemMeasurementId only for existing items (not new items)
+    if (!isNewItem && orderItemMeasurementId != null && orderItemMeasurementId > 0) {
       measurementMap["orderItemMeasurementId"] = orderItemMeasurementId;
     }
 
@@ -2590,14 +2614,15 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
 
     // Construct the Item map
-    // Check if this is a new item (no orderItemId or orderItemId is 0/null)
-    final isNewItem = widget.orderId == null || item.orderItemId == null || item.orderItemId == 0;
+    // isNewItem already defined above
     
     Map<String, dynamic> itemMap = {
       "dressTypeId": item.selectedDressTypeId,
       "Measurement": measurementMap,
       "Pattern": item.selectedPatterns.isNotEmpty
-          ? item.selectedPatterns.map((pattern) {
+          ? item.selectedPatterns.asMap().entries.map((entry) {
+              final index = entry.key;
+              final pattern = entry.value;
               Map<String, dynamic> patternMap = {
                 "category": pattern['category'] ?? 'Unknown',
                 "name": pattern['name'] is List
@@ -2605,14 +2630,47 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                     : [pattern['name'].toString()],
               };
               // Include orderItemPatternId only for existing items (not new items)
-              // Use pattern's own ID if available, otherwise fall back to item's ID
+              // For existing items, the first pattern MUST have orderItemPatternId for backend validation
               if (!isNewItem) {
-                final patternId = pattern['orderItemPatternId'] != null && pattern['orderItemPatternId'] > 0
-                    ? pattern['orderItemPatternId'] as int?
-                    : (item.orderItemPatternId != null && item.orderItemPatternId! > 0
-                        ? item.orderItemPatternId
-                        : null);
-                if (patternId != null) {
+                // Get patternId from pattern object, or fallback to item's orderItemPatternId
+                // Handle both int and dynamic types
+                int? patternId;
+                final patternIdValue = pattern['orderItemPatternId'];
+                if (patternIdValue != null) {
+                  if (patternIdValue is int && patternIdValue > 0) {
+                    patternId = patternIdValue;
+                  } else if (patternIdValue is num && patternIdValue.toInt() > 0) {
+                    patternId = patternIdValue.toInt();
+                  } else if (patternIdValue == 0) {
+                    patternId = null; // 0 is not a valid ID
+                  }
+                }
+                
+                // If not found in pattern, use item's orderItemPatternId
+                if ((patternId == null || patternId == 0) && item.orderItemPatternId != null && item.orderItemPatternId! > 0) {
+                  patternId = item.orderItemPatternId;
+                  print('🔍 Using item.orderItemPatternId=$patternId as fallback');
+                }
+                
+                // Always set orderItemPatternId on the first pattern for existing items (required by backend)
+                if (index == 0) {
+                  if (patternId != null && patternId > 0) {
+                    patternMap["orderItemPatternId"] = patternId;
+                    print('✅ Setting orderItemPatternId=$patternId on first pattern for item ${item.orderItemId}');
+                  } else {
+                    // This is a critical error - backend will reject the request
+                    print('❌ ERROR: Existing item ${item.orderItemId} missing orderItemPatternId for first pattern!');
+                    print('   Pattern orderItemPatternId: ${pattern['orderItemPatternId']}');
+                    print('   Item orderItemPatternId: ${item.orderItemPatternId}');
+                    print('   Pattern keys: ${pattern.keys.toList()}');
+                    // Still try to set it if item has it - backend will give a better error message
+                    if (item.orderItemPatternId != null && item.orderItemPatternId! > 0) {
+                      patternMap["orderItemPatternId"] = item.orderItemPatternId;
+                      print('⚠️ Using item.orderItemPatternId as last resort: ${item.orderItemPatternId}');
+                    }
+                  }
+                } else if (patternId != null && patternId > 0) {
+                  // Optional: include ID for other patterns too if available
                   patternMap["orderItemPatternId"] = patternId;
                 }
               }
@@ -3119,75 +3177,97 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                                 });
                               }
                             },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 15, vertical: 12),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            child: Column(
+                              children: [
+                                // Highlighted header section
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 15, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: ColorPalatte.primary.withOpacity(0.1),
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: ColorPalatte.primary.withOpacity(0.3),
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
-                                                Text(
-                                                  "Item ${index + 1}",
-                                                  style: TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
-                                                      color: ColorPalatte.primary),
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Container(
+                                                      padding: EdgeInsets.symmetric(
+                                                          horizontal: 8, vertical: 4),
+                                                      decoration: BoxDecoration(
+                                                        color: ColorPalatte.primary,
+                                                        borderRadius: BorderRadius.circular(6),
+                                                      ),
+                                                      child: Text(
+                                                        "Item ${index + 1}",
+                                                        style: TextStyle(
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 16,
+                                                            color: Colors.white),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    if (item.selectedDressType != null)
+                                                      Text(
+                                                        item.selectedDressType!['name'] ?? 'Unknown Dress',
+                                                        style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: Colors.grey[700],
+                                                            fontWeight: FontWeight.w600),
+                                                      )
+                                                    else
+                                                      Text(
+                                                        'Select Dress Type',
+                                                        style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: Colors.grey[500],
+                                                            fontStyle: FontStyle.italic),
+                                                      ),
+                                                  ],
                                                 ),
-                                                if (item.selectedDressType != null)
-                                                  Text(
-                                                    item.selectedDressType!['name'] ?? 'Unknown Dress',
-                                                    style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors.grey[600],
-                                                        fontWeight: FontWeight.w500),
-                                                  )
-                                                else
-                                                  Text(
-                                                    'Select Dress Type',
-                                                    style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors.grey[400],
-                                                        fontStyle: FontStyle.italic),
-                                                  ),
+                                                IconButton(
+                                                  onPressed: () => _showDeleteConfirmation(index),
+                                                  icon: Icon(Icons.delete, color: Colors.red, size: 20),
+                                                  tooltip: 'Remove Item',
+                                                  padding: EdgeInsets.zero,
+                                                  constraints: BoxConstraints(),
+                                                ),
                                               ],
-                                            ),
-                                            IconButton(
-                                              onPressed: () => _showDeleteConfirmation(index),
-                                              icon: Icon(Icons.delete, color: Colors.red, size: 20),
-                                              tooltip: 'Remove Item',
-                                              padding: EdgeInsets.zero,
-                                              constraints: BoxConstraints(),
                                             ),
                                           ],
                                         ),
-                                        const SizedBox(height: 4),
-                                      ],
-                                    ),
+                                      ),
+                                      Icon(
+                                        item.isExpanded
+                                            ? Icons.keyboard_arrow_up
+                                            : Icons.keyboard_arrow_down,
+                                        size: 28,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ],
                                   ),
-                                  Icon(
-                                    item.isExpanded
-                                        ? Icons.keyboard_arrow_up
-                                        : Icons.keyboard_arrow_down,
-                                    size: 28,
-                                    color: Colors.grey[700],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 3),
-                        if (item.isExpanded)
-                          Column(
+                                ),
+                                // Expanded content section
+                                if (item.isExpanded)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 15, vertical: 12),
+                                    child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               SizedBox(height: 5),
@@ -3344,6 +3424,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                               ],
                             ],
                           ),
+                                    ],
+                                  ),
+                                  ),
                       ],
                     );
                   }),
