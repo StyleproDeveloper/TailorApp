@@ -896,18 +896,32 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         await OrderItemMeasurementModel.create([measurement], { session });
 
         // Create Pattern
+        // Filter out invalid patterns (empty category or name)
+        const validPatterns = Array.isArray(item?.Pattern)
+          ? item?.Pattern
+              .filter((p) => p && (p?.category || p?.name))
+              .map((p) => ({
+                category: p?.category || 'Unknown',
+                name: Array.isArray(p?.name) 
+                  ? (p?.name.length > 0 ? p?.name : ['None'])
+                  : (p?.name ? [p?.name] : ['None']),
+              }))
+          : [];
+        
         const pattern = {
           orderItemPatternId,
           orderId,
           orderItemId,
           owner: item?.owner,
-          patterns: Array.isArray(item?.Pattern)
-            ? item?.Pattern.map((p) => ({
-                category: p?.category,
-                name: Array.isArray(p?.name) ? p?.name : [p?.name],
-              }))
-            : [],
+          patterns: validPatterns.length > 0 ? validPatterns : [{ category: 'Unknown', name: ['None'] }],
         };
+        
+        logger.debug('Creating pattern for new item', {
+          orderItemId,
+          patternCount: validPatterns.length,
+          patterns: validPatterns,
+        });
+        
         await OrderItemPatternModel.create([pattern], { session });
       } else {
         // Update existing item (requires IDs)

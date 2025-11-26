@@ -48,18 +48,18 @@ const measurementSchema = Joi.object({
 const patternSchema = Joi.array()
   .items(
     Joi.object({
-      orderItemPatternId: Joi.number().messages({
+      orderItemPatternId: Joi.number().allow(null).optional().messages({
         'any.required': 'Pattern ID is required',
       }),
-      category: Joi.string().required().messages({
+      category: Joi.string().allow('', null).optional().messages({
         'any.required': 'Pattern category is required',
       }),
-      name: Joi.array().items(Joi.string()).required().messages({
+      name: Joi.array().items(Joi.string()).allow(null, []).optional().messages({
         'any.required': 'Pattern names are required',
       }),
-    })
+    }).unknown(true) // Allow additional fields
   )
-  .required()
+  .min(0) // Allow empty array for new items
   .messages({
     'any.required': 'Pattern is required',
   });
@@ -72,8 +72,12 @@ const itemSchema = Joi.object({
   dressTypeId: Joi.number().allow(null).optional().messages({
     'any.required': 'Dress Type is required!',
   }),
-  Measurement: measurementSchema.required(),
-  Pattern: patternSchema.required(),
+  Measurement: measurementSchema.allow(null, {}).messages({
+    'any.required': 'Measurement is required',
+  }),
+  Pattern: patternSchema.allow(null, []).messages({
+    'any.required': 'Pattern is required',
+  }),
   special_instructions: Joi.string().allow(''),
   recording: Joi.string().allow(''),
   videoLink: Joi.string().allow(''),

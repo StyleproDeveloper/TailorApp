@@ -86,15 +86,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
     print('🔵 Gallery: _showImagePickerOptions called');
     
     try {
-      if (kIsWeb) {
-        print('🔵 Gallery: Running on web, opening file picker directly');
-        // On web, directly open file picker
-        await _pickFromGallery();
-        return;
-      }
-
-      print('🔵 Gallery: Running on mobile, showing bottom sheet');
-      // On mobile, show bottom sheet
+      print('🔵 Gallery: Showing bottom sheet with upload options');
+      // Show bottom sheet with all upload options
       await showModalBottomSheet(
         context: context,
         shape: const RoundedRectangleBorder(
@@ -107,19 +100,38 @@ class _GalleryScreenState extends State<GalleryScreen> {
               child: Wrap(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.camera_alt, color: ColorPalatte.primary),
-                    title: const Text("Take Photo"),
+                    leading: const Icon(Icons.camera_alt, color: ColorPalatte.primary, size: 28),
+                    title: const Text("Take Photo", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
                     onTap: () {
                       Navigator.pop(context);
                       _pickFromCamera();
                     },
                   ),
+                  const Divider(),
                   ListTile(
-                    leading: const Icon(Icons.photo_library, color: ColorPalatte.primary),
-                    title: const Text("Choose from Gallery"),
+                    leading: const Icon(Icons.photo_library, color: ColorPalatte.primary, size: 28),
+                    title: const Text("Photo Library", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
                     onTap: () {
                       Navigator.pop(context);
                       _pickFromGallery();
+                    },
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.folder, color: ColorPalatte.primary, size: 28),
+                    title: const Text("Choose Files", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _pickFromFiles();
+                    },
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.cloud, color: ColorPalatte.primary, size: 28),
+                    title: const Text("Google Drive", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _pickFromGoogleDrive();
                     },
                   ),
                 ],
@@ -165,7 +177,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   Future<void> _pickFromGallery() async {
     try {
-      print('🖼️ Gallery: Opening file picker...');
+      print('🖼️ Gallery: Opening photo library...');
       
       // Use pickMultiImage for multiple selection
       final List<XFile>? pickedFiles = await _picker.pickMultiImage(
@@ -193,6 +205,71 @@ class _GalleryScreenState extends State<GalleryScreen> {
         CustomSnackbar.showSnackbar(
           context,
           'Error selecting images: ${e.toString()}',
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFromFiles() async {
+    try {
+      print('📁 Gallery: Opening file picker...');
+      
+      // Use pickMultiImage for file selection (works for both images and files)
+      final List<XFile>? pickedFiles = await _picker.pickMultiImage(
+        imageQuality: 85,
+      );
+
+      print('📁 Gallery: Files selected: ${pickedFiles?.length ?? 0}');
+
+      if (pickedFiles != null && pickedFiles.isNotEmpty) {
+        print('📁 Gallery: Processing ${pickedFiles.length} file(s)');
+        
+        // Upload all selected files
+        for (var file in pickedFiles) {
+          await _uploadImageToBackend(file);
+        }
+
+        print('✅ Gallery: Uploaded ${pickedFiles.length} file(s)');
+      } else {
+        print('⚠️ Gallery: No files selected');
+      }
+    } catch (e, stackTrace) {
+      print('❌ Gallery: Error picking files: $e');
+      print('❌ Gallery: Stack trace: $stackTrace');
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Error selecting files: ${e.toString()}',
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFromGoogleDrive() async {
+    try {
+      print('☁️ Gallery: Google Drive picker...');
+      
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Google Drive integration coming soon!',
+          duration: const Duration(seconds: 2),
+        );
+      }
+      
+      // TODO: Implement Google Drive integration
+      // This would require:
+      // 1. Google Drive API setup
+      // 2. OAuth authentication
+      // 3. File picker integration
+      
+    } catch (e, stackTrace) {
+      print('❌ Gallery: Error with Google Drive: $e');
+      print('❌ Gallery: Stack trace: $stackTrace');
+      if (mounted) {
+        CustomSnackbar.showSnackbar(
+          context,
+          'Error accessing Google Drive: ${e.toString()}',
         );
       }
     }
