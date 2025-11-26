@@ -424,22 +424,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
       appBar: Commonheader(
         title: 'Gallery',
         showBackArrow: false,
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16.0),
-            child: TextButton.icon(
-              onPressed: () {
-                print('🔵 Gallery: Upload button clicked in app bar');
-                _showImagePickerOptions();
-              },
-              icon: const Icon(Icons.upload, color: ColorPalatte.primary, size: 20),
-              label: const Text(
-                'Upload',
-                style: TextStyle(color: ColorPalatte.primary, fontSize: 16),
-              ),
-            ),
-          ),
-        ],
       ),
       body: (_isLoading || _isUploading)
           ? const Center(child: CircularProgressIndicator())
@@ -578,18 +562,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     ),
                   ],
                 ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          print('🔵 Gallery: FAB clicked');
-          _showImagePickerOptions();
-        },
-        backgroundColor: ColorPalatte.primary,
-        icon: const Icon(Icons.add_photo_alternate, color: Colors.white),
-        label: const Text(
-          'Upload',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-      ),
     );
   }
 }
