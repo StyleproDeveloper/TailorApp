@@ -957,9 +957,51 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         // Update existing item (requires IDs)
         // Use the resolved itemOrderItemId
         const orderItemIdForUpdate = itemOrderItemId;
-        const hasMeasurementId = item?.Measurement?.orderItemMeasurementId;
+        
+        // Check for measurement ID - can be in Measurement object or we can look it up
+        let hasMeasurementId = item?.Measurement?.orderItemMeasurementId;
+        
+        // Check for pattern ID - must be on first pattern
         const hasPattern = item.Pattern?.length > 0;
-        const hasPatternId = item.Pattern?.[0]?.orderItemPatternId;
+        let hasPatternId = item.Pattern?.[0]?.orderItemPatternId;
+        
+        // If pattern ID is missing but we have orderItemId, try to look it up from database
+        if (!hasPatternId && orderItemIdForUpdate && hasPattern) {
+          try {
+            const existingPattern = await OrderItemPatternModel.findOne({ 
+              orderItemId: orderItemIdForUpdate, 
+              orderId: numericOrderId 
+            }).session(session);
+            if (existingPattern && existingPattern.orderItemPatternId) {
+              hasPatternId = existingPattern.orderItemPatternId;
+              logger.info('Found orderItemPatternId from database', { 
+                orderItemId: orderItemIdForUpdate,
+                orderItemPatternId: hasPatternId 
+              });
+            }
+          } catch (lookupError) {
+            logger.warn('Could not lookup pattern ID', { error: lookupError.message });
+          }
+        }
+        
+        // If measurement ID is missing but we have orderItemId, try to look it up from database
+        if (!hasMeasurementId && orderItemIdForUpdate) {
+          try {
+            const existingMeasurement = await OrderItemMeasurementModel.findOne({ 
+              orderItemId: orderItemIdForUpdate, 
+              orderId: numericOrderId 
+            }).session(session);
+            if (existingMeasurement && existingMeasurement.orderItemMeasurementId) {
+              hasMeasurementId = existingMeasurement.orderItemMeasurementId;
+              logger.info('Found orderItemMeasurementId from database', { 
+                orderItemId: orderItemIdForUpdate,
+                orderItemMeasurementId: hasMeasurementId 
+              });
+            }
+          } catch (lookupError) {
+            logger.warn('Could not lookup measurement ID', { error: lookupError.message });
+          }
+        }
         
         logger.debug('Validating existing item IDs', {
           orderItemId: orderItemIdForUpdate,
@@ -967,7 +1009,10 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
           hasPattern,
           hasPatternId: !!hasPatternId,
           measurementId: hasMeasurementId,
-          patternId: hasPatternId
+          patternId: hasPatternId,
+          itemKeys: Object.keys(item || {}),
+          measurementKeys: item?.Measurement ? Object.keys(item.Measurement) : [],
+          patternKeys: item?.Pattern?.[0] ? Object.keys(item.Pattern[0]) : [],
         });
         
         if (!hasMeasurementId || !hasPattern || !hasPatternId) {
