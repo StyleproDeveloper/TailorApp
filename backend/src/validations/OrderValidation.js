@@ -72,7 +72,7 @@ const itemSchema = Joi.object({
   dressTypeId: Joi.number().allow(null).optional().messages({
     'any.required': 'Dress Type is required!',
   }),
-  Measurement: measurementSchema.allow(null, {}).optional().messages({
+  Measurement: measurementSchema.allow(null).optional().messages({
     'any.required': 'Measurement is required',
   }),
   Pattern: patternSchema.allow(null).optional().messages({
