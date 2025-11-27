@@ -54,7 +54,7 @@ const patternSchema = Joi.array()
       category: Joi.string().allow('', null).optional().messages({
         'any.required': 'Pattern category is required',
       }),
-      name: Joi.array().items(Joi.string()).allow(null).empty([]).optional().messages({
+      name: Joi.array().items(Joi.string()).allow(null).optional().messages({
         'any.required': 'Pattern names are required',
       }),
     }).unknown(true) // Allow additional fields
