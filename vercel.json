@@ -87,11 +87,7 @@
     },
     {
       "source": "/manifest.json",
-      "destination": "/manifest.json",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/manifest+json"
-      }
+      "destination": "/manifest.json"
     },
     {
       "source": "/flutter_service_worker.js",
