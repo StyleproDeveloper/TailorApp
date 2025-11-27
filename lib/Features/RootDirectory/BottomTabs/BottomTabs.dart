@@ -14,6 +14,7 @@ import 'package:tailorapp/Core/Widgets/TrialBanner.dart';
 import 'package:tailorapp/Core/Services/Services.dart';
 import 'package:tailorapp/Core/Services/Urls.dart';
 import 'package:tailorapp/GlobalVariables.dart';
+import 'package:tailorapp/Routes/App_route.dart';
 
 class Homescreen extends StatefulWidget {
   const Homescreen({super.key});
@@ -355,7 +356,7 @@ class _HomescreenState extends State<Homescreen> {
                       final prefs = await SharedPreferences.getInstance();
                       await prefs.clear();
                       // Navigate to login
-                      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+                      Navigator.of(context).pushNamedAndRemoveUntil(AppRoute.login, (route) => false);
                     },
                     icon: Icon(Icons.logout),
                     label: Text('Re-login to Refresh Permissions'),
