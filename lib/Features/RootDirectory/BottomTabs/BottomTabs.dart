@@ -356,7 +356,7 @@ class _HomescreenState extends State<Homescreen> {
                       final prefs = await SharedPreferences.getInstance();
                       await prefs.clear();
                       // Navigate to login
-                      Navigator.of(context).pushNamedAndRemoveUntil(AppRoute.login, (route) => false);
+                      Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
                     },
                     icon: Icon(Icons.logout),
                     label: Text('Re-login to Refresh Permissions'),
