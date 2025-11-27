@@ -341,10 +341,28 @@ class _HomescreenState extends State<Homescreen> {
                   ),
                   SizedBox(height: 16),
                   TextButton(
-                    onPressed: () {
+                    onPressed: () async {
+                      // Reload permissions from SharedPreferences
+                      await GlobalVariables.loadShopId();
                       setState(() {}); // Refresh
                     },
                     child: Text('Refresh'),
+                  ),
+                  SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      // Force re-login to fetch permissions again
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.clear();
+                      // Navigate to login
+                      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+                    },
+                    icon: Icon(Icons.logout),
+                    label: Text('Re-login to Refresh Permissions'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ],
               ),
