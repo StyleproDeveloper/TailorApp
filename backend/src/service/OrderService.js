@@ -1163,7 +1163,17 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
       stack: err.stack,
       errorName: err.name,
       errorCode: err.code,
-      validationDetails: err.details
+      validationDetails: err.details,
+      itemCount: Item?.length || 0,
+      itemDetails: Item?.map((item, idx) => ({
+        index: idx,
+        hasOrderItemId: !!item?.orderItemId,
+        orderItemId: item?.orderItemId,
+        dressTypeId: item?.dressTypeId,
+        hasMeasurement: !!item?.Measurement,
+        hasPattern: !!item?.Pattern,
+        patternLength: item?.Pattern?.length || 0,
+      }))
     });
     
     // Provide more specific error messages
@@ -1172,6 +1182,11 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         ? err.details.map(d => d.message).join(', ')
         : err.message || 'Validation error';
       throw new Error(`Validation failed: ${errorMessage}`);
+    }
+    
+    // Provide better error messages for common issues
+    if (err.message && err.message.includes('required')) {
+      throw new Error(`Missing required field: ${err.message}`);
     }
     
     throw err;
