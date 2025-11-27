@@ -17,7 +17,7 @@ const dateOnly = () =>
 
 // Measurement Schema
 const measurementSchema = Joi.object({
-  orderItemMeasurementId: Joi.number().messages({
+  orderItemMeasurementId: Joi.number().allow(null).optional().messages({
     'any.required': 'Measurement ID is required',
   }),
   length: Joi.number().allow(null),

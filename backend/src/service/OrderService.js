@@ -913,31 +913,52 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
 
         // Create Measurement
         // Exclude orderItemMeasurementId, orderId, and orderItemId from spread to prevent overwriting generated IDs
+        // Also exclude any null/undefined values that might cause issues
         const { orderItemMeasurementId: _, orderId: __, orderItemId: ___, ...measurementData } = item?.Measurement || {};
+        
+        // Clean measurementData to remove null/undefined values that might cause validation issues
+        const cleanedMeasurementData = {};
+        for (const [key, value] of Object.entries(measurementData || {})) {
+          if (value !== undefined) {
+            cleanedMeasurementData[key] = value;
+          }
+        }
+        
         const measurement = {
           orderItemMeasurementId,
           orderId: numericOrderId,
           orderItemId,
-          customerId: orderDetails?.customerId,
-          dressTypeId: item?.dressTypeId,
+          customerId: orderDetails?.customerId || existingOrder?.customerId,
+          dressTypeId: item?.dressTypeId ?? null,
           owner: item?.owner,
-          ...measurementData,
+          ...cleanedMeasurementData,
         };
+        
+        logger.debug('Creating measurement for new item', {
+          orderItemId,
+          orderItemMeasurementId,
+          measurementKeys: Object.keys(measurement),
+          hasMeasurementData: Object.keys(cleanedMeasurementData).length > 0,
+        });
+        
         await OrderItemMeasurementModel.create([measurement], { session });
 
         // Create Pattern
         // Filter out invalid patterns (empty category or name)
-        const validPatterns = Array.isArray(item?.Pattern)
-          ? item?.Pattern
-              .filter((p) => p && (p?.category || p?.name))
-              .map((p) => ({
-                category: p?.category || 'Unknown',
-                name: Array.isArray(p?.name) 
-                  ? (p?.name.length > 0 ? p?.name : ['None'])
-                  : (p?.name ? [p?.name] : ['None']),
-              }))
-          : [];
+        // Handle both empty arrays and null/undefined
+        let validPatterns = [];
+        if (Array.isArray(item?.Pattern) && item.Pattern.length > 0) {
+          validPatterns = item.Pattern
+            .filter((p) => p && (p?.category || p?.name))
+            .map((p) => ({
+              category: p?.category || 'Unknown',
+              name: Array.isArray(p?.name) 
+                ? (p?.name.length > 0 ? p?.name : ['None'])
+                : (p?.name ? [p?.name] : ['None']),
+            }));
+        }
         
+        // Always create a pattern, even if empty - use default
         const pattern = {
           orderItemPatternId,
           orderId: numericOrderId,
@@ -950,6 +971,9 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
           orderItemId,
           patternCount: validPatterns.length,
           patterns: validPatterns,
+          originalPattern: item?.Pattern,
+          hasPattern: !!item?.Pattern,
+          patternType: Array.isArray(item?.Pattern) ? 'array' : typeof item?.Pattern,
         });
         
         await OrderItemPatternModel.create([pattern], { session });
