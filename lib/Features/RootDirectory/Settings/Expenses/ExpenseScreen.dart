@@ -120,6 +120,10 @@ class _ExpensescreenState extends State<Expensescreen> {
             return {
               'name': expense['name'] ?? 'Unknown Expense',
               'expenseId': expense['expenseId'] ?? 'N/A',
+              'rent': expense['rent'] ?? 0,
+              'electricity': expense['electricity'] ?? 0,
+              'salary': expense['salary'] ?? 0,
+              'miscellaneous': expense['miscellaneous'] ?? 0,
             };
           }));
           if (expenseData.length < pageSize) {
@@ -156,18 +160,40 @@ class _ExpensescreenState extends State<Expensescreen> {
   }
 
   void _showEditExpenseModal(
-      BuildContext context, Map<String, dynamic> userData) {
+      BuildContext context, Map<String, dynamic> expenseData) {
     showDialog(
       context: context,
       barrierDismissible: true,
       builder: (context) => Addexpensemodal(
-        expenseData: userData,
+        expenseData: expenseData,
         onClose: () {
           Navigator.of(context).pop();
         },
         submit: () {
           _fetchExpenseData();
         },
+      ),
+    );
+  }
+  
+  Widget _buildExpenseRow(String label, dynamic amount) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+          ),
+          Text(
+            '₹${(amount is num ? amount : 0).toStringAsFixed(2)}',
+            style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87),
+          ),
+        ],
       ),
     );
   }
@@ -234,19 +260,63 @@ class _ExpensescreenState extends State<Expensescreen> {
                           );
                         }
                         final expense = expenses[index];
+                        // Calculate total expense
+                        final total = (expense['rent'] ?? 0) +
+                            (expense['electricity'] ?? 0) +
+                            (expense['salary'] ?? 0) +
+                            (expense['miscellaneous'] ?? 0);
+                        
                         return Card(
                           elevation: 2,
                           margin: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: ListTile(
-                            title: Text(expense['name'],
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
-                            subtitle:
-                                Text("Expense ID: ${expense['expenseId']}"),
-                            leading: const Icon(Icons.money,
-                                color: ColorPalatte.primary),
-                            onTap: () =>
-                                _showEditExpenseModal(context, expense),
+                          child: InkWell(
+                            onTap: () => _showEditExpenseModal(context, expense),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.money,
+                                          color: ColorPalatte.primary),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          expense['name'],
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16),
+                                        ),
+                                      ),
+                                      Text(
+                                        '₹${total.toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                            color: ColorPalatte.primary),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (expense['rent'] != null && expense['rent'] > 0)
+                                    _buildExpenseRow('Rent', expense['rent']),
+                                  if (expense['electricity'] != null && expense['electricity'] > 0)
+                                    _buildExpenseRow('Electricity', expense['electricity']),
+                                  if (expense['salary'] != null && expense['salary'] > 0)
+                                    _buildExpenseRow('Salary', expense['salary']),
+                                  if (expense['miscellaneous'] != null && expense['miscellaneous'] > 0)
+                                    _buildExpenseRow('Miscellaneous', expense['miscellaneous']),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    "ID: ${expense['expenseId']}",
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600]),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         );
                       },

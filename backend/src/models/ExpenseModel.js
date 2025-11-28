@@ -18,6 +18,26 @@ const ExpenseSchema = new Schema(
       required: true,
       maxlength: 100,
     },
+    rent: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    electricity: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    salary: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    miscellaneous: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     owner: {
       type: String,
       default: null,

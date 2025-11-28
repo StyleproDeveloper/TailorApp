@@ -24,6 +24,10 @@ class Addexpensemodal extends StatefulWidget {
 
 class _AddexpensemodalState extends State<Addexpensemodal> {
   final TextEditingController roleNameController = TextEditingController();
+  final TextEditingController rentController = TextEditingController();
+  final TextEditingController electricityController = TextEditingController();
+  final TextEditingController salaryController = TextEditingController();
+  final TextEditingController miscellaneousController = TextEditingController();
 
   void handleSaveRole() async {
     int? id = GlobalVariables.shopIdGet;
@@ -46,9 +50,20 @@ class _AddexpensemodalState extends State<Addexpensemodal> {
     }
     try {
       showLoader(context);
+      
+      // Parse amounts, defaulting to 0 if empty
+      final rent = double.tryParse(rentController.text) ?? 0.0;
+      final electricity = double.tryParse(electricityController.text) ?? 0.0;
+      final salary = double.tryParse(salaryController.text) ?? 0.0;
+      final miscellaneous = double.tryParse(miscellaneousController.text) ?? 0.0;
+      
       final payload = {
         'shop_id': id,
         'name': capitalize(roleNameController.text),
+        'rent': rent,
+        'electricity': electricity,
+        'salary': salary,
+        'miscellaneous': miscellaneous,
         // 'owner': 'test'
       };
       Response response;
@@ -85,7 +100,21 @@ class _AddexpensemodalState extends State<Addexpensemodal> {
     super.initState();
     if (widget.expenseData != null) {
       roleNameController.text = widget.expenseData!['name']?.trim() ?? '';
+      rentController.text = widget.expenseData!['rent']?.toString() ?? '';
+      electricityController.text = widget.expenseData!['electricity']?.toString() ?? '';
+      salaryController.text = widget.expenseData!['salary']?.toString() ?? '';
+      miscellaneousController.text = widget.expenseData!['miscellaneous']?.toString() ?? '';
     }
+  }
+  
+  @override
+  void dispose() {
+    roleNameController.dispose();
+    rentController.dispose();
+    electricityController.dispose();
+    salaryController.dispose();
+    miscellaneousController.dispose();
+    super.dispose();
   }
 
   @override
@@ -122,6 +151,78 @@ class _AddexpensemodalState extends State<Addexpensemodal> {
                 decoration: InputDecoration(
                   labelText: 'Expense Name',
                   labelStyle: Expensestyle.expenseText,
+                  enabledBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.black),
+                  ),
+                  focusedBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.black, width: 2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Rent field
+              TextField(
+                controller: rentController,
+                style: Expensestyle.expenseText,
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Rent (₹)',
+                  labelStyle: Expensestyle.expenseText,
+                  prefixIcon: Icon(Icons.home, color: Colors.grey),
+                  enabledBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.black),
+                  ),
+                  focusedBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.black, width: 2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Electricity field
+              TextField(
+                controller: electricityController,
+                style: Expensestyle.expenseText,
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Electricity (₹)',
+                  labelStyle: Expensestyle.expenseText,
+                  prefixIcon: Icon(Icons.bolt, color: Colors.grey),
+                  enabledBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.black),
+                  ),
+                  focusedBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.black, width: 2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Salary field
+              TextField(
+                controller: salaryController,
+                style: Expensestyle.expenseText,
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Salary (₹)',
+                  labelStyle: Expensestyle.expenseText,
+                  prefixIcon: Icon(Icons.person, color: Colors.grey),
+                  enabledBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.black),
+                  ),
+                  focusedBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.black, width: 2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Miscellaneous field
+              TextField(
+                controller: miscellaneousController,
+                style: Expensestyle.expenseText,
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Miscellaneous (₹)',
+                  labelStyle: Expensestyle.expenseText,
+                  prefixIcon: Icon(Icons.category, color: Colors.grey),
                   enabledBorder: const UnderlineInputBorder(
                     borderSide: BorderSide(color: Colors.black),
                   ),

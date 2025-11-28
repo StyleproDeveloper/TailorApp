@@ -42,7 +42,7 @@ const getAllExpenseService = async (shop_id, queryParams) => {
 
     const ExpenseModel = getExpenseModel(shop_id);
     const searchbleFields = ['name', 'owner'];
-    const numericFields = ['expenseId', 'shop_id'];
+    const numericFields = ['expenseId', 'shop_id', 'rent', 'electricity', 'salary', 'miscellaneous'];
     // Get the query options
     const options = buildQueryOptions(
       queryParams,
