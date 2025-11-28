@@ -366,7 +366,10 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     // Stop and dispose audio recorder
     _recordingTimer?.cancel();
     if (_isRecording) {
-      _audioRecorder.stop().catchError((e) => print('Error stopping recorder on dispose: $e'));
+      _audioRecorder.stop().catchError((e) {
+        print('Error stopping recorder on dispose: $e');
+        return null;
+      });
     }
     _audioRecorder.dispose();
     for (var item in orderItems) {
