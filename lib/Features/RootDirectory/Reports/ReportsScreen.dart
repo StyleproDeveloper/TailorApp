@@ -427,27 +427,36 @@ class _ReportsScreenState extends State<ReportsScreen> {
       double totalSalary = 0;
       double totalMiscellaneous = 0;
 
+      print('🔍 Expense Metrics - Response received: ${allExpensesResponse.data != null}');
+      
       if (allExpensesResponse.data != null && allExpensesResponse.data['data'] != null) {
         final allExpenses = allExpensesResponse.data['data'] as List<dynamic>;
+        print('🔍 Expense Metrics - Total expenses found: ${allExpenses.length}');
 
         for (var expense in allExpenses) {
           final entries = expense['entries'] as List<dynamic>? ?? [];
+          print('🔍 Expense: ${expense['name']}, Entries count: ${entries.length}');
           
           if (entries.isNotEmpty) {
             // New structure: process entries array
             for (var entry in entries) {
               final entryDateStr = entry['date'];
-              if (entryDateStr == null) continue;
+              if (entryDateStr == null) {
+                print('⚠️ Entry missing date: $entry');
+                continue;
+              }
               
               DateTime entryDate;
               try {
                 entryDate = DateTime.parse(entryDateStr);
               } catch (e) {
+                print('⚠️ Error parsing date: $entryDateStr, Error: $e');
                 continue;
               }
               
               final amount = (entry['amount'] ?? 0).toDouble();
               final expenseType = (entry['expenseType'] ?? '').toString();
+              print('🔍 Processing entry: type=$expenseType, amount=$amount, date=$entryDateStr');
               
               // Today's expenses
               final entryDateOnly = DateTime(entryDate.year, entryDate.month, entryDate.day);
@@ -547,6 +556,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
         }
       }
 
+      print('🔍 Expense Metrics Summary:');
+      print('  - Today: ₹$todayExpenses');
+      print('  - This Week: ₹$thisWeekExpenses');
+      print('  - This Month: ₹$thisMonthExpenses');
+      print('  - Total Rent: ₹$totalRent');
+      print('  - Total Electricity: ₹$totalElectricity');
+      print('  - Total Salary: ₹$totalSalary');
+      print('  - Total Miscellaneous: ₹$totalMiscellaneous');
+      print('  - Total Expenses: ₹${totalRent + totalElectricity + totalSalary + totalMiscellaneous}');
+      
       setState(() {
         expenseMetrics = {
           'todayExpenses': todayExpenses,
@@ -560,7 +579,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
         };
       });
     } catch (e) {
-      print('Error fetching expense metrics: $e');
+      print('❌ Error fetching expense metrics: $e');
+      print('❌ Stack trace: ${StackTrace.current}');
     }
   }
 
