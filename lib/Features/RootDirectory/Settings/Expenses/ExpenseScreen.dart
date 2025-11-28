@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tailorapp/Core/Services/Services.dart';
 import 'package:tailorapp/Core/Services/Urls.dart';
 import 'package:tailorapp/Core/Widgets/CustomLoader.dart';
@@ -120,6 +121,8 @@ class _ExpensescreenState extends State<Expensescreen> {
             return {
               'name': expense['name'] ?? 'Unknown Expense',
               'expenseId': expense['expenseId'] ?? 'N/A',
+              'entries': expense['entries'] ?? [],
+              // Keep old fields for backward compatibility
               'rent': expense['rent'] ?? 0,
               'electricity': expense['electricity'] ?? 0,
               'salary': expense['salary'] ?? 0,
@@ -260,11 +263,22 @@ class _ExpensescreenState extends State<Expensescreen> {
                           );
                         }
                         final expense = expenses[index];
-                        // Calculate total expense
-                        final total = (expense['rent'] ?? 0) +
-                            (expense['electricity'] ?? 0) +
-                            (expense['salary'] ?? 0) +
-                            (expense['miscellaneous'] ?? 0);
+                        final entries = expense['entries'] as List<dynamic>? ?? [];
+                        
+                        // Calculate total expense from entries
+                        double total = 0;
+                        if (entries.isNotEmpty) {
+                          total = entries.fold<double>(
+                            0,
+                            (sum, entry) => sum + ((entry['amount'] ?? 0) as num).toDouble(),
+                          );
+                        } else {
+                          // Fallback to old structure for backward compatibility
+                          total = (expense['rent'] ?? 0) +
+                              (expense['electricity'] ?? 0) +
+                              (expense['salary'] ?? 0) +
+                              (expense['miscellaneous'] ?? 0);
+                        }
                         
                         return Card(
                           elevation: 2,
@@ -298,15 +312,114 @@ class _ExpensescreenState extends State<Expensescreen> {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  if (expense['rent'] != null && expense['rent'] > 0)
-                                    _buildExpenseRow('Rent', expense['rent']),
-                                  if (expense['electricity'] != null && expense['electricity'] > 0)
-                                    _buildExpenseRow('Electricity', expense['electricity']),
-                                  if (expense['salary'] != null && expense['salary'] > 0)
-                                    _buildExpenseRow('Salary', expense['salary']),
-                                  if (expense['miscellaneous'] != null && expense['miscellaneous'] > 0)
-                                    _buildExpenseRow('Miscellaneous', expense['miscellaneous']),
+                                  const SizedBox(height: 12),
+                                  if (entries.isNotEmpty) ...[
+                                    // Table header
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                      decoration: BoxDecoration(
+                                        color: ColorPalatte.primary.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            flex: 2,
+                                            child: Text(
+                                              'Type',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                                color: ColorPalatte.primary,
+                                              ),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Text(
+                                              'Amount',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                                color: ColorPalatte.primary,
+                                              ),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Text(
+                                              'Date',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                                color: ColorPalatte.primary,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    // Table rows
+                                    ...entries.map((entry) {
+                                      final type = (entry['expenseType'] ?? 'rent').toString();
+                                      final amount = (entry['amount'] ?? 0) as num;
+                                      final dateStr = entry['date'] ?? '';
+                                      String formattedDate = '';
+                                      try {
+                                        if (dateStr.isNotEmpty) {
+                                          final date = DateTime.parse(dateStr);
+                                          formattedDate = DateFormat('yyyy-MM-dd').format(date);
+                                        }
+                                      } catch (e) {
+                                        formattedDate = dateStr;
+                                      }
+                                      
+                                      return Container(
+                                        margin: const EdgeInsets.only(bottom: 4),
+                                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.grey[300]!),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                type[0].toUpperCase() + type.substring(1),
+                                                style: const TextStyle(fontSize: 12),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                '₹${amount.toStringAsFixed(2)}',
+                                                style: const TextStyle(fontSize: 12),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                formattedDate,
+                                                style: const TextStyle(fontSize: 12),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ] else ...[
+                                    // Fallback to old structure display
+                                    if (expense['rent'] != null && expense['rent'] > 0)
+                                      _buildExpenseRow('Rent', expense['rent']),
+                                    if (expense['electricity'] != null && expense['electricity'] > 0)
+                                      _buildExpenseRow('Electricity', expense['electricity']),
+                                    if (expense['salary'] != null && expense['salary'] > 0)
+                                      _buildExpenseRow('Salary', expense['salary']),
+                                    if (expense['miscellaneous'] != null && expense['miscellaneous'] > 0)
+                                      _buildExpenseRow('Miscellaneous', expense['miscellaneous']),
+                                  ],
                                   const SizedBox(height: 4),
                                   Text(
                                     "ID: ${expense['expenseId']}",

@@ -431,48 +431,101 @@ class _ReportsScreenState extends State<ReportsScreen> {
         final allExpenses = allExpensesResponse.data['data'] as List<dynamic>;
 
         for (var expense in allExpenses) {
-          final createdAt = expense['createdAt'];
-          if (createdAt == null) continue;
+          final entries = expense['entries'] as List<dynamic>? ?? [];
+          
+          if (entries.isNotEmpty) {
+            // New structure: process entries array
+            for (var entry in entries) {
+              final entryDateStr = entry['date'];
+              if (entryDateStr == null) continue;
+              
+              DateTime entryDate;
+              try {
+                entryDate = DateTime.parse(entryDateStr);
+              } catch (e) {
+                continue;
+              }
+              
+              final amount = (entry['amount'] ?? 0).toDouble();
+              final expenseType = (entry['expenseType'] ?? '').toString();
+              
+              // Accumulate totals by category
+              if (expenseType == 'rent') {
+                totalRent += amount;
+              } else if (expenseType == 'electricity') {
+                totalElectricity += amount;
+              } else if (expenseType == 'salary') {
+                totalSalary += amount;
+              } else if (expenseType == 'miscellaneous') {
+                totalMiscellaneous += amount;
+              }
+              
+              // Today's expenses
+              final entryDateOnly = DateTime(entryDate.year, entryDate.month, entryDate.day);
+              final todayDateOnly = DateTime(now.year, now.month, now.day);
+              if (entryDateOnly.year == todayDateOnly.year &&
+                  entryDateOnly.month == todayDateOnly.month &&
+                  entryDateOnly.day == todayDateOnly.day) {
+                todayExpenses += amount;
+              }
+              
+              // This week's expenses
+              if (entryDate.isAfter(weekStartDate.subtract(const Duration(seconds: 1))) &&
+                  entryDate.isBefore(weekEndDate.add(const Duration(seconds: 1)))) {
+                thisWeekExpenses += amount;
+              }
+              
+              // This month's expenses
+              if (entryDate.isAfter(currentMonthStart.subtract(const Duration(seconds: 1))) &&
+                  entryDate.isBefore(currentMonthEnd.add(const Duration(seconds: 1)))) {
+                thisMonthExpenses += amount;
+              }
+            }
+          } else {
+            // Old structure: backward compatibility
+            final createdAt = expense['createdAt'];
+            if (createdAt == null) continue;
 
-          DateTime expenseDate;
-          try {
-            expenseDate = DateTime.parse(createdAt);
-          } catch (e) {
-            continue;
-          }
+            DateTime expenseDate;
+            try {
+              expenseDate = DateTime.parse(createdAt);
+            } catch (e) {
+              continue;
+            }
 
-          // Calculate total expense for this entry
-          final rent = (expense['rent'] ?? 0).toDouble();
-          final electricity = (expense['electricity'] ?? 0).toDouble();
-          final salary = (expense['salary'] ?? 0).toDouble();
-          final miscellaneous = (expense['miscellaneous'] ?? 0).toDouble();
-          final totalExpense = rent + electricity + salary + miscellaneous;
+            // Calculate total expense for this entry
+            final rent = (expense['rent'] ?? 0).toDouble();
+            final electricity = (expense['electricity'] ?? 0).toDouble();
+            final salary = (expense['salary'] ?? 0).toDouble();
+            final miscellaneous = (expense['miscellaneous'] ?? 0).toDouble();
+            final totalExpense = rent + electricity + salary + miscellaneous;
 
-          // Accumulate totals by category
-          totalRent += rent;
-          totalElectricity += electricity;
-          totalSalary += salary;
-          totalMiscellaneous += miscellaneous;
+            // Accumulate totals by category
+            totalRent += rent;
+            totalElectricity += electricity;
+            totalSalary += salary;
+            totalMiscellaneous += miscellaneous;
 
-          // Today's expenses
-          final expenseDateOnly = DateTime(expenseDate.year, expenseDate.month, expenseDate.day);
-          final todayDateOnly = DateTime(now.year, now.month, now.day);
-          if (expenseDateOnly.year == todayDateOnly.year &&
-              expenseDateOnly.month == todayDateOnly.month &&
-              expenseDateOnly.day == todayDateOnly.day) {
-            todayExpenses += totalExpense;
-          }
+            // Today's expenses
+            final expenseDateOnly = DateTime(expenseDate.year, expenseDate.month, expenseDate.day);
+            final todayDateOnly = DateTime(now.year, now.month, now.day);
+            if (expenseDateOnly.year == todayDateOnly.year &&
+                expenseDateOnly.month == todayDateOnly.month &&
+                expenseDateOnly.day == todayDateOnly.day) {
+              todayExpenses += totalExpense;
+            }
 
-          // This week's expenses
-          if (expenseDate.isAfter(weekStartDate.subtract(const Duration(seconds: 1))) &&
-              expenseDate.isBefore(weekEndDate.add(const Duration(seconds: 1)))) {
-            thisWeekExpenses += totalExpense;
-          }
+            // This week's expenses
+            if (expenseDate.isAfter(weekStartDate.subtract(const Duration(seconds: 1))) &&
+                expenseDate.isBefore(weekEndDate.add(const Duration(seconds: 1)))) {
+              thisWeekExpenses += totalExpense;
+            }
 
-          // This month's expenses
-          if (expenseDate.isAfter(currentMonthStart.subtract(const Duration(seconds: 1))) &&
-              expenseDate.isBefore(currentMonthEnd.add(const Duration(seconds: 1)))) {
-            thisMonthExpenses += totalExpense;
+            // This month's expenses
+            if (expenseDate.isAfter(currentMonthStart.subtract(const Duration(seconds: 1))) &&
+                expenseDate.isBefore(currentMonthEnd.add(const Duration(seconds: 1)))) {
+              thisMonthExpenses += totalExpense;
+            }
           }
         }
       }

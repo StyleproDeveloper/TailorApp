@@ -2,6 +2,23 @@ const mongoose = require('mongoose');
 
 const Schema = mongoose.Schema;
 
+const ExpenseEntrySchema = new Schema({
+  expenseType: {
+    type: String,
+    required: true,
+    enum: ['rent', 'electricity', 'salary', 'miscellaneous'],
+  },
+  amount: {
+    type: Number,
+    required: true,
+    min: 0,
+  },
+  date: {
+    type: Date,
+    required: true,
+  },
+}, { _id: false });
+
 const ExpenseSchema = new Schema(
   {
     expenseId: {
@@ -18,6 +35,11 @@ const ExpenseSchema = new Schema(
       required: true,
       maxlength: 100,
     },
+    entries: {
+      type: [ExpenseEntrySchema],
+      default: [],
+    },
+    // Keep old fields for backward compatibility
     rent: {
       type: Number,
       default: 0,
