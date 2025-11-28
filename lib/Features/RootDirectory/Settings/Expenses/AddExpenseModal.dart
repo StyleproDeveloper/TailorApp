@@ -177,11 +177,9 @@ class _AddexpensemodalState extends State<Addexpensemodal> {
       
       // Build entries array
       final entries = expenseEntries.map((entry) => {
-        return {
-          'expenseType': entry.expenseType,
-          'amount': double.parse(entry.amountController.text),
-          'date': entry.date!.toIso8601String(),
-        };
+        'expenseType': entry.expenseType,
+        'amount': double.parse(entry.amountController.text),
+        'date': entry.date!.toIso8601String(),
       }).toList();
       
       final payload = {
