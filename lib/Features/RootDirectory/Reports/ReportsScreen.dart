@@ -20,6 +20,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Map<String, dynamic> metrics = {};
   Map<String, dynamic> paymentMetrics = {};
   Map<String, dynamic> outstandingMetrics = {};
+  Map<String, dynamic> expenseMetrics = {};
   List<Map<String, dynamic>> ordersByStatus = [];
   List<Map<String, dynamic>> topDressTypes = [];
   List<Map<String, dynamic>> monthlySales = [];
@@ -56,6 +57,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _fetchMetrics(),
         _fetchPaymentMetrics(),
         _fetchOutstandingMetrics(),
+        _fetchExpenseMetrics(),
         _fetchOrdersByStatus(),
         _fetchTopDressTypes(),
         _fetchMonthlySales(),
@@ -392,6 +394,106 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
+  Future<void> _fetchExpenseMetrics() async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null) return;
+
+    try {
+      final now = DateTime.now();
+
+      // Today's date range
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      // This week's date range (Monday to Sunday)
+      final weekStart = now.subtract(Duration(days: now.weekday - 1));
+      final weekStartDate = DateTime(weekStart.year, weekStart.month, weekStart.day);
+      final weekEnd = weekStart.add(const Duration(days: 6));
+      final weekEndDate = DateTime(weekEnd.year, weekEnd.month, weekEnd.day, 23, 59, 59);
+
+      // This month's date range
+      final currentMonthStart = DateTime(now.year, now.month, 1);
+      final currentMonthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+
+      // Fetch all expenses
+      final allExpensesUrl = "${Urls.expense}/$shopId?pageNumber=1&pageSize=10000";
+      final allExpensesResponse = await ApiService().get(allExpensesUrl, context);
+
+      double todayExpenses = 0;
+      double thisWeekExpenses = 0;
+      double thisMonthExpenses = 0;
+      double totalRent = 0;
+      double totalElectricity = 0;
+      double totalSalary = 0;
+      double totalMiscellaneous = 0;
+
+      if (allExpensesResponse.data != null && allExpensesResponse.data['data'] != null) {
+        final allExpenses = allExpensesResponse.data['data'] as List<dynamic>;
+
+        for (var expense in allExpenses) {
+          final createdAt = expense['createdAt'];
+          if (createdAt == null) continue;
+
+          DateTime expenseDate;
+          try {
+            expenseDate = DateTime.parse(createdAt);
+          } catch (e) {
+            continue;
+          }
+
+          // Calculate total expense for this entry
+          final rent = (expense['rent'] ?? 0).toDouble();
+          final electricity = (expense['electricity'] ?? 0).toDouble();
+          final salary = (expense['salary'] ?? 0).toDouble();
+          final miscellaneous = (expense['miscellaneous'] ?? 0).toDouble();
+          final totalExpense = rent + electricity + salary + miscellaneous;
+
+          // Accumulate totals by category
+          totalRent += rent;
+          totalElectricity += electricity;
+          totalSalary += salary;
+          totalMiscellaneous += miscellaneous;
+
+          // Today's expenses
+          final expenseDateOnly = DateTime(expenseDate.year, expenseDate.month, expenseDate.day);
+          final todayDateOnly = DateTime(now.year, now.month, now.day);
+          if (expenseDateOnly.year == todayDateOnly.year &&
+              expenseDateOnly.month == todayDateOnly.month &&
+              expenseDateOnly.day == todayDateOnly.day) {
+            todayExpenses += totalExpense;
+          }
+
+          // This week's expenses
+          if (expenseDate.isAfter(weekStartDate.subtract(const Duration(seconds: 1))) &&
+              expenseDate.isBefore(weekEndDate.add(const Duration(seconds: 1)))) {
+            thisWeekExpenses += totalExpense;
+          }
+
+          // This month's expenses
+          if (expenseDate.isAfter(currentMonthStart.subtract(const Duration(seconds: 1))) &&
+              expenseDate.isBefore(currentMonthEnd.add(const Duration(seconds: 1)))) {
+            thisMonthExpenses += totalExpense;
+          }
+        }
+      }
+
+      setState(() {
+        expenseMetrics = {
+          'todayExpenses': todayExpenses,
+          'thisWeekExpenses': thisWeekExpenses,
+          'thisMonthExpenses': thisMonthExpenses,
+          'totalRent': totalRent,
+          'totalElectricity': totalElectricity,
+          'totalSalary': totalSalary,
+          'totalMiscellaneous': totalMiscellaneous,
+          'totalExpenses': totalRent + totalElectricity + totalSalary + totalMiscellaneous,
+        };
+      });
+    } catch (e) {
+      print('Error fetching expense metrics: $e');
+    }
+  }
+
   Future<void> _fetchOutstandingMetrics() async {
     int? shopId = GlobalVariables.shopIdGet;
     if (shopId == null) return;
@@ -471,6 +573,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
               _buildSalesMetrics(),
               const SizedBox(height: 20),
               _buildPaymentMetrics(),
+              const SizedBox(height: 20),
+              _buildExpenseMetrics(),
               const SizedBox(height: 20),
               _buildOutstandingMetrics(),
               const SizedBox(height: 20),
@@ -1118,6 +1222,170 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildExpenseMetrics() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Expenses Overview',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: ColorPalatte.primary,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildMetricCard(
+                'Today',
+                '₹${NumberFormat('#,##0').format(expenseMetrics['todayExpenses'] ?? 0)}',
+                'Expenses',
+                Icons.receipt,
+                Colors.red,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildMetricCard(
+                'This Week',
+                '₹${NumberFormat('#,##0').format(expenseMetrics['thisWeekExpenses'] ?? 0)}',
+                'Expenses',
+                Icons.date_range,
+                Colors.orange,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildMetricCard(
+                'This Month',
+                '₹${NumberFormat('#,##0').format(expenseMetrics['thisMonthExpenses'] ?? 0)}',
+                'Expenses',
+                Icons.calendar_month,
+                Colors.deepOrange,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Expense Breakdown (This Month)',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildExpenseRow(
+                'Rent',
+                expenseMetrics['totalRent'] ?? 0.0,
+                Icons.home,
+                Colors.blue,
+              ),
+              const Divider(),
+              _buildExpenseRow(
+                'Electricity',
+                expenseMetrics['totalElectricity'] ?? 0.0,
+                Icons.bolt,
+                Colors.amber,
+              ),
+              const Divider(),
+              _buildExpenseRow(
+                'Salary',
+                expenseMetrics['totalSalary'] ?? 0.0,
+                Icons.person,
+                Colors.green,
+              ),
+              const Divider(),
+              _buildExpenseRow(
+                'Miscellaneous',
+                expenseMetrics['totalMiscellaneous'] ?? 0.0,
+                Icons.category,
+                Colors.purple,
+              ),
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total Expenses',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    Text(
+                      '₹${NumberFormat('#,##0').format(expenseMetrics['totalExpenses'] ?? 0)}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExpenseRow(String label, double amount, IconData icon, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          Text(
+            '₹${NumberFormat('#,##0').format(amount)}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[700],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
