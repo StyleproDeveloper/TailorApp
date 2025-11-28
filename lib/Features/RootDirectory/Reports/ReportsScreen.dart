@@ -458,38 +458,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
               final expenseType = (entry['expenseType'] ?? '').toString();
               print('🔍 Processing entry: type=$expenseType, amount=$amount, date=$entryDateStr');
               
-              // Today's expenses
+              // Check date ranges
               final entryDateOnly = DateTime(entryDate.year, entryDate.month, entryDate.day);
               final todayDateOnly = DateTime(now.year, now.month, now.day);
-              if (entryDateOnly.year == todayDateOnly.year &&
+              final isToday = entryDateOnly.year == todayDateOnly.year &&
                   entryDateOnly.month == todayDateOnly.month &&
-                  entryDateOnly.day == todayDateOnly.day) {
+                  entryDateOnly.day == todayDateOnly.day;
+              final isThisWeek = entryDate.isAfter(weekStartDate.subtract(const Duration(seconds: 1))) &&
+                  entryDate.isBefore(weekEndDate.add(const Duration(seconds: 1)));
+              final isThisMonth = entryDate.isAfter(currentMonthStart.subtract(const Duration(seconds: 1))) &&
+                  entryDate.isBefore(currentMonthEnd.add(const Duration(seconds: 1)));
+              
+              // Today's expenses
+              if (isToday) {
                 todayExpenses += amount;
-                
-                // Accumulate category totals for today
-                if (expenseType == 'rent') {
-                  totalRent += amount;
-                } else if (expenseType == 'electricity') {
-                  totalElectricity += amount;
-                } else if (expenseType == 'salary') {
-                  totalSalary += amount;
-                } else if (expenseType == 'miscellaneous') {
-                  totalMiscellaneous += amount;
-                }
               }
               
               // This week's expenses
-              if (entryDate.isAfter(weekStartDate.subtract(const Duration(seconds: 1))) &&
-                  entryDate.isBefore(weekEndDate.add(const Duration(seconds: 1)))) {
+              if (isThisWeek) {
                 thisWeekExpenses += amount;
               }
               
               // This month's expenses - also accumulate category totals
-              if (entryDate.isAfter(currentMonthStart.subtract(const Duration(seconds: 1))) &&
-                  entryDate.isBefore(currentMonthEnd.add(const Duration(seconds: 1)))) {
+              if (isThisMonth) {
                 thisMonthExpenses += amount;
                 
-                // Accumulate category totals for this month
+                // Accumulate category totals for this month (only once, even if also today)
                 if (expenseType == 'rent') {
                   totalRent += amount;
                 } else if (expenseType == 'electricity') {
