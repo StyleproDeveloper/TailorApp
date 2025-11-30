@@ -7,6 +7,8 @@ const {
   updateExpense,
   deleteExpense,
 } = require('../controller/ExpenseController');
+const { validateRequest } = require('../middlewares/validateRequest');
+const { createExpenseSchema, updateExpenseSchema } = require('../validations/ExpenseValidation');
 
 /**
  * @swagger
@@ -38,7 +40,7 @@ const {
  *       201:
  *         description: Expense created successfully
  */
-router.post('/', createExpense);
+router.post('/', validateRequest(createExpenseSchema), createExpense);
 
 /**
  * @swagger
@@ -141,7 +143,7 @@ router.get('/:shop_id/:id', getExpenseById);
  *       200:
  *         description: Expense updated successfully
  */
-router.put('/:shop_id/:id', updateExpense);
+router.put('/:shop_id/:id', validateRequest(updateExpenseSchema), updateExpense);
 
 /**
  * @swagger

@@ -16,7 +16,7 @@ const getExpenseModel = (shop_id) => {
 // **Create Expense**
 const createExpenseService = async (expenseData) => {
   try {
-    const { shop_id, ...data } = expenseData;
+    const { shop_id, entries, ...data } = expenseData;
     if (!shop_id) throw new Error('Shop ID is required');
 
     const shopExists = await isShopExists(shop_id);
@@ -25,7 +25,25 @@ const createExpenseService = async (expenseData) => {
     const ExpenseModel = getExpenseModel(shop_id);
     const expenseId = await getNextSequenceValue('expenseId');
 
-    const newExpense = new ExpenseModel({ expenseId, shop_id, ...data });
+    // Convert date strings to Date objects in entries array
+    let processedEntries = [];
+    if (entries && Array.isArray(entries) && entries.length > 0) {
+      processedEntries = entries.map(entry => {
+        const processedEntry = { ...entry };
+        // Convert date string to Date object if it's a string
+        if (entry.date && typeof entry.date === 'string') {
+          processedEntry.date = new Date(entry.date);
+        }
+        return processedEntry;
+      });
+    }
+
+    const newExpense = new ExpenseModel({ 
+      expenseId, 
+      shop_id, 
+      ...data,
+      entries: processedEntries.length > 0 ? processedEntries : []
+    });
     return await newExpense.save();
   } catch (error) {
     throw error;
@@ -83,9 +101,25 @@ const updateExpenseService = async (shop_id, expenseId, expenseData) => {
     if (!shopExists) throw new Error(`Shop with ID ${shop_id} does not exist`);
 
     const ExpenseModel = getExpenseModel(shop_id);
+    
+    // Convert date strings to Date objects in entries array if present
+    const { entries, ...otherData } = expenseData;
+    let updateData = { ...otherData };
+    
+    if (entries && Array.isArray(entries) && entries.length > 0) {
+      updateData.entries = entries.map(entry => {
+        const processedEntry = { ...entry };
+        // Convert date string to Date object if it's a string
+        if (entry.date && typeof entry.date === 'string') {
+          processedEntry.date = new Date(entry.date);
+        }
+        return processedEntry;
+      });
+    }
+    
     return await ExpenseModel.findOneAndUpdate(
       { expenseId: Number(expenseId) },
-      expenseData,
+      updateData,
       { new: true }
     );
   } catch (error) {
