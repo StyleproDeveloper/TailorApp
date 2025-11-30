@@ -7,7 +7,7 @@ const {
   updateExpense,
   deleteExpense,
 } = require('../controller/ExpenseController');
-const { validateRequest } = require('../middlewares/validateRequest');
+const validateRequest = require('../middlewares/validateRequest');
 const { createExpenseSchema, updateExpenseSchema } = require('../validations/ExpenseValidation');
 
 /**
