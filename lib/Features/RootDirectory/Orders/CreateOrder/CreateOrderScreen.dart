@@ -3141,7 +3141,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                   ...orderItems.asMap().entries.map((entry) {
                     int index = entry.key;
                     OrderItem item = entry.value;
+                    // Ensure GlobalKey exists for this item
+                    if (!_itemKeys.containsKey(index)) {
+                      _itemKeys[index] = GlobalKey();
+                    }
                     return Column(
+                      key: _itemKeys[index],
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (!item.isExpanded) SizedBox(height: 10),
