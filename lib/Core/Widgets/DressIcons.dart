@@ -5,70 +5,70 @@ class DressIcons {
   // Map of dress types to their corresponding icons
   static const Map<String, IconData> _dressIconMap = {
     // Formal wear
-    'blouse': Icons.woman,
-    'blazer': Icons.business_center,
-    'suit': Icons.business_center,
-    'coat': Icons.outbond,
+    'blouse': Icons.checkroom, // Changed from woman to checkroom (clothing icon)
+    'blazer': Icons.checkroom, // Changed from business_center to checkroom
+    'suit': Icons.checkroom, // Changed from business_center to checkroom
+    'coat': Icons.checkroom, // Changed from outbond to checkroom
     'jacket': Icons.checkroom,
     
     // Traditional wear
-    'kurta': Icons.self_improvement,
-    'kurti': Icons.self_improvement,
-    'saree': Icons.woman,
-    'lehenga': Icons.celebration,
-    'anarkali': Icons.celebration,
-    'salwar': Icons.self_improvement,
-    'churidar': Icons.self_improvement,
-    'palazzo': Icons.self_improvement,
+    'kurta': Icons.checkroom, // Changed from self_improvement to checkroom
+    'kurti': Icons.checkroom, // Changed from self_improvement to checkroom
+    'saree': Icons.checkroom, // Changed from woman to checkroom
+    'lehenga': Icons.checkroom, // Changed from celebration to checkroom
+    'anarkali': Icons.checkroom, // Changed from celebration to checkroom
+    'salwar': Icons.checkroom, // Changed from self_improvement to checkroom
+    'churidar': Icons.checkroom, // Changed from self_improvement to checkroom
+    'palazzo': Icons.checkroom, // Changed from self_improvement to checkroom
     
     // Casual wear
     'shirt': Icons.checkroom,
     'top': Icons.checkroom,
     't-shirt': Icons.checkroom,
     'tshirt': Icons.checkroom,
-    'dress': Icons.woman,
-    'gown': Icons.celebration,
-    'maxi': Icons.woman,
+    'dress': Icons.checkroom, // Changed from woman to checkroom
+    'gown': Icons.checkroom, // Changed from celebration to checkroom
+    'maxi': Icons.checkroom, // Changed from woman to checkroom
     
     // Bottom wear
-    'pant': Icons.straighten,
-    'pants': Icons.straighten,
-    'trouser': Icons.straighten,
-    'trousers': Icons.straighten,
-    'jeans': Icons.straighten,
-    'skirt': Icons.woman,
-    'shorts': Icons.straighten,
-    'leggings': Icons.straighten,
+    'pant': Icons.checkroom, // Changed from straighten to checkroom
+    'pants': Icons.checkroom, // Changed from straighten to checkroom
+    'trouser': Icons.checkroom, // Changed from straighten to checkroom
+    'trousers': Icons.checkroom, // Changed from straighten to checkroom
+    'jeans': Icons.checkroom, // Changed from straighten to checkroom
+    'skirt': Icons.checkroom, // Changed from woman to checkroom
+    'shorts': Icons.checkroom, // Changed from straighten to checkroom
+    'leggings': Icons.checkroom, // Changed from straighten to checkroom
     
     // Inner wear
-    'bra': Icons.favorite_border,
-    'petticoat': Icons.woman,
-    'slip': Icons.woman,
+    'bra': Icons.checkroom, // Changed from favorite_border to checkroom
+    'petticoat': Icons.checkroom, // Changed from woman to checkroom
+    'slip': Icons.checkroom, // Changed from woman to checkroom
     
     // Accessories
-    'dupatta': Icons.waves,
-    'scarf': Icons.waves,
-    'stole': Icons.waves,
-    'shawl': Icons.waves,
+    'dupatta': Icons.checkroom, // Changed from waves to checkroom
+    'scarf': Icons.checkroom, // Changed from waves to checkroom
+    'stole': Icons.checkroom, // Changed from waves to checkroom
+    'shawl': Icons.checkroom, // Changed from waves to checkroom
     
     // Kids wear
-    'frock': Icons.child_care,
-    'romper': Icons.child_care,
-    'jumpsuit': Icons.child_care,
+    'frock': Icons.checkroom, // Changed from child_care to checkroom
+    'romper': Icons.checkroom, // Changed from child_care to checkroom
+    'jumpsuit': Icons.checkroom, // Changed from child_care to checkroom
     
     // Men's wear
-    'dhoti': Icons.man,
-    'lungi': Icons.man,
-    'veshti': Icons.man,
+    'dhoti': Icons.checkroom, // Changed from man to checkroom
+    'lungi': Icons.checkroom, // Changed from man to checkroom
+    'veshti': Icons.checkroom, // Changed from man to checkroom
     
     // Special occasion
-    'wedding': Icons.favorite,
-    'party': Icons.celebration,
-    'evening': Icons.nights_stay,
+    'wedding': Icons.checkroom, // Changed from favorite to checkroom
+    'party': Icons.checkroom, // Changed from celebration to checkroom
+    'evening': Icons.checkroom, // Changed from nights_stay to checkroom
     
     // Work wear
-    'uniform': Icons.work,
-    'apron': Icons.kitchen,
+    'uniform': Icons.checkroom, // Changed from work to checkroom
+    'apron': Icons.checkroom, // Changed from kitchen to checkroom
     
     // Default fallback
     'default': Icons.checkroom,
