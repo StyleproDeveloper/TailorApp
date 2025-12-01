@@ -1059,8 +1059,8 @@ const updateOrderService = async (orderId, orderData, shop_id) => {
         }
 
         const orderItemId = orderItemIdForUpdate;
-        const orderItemMeasurementId = item.Measurement.orderItemMeasurementId;
-        const orderItemPatternId = item.Pattern[0].orderItemPatternId;
+        const orderItemMeasurementId = hasMeasurementId;
+        const orderItemPatternId = hasPatternId;
 
         // Update Order Item
         // Handle both Pictures and pictures field names for backward compatibility
