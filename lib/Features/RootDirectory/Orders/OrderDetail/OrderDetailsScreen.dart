@@ -466,7 +466,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   'createdAt',
                   'updatedAt'
                 ].contains(e.key))
-            .map((e) => MapEntry(_beautifyKey(e.key), e.value.toString()));
+            .map((e) => MapEntry(_beautifyKey(e.key), 
+                (e.value == null || e.value == 'null') ? '' : e.value.toString()));
 
         final dressTypeId = item['dressTypeId'];
         final dressTypeName = dressTypeNames[dressTypeId] ?? 'Dress Type $dressTypeId';
@@ -2601,7 +2602,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                         ].contains(e.key))
                     .map((entry) {
                   final key = _beautifyKey(entry.key);
-                  final value = entry.value?.toString() ?? '';
+                  final rawValue = entry.value;
+                  final value = (rawValue == null || rawValue == 'null' || rawValue.toString() == 'null') 
+                      ? '' 
+                      : rawValue.toString();
                   return pw.TableRow(
                     children: [
                       _buildTableCellPDF(key),
