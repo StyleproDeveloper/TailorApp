@@ -603,6 +603,9 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: TextField(
                   controller: imageUrlController,
+                  onChanged: (value) {
+                    setState(() {}); // Update preview when URL changes
+                  },
                   decoration: InputDecoration(
                     labelText: 'Image URL (Optional)',
                     hintText: 'Enter image URL or leave blank',
@@ -621,7 +624,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
               ),
               
               // Preview image if URL is provided
-              if (imageUrlController.text.isNotEmpty)
+              if (imageUrlController.text.trim().isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   child: Container(
@@ -634,11 +637,22 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8.0),
                       child: Image.network(
-                        imageUrlController.text,
+                        imageUrlController.text.trim(),
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Center(
                             child: Icon(Icons.broken_image, color: Colors.grey),
+                          );
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
                           );
                         },
                       ),
