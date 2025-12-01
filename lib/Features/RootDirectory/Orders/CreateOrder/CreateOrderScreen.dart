@@ -63,6 +63,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   Timer? _recordingTimer;
   int _recordingDuration = 0; // Duration in seconds
   final ScrollController _scrollController = ScrollController();
+  final Map<int, GlobalKey> _itemKeys = {}; // GlobalKeys for each item card
   int pageNumber = 1;
   final int pageSize = 10;
   bool hasMoreData = true;
@@ -4216,6 +4217,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   }
 
   void _addNewItem() {
+    final newIndex = orderItems.length; // Index of the new item
+    
     setState(() {
       // Collapse all existing items
       for (var item in orderItems) {
@@ -4226,16 +4229,22 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       // Add listener to the new item's cost controller
       newItem.originalCost?.addListener(_updateTotalCost);
       orderItems.add(newItem);
+      // Create GlobalKey for the new item
+      _itemKeys[newIndex] = GlobalKey();
     });
     
     // Scroll to the new item after a short delay to ensure it's rendered
-    Future.delayed(Duration(milliseconds: 100), () {
-      if (mounted && _scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+    Future.delayed(Duration(milliseconds: 200), () {
+      if (mounted && _itemKeys.containsKey(newIndex)) {
+        final key = _itemKeys[newIndex];
+        if (key?.currentContext != null) {
+          Scrollable.ensureVisible(
+            key!.currentContext!,
+            duration: Duration(milliseconds: 500),
+            curve: Curves.easeInOut,
+            alignment: 0.1, // Position item near top of visible area
+          );
+        }
       }
     });
   }
@@ -4305,6 +4314,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   }
 
   void _copyFromItem(OrderItem sourceItem) {
+    final newIndex = orderItems.length; // Index of the new item
+    
     setState(() {
       // Collapse all existing items
       for (var item in orderItems) {
@@ -4315,16 +4326,22 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       // Add listener to the new item's cost controller
       newItem.originalCost?.addListener(_updateTotalCost);
       orderItems.add(newItem);
+      // Create GlobalKey for the new item
+      _itemKeys[newIndex] = GlobalKey();
     });
     
     // Scroll to the new item after a short delay to ensure it's rendered
-    Future.delayed(Duration(milliseconds: 100), () {
-      if (mounted && _scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+    Future.delayed(Duration(milliseconds: 200), () {
+      if (mounted && _itemKeys.containsKey(newIndex)) {
+        final key = _itemKeys[newIndex];
+        if (key?.currentContext != null) {
+          Scrollable.ensureVisible(
+            key!.currentContext!,
+            duration: Duration(milliseconds: 500),
+            curve: Curves.easeInOut,
+            alignment: 0.1, // Position item near top of visible area
+          );
+        }
       }
     });
 
@@ -4423,6 +4440,19 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   void _removeItem(int index) {
     setState(() {
       orderItems.removeAt(index);
+      // Clean up GlobalKey for deleted item and reindex remaining keys
+      _itemKeys.remove(index);
+      // Reindex keys for items after the deleted one
+      final keysToUpdate = <int, GlobalKey>{};
+      _itemKeys.forEach((key, value) {
+        if (key > index) {
+          keysToUpdate[key - 1] = value;
+        } else if (key < index) {
+          keysToUpdate[key] = value;
+        }
+      });
+      _itemKeys.clear();
+      _itemKeys.addAll(keysToUpdate);
     });
 
     // Show success message
