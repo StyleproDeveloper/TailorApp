@@ -251,6 +251,7 @@ class _DressScreenState extends State<DressScreen> {
                             ),
                             leading: DressIconWidget(
                               dressType: dress['name'],
+                              imageUrl: dress['imageUrl'],
                               size: 50,
                               showBackground: true,
                             ),

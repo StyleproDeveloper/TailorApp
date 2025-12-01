@@ -13,6 +13,10 @@ const DressTypeSchema = new Schema(
       type: String,
       required: true,
     },
+    imageUrl: {
+      type: String,
+      default: null,
+    },
     owner: {
       type: String,
     },

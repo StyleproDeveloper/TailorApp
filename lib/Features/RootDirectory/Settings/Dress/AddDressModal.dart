@@ -24,6 +24,7 @@ class AddDressModal extends StatefulWidget {
 
 class _AddDressModalState extends State<AddDressModal> with SingleTickerProviderStateMixin {
   late TextEditingController dressNameController;
+  late TextEditingController imageUrlController;
   late TabController _tabController;
   
   // Master lists (all available options) - with caching
@@ -55,6 +56,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
   void initState() {
     super.initState();
     dressNameController = TextEditingController(text: widget.dressName ?? '');
+    imageUrlController = TextEditingController();
     _tabController = TabController(length: 2, vsync: this);
     
     // Load data
@@ -79,6 +81,7 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
     
     // Then load existing assignments for this dress
     if (widget.dressDataId != null) {
+      await fetchDressDetails(widget.dressDataId);
       await fetchDressPattMea(widget.dressDataId);
     }
   }
@@ -94,7 +97,30 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
   void dispose() {
     _tabController.dispose();
     dressNameController.dispose();
+    imageUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> fetchDressDetails(int? dressTypeId) async {
+    int? shopId = GlobalVariables.shopIdGet;
+    if (shopId == null) {
+      print("Shop ID is missing");
+      return;
+    }
+
+    try {
+      final String requestUrl = "${Urls.addDress}/$shopId/$dressTypeId";
+      final response = await ApiService().get(requestUrl, context);
+      
+      if (response.data is Map<String, dynamic> && response.data.containsKey('data')) {
+        final dressData = response.data['data'];
+        setState(() {
+          imageUrlController.text = dressData['imageUrl'] ?? '';
+        });
+      }
+    } catch (e) {
+      print("Error fetching dress details: $e");
+    }
   }
 
   Future<void> fetchDressPattMea(int? dressTypeId) async {
@@ -253,6 +279,9 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
     final Map<String, dynamic> payloadSaveDress = {
       "shop_id": shopId,
       "name": capitalize(dressNameController.text),
+      "imageUrl": imageUrlController.text.trim().isNotEmpty 
+          ? imageUrlController.text.trim() 
+          : null,
     };
 
     try {
@@ -568,6 +597,54 @@ class _AddDressModalState extends State<AddDressModal> with SingleTickerProvider
                   ),
                 ),
               ),
+              
+              // Image URL Field
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: TextField(
+                  controller: imageUrlController,
+                  decoration: InputDecoration(
+                    labelText: 'Image URL (Optional)',
+                    hintText: 'Enter image URL or leave blank',
+                    prefixIcon: Icon(Icons.image, color: ColorPalatte.primary),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                      borderSide: BorderSide(color: ColorPalatte.primary),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              
+              // Preview image if URL is provided
+              if (imageUrlController.text.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Container(
+                    height: 100,
+                    width: 100,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8.0),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8.0),
+                      child: Image.network(
+                        imageUrlController.text,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Icon(Icons.broken_image, color: Colors.grey),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
               
               // Compact Tab Bar
               Container(

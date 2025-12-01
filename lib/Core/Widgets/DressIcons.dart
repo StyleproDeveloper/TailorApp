@@ -151,6 +151,7 @@ class DressIcons {
 // Custom widget for dress icons
 class DressIconWidget extends StatelessWidget {
   final String? dressType;
+  final String? imageUrl; // URL for dress type image
   final double size;
   final bool showBackground;
   final Color? backgroundColor;
@@ -159,6 +160,7 @@ class DressIconWidget extends StatelessWidget {
   const DressIconWidget({
     Key? key,
     required this.dressType,
+    this.imageUrl,
     this.size = 40.0,
     this.showBackground = true,
     this.backgroundColor,
@@ -171,6 +173,58 @@ class DressIconWidget extends StatelessWidget {
     final Color bgColor = backgroundColor ?? DressIcons.getColorForDressType(dressType);
     final Color icColor = iconColor ?? Colors.white;
     
+    // If imageUrl is provided, show image instead of icon
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(size / 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(size / 2),
+          child: Image.network(
+            imageUrl!,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              // Fallback to icon if image fails to load
+              return _buildIconWidget(icon, bgColor, icColor);
+            },
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Center(
+                child: SizedBox(
+                  width: size * 0.5,
+                  height: size * 0.5,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                        : null,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+    
+    // Show icon if no imageUrl
+    return _buildIconWidget(icon, bgColor, icColor);
+  }
+  
+  Widget _buildIconWidget(IconData icon, Color bgColor, Color icColor) {
     if (showBackground) {
       return Container(
         width: size,

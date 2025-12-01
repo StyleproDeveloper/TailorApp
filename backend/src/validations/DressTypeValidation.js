@@ -7,6 +7,9 @@ const dressTypeSchema = Joi.object({
   name: Joi.string().max(100).required().messages({
     'any.required': 'Name is required!',
   }),
+  imageUrl: Joi.string().uri().allow('', null).optional().messages({
+    'string.uri': 'Image URL must be a valid URL',
+  }),
   owner: Joi.string().optional(),
 });
 
