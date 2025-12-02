@@ -193,26 +193,38 @@ class _GalleryScreenState extends State<GalleryScreen> {
         int successCount = 0;
         for (var xFile in pickedFiles) {
           try {
-            // Verify file exists (for mobile native)
+            // Verify file can be accessed (for mobile native only)
+            // On web, we'll validate during upload
             if (!kIsWeb) {
-              final file = File(xFile.path);
-              if (!await file.exists()) {
-                print('⚠️ Gallery: File does not exist: ${file.path}');
-                if (mounted) {
-                  CustomSnackbar.showSnackbar(
-                    context,
-                    'Warning: One image file not found and was skipped',
-                  );
+              try {
+                final file = File(xFile.path);
+                if (!await file.exists()) {
+                  print('⚠️ Gallery: File does not exist: ${file.path}');
+                  if (mounted) {
+                    CustomSnackbar.showSnackbar(
+                      context,
+                      'Warning: One image file not found and was skipped',
+                    );
+                  }
+                  continue;
                 }
-                continue;
-              }
-              final fileSize = await file.length();
-              if (fileSize == 0) {
-                print('⚠️ Gallery: File is empty: ${file.path}');
+                final fileSize = await file.length();
+                if (fileSize == 0) {
+                  print('⚠️ Gallery: File is empty: ${file.path}');
+                  if (mounted) {
+                    CustomSnackbar.showSnackbar(
+                      context,
+                      'Warning: One image file is empty and was skipped',
+                    );
+                  }
+                  continue;
+                }
+              } catch (readError) {
+                print('❌ Gallery: Cannot access file ${xFile.path}: $readError');
                 if (mounted) {
                   CustomSnackbar.showSnackbar(
                     context,
-                    'Warning: One image file is empty and was skipped',
+                    'Error: Cannot access image file. Please try again.',
                   );
                 }
                 continue;
@@ -221,12 +233,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
             
             await _uploadImageToBackend(xFile);
             successCount++;
-          } catch (e) {
-            print('❌ Gallery: Error uploading file ${xFile.path}: $e');
+          } catch (e, stackTrace) {
+            print('❌ Gallery: Error uploading file ${xFile.name}: $e');
+            print('❌ Gallery: Stack trace: $stackTrace');
             if (mounted) {
+              String errorMsg = 'Error uploading one image';
+              if (e.toString().contains('Invalid argument')) {
+                errorMsg = 'Error: Could not process image file. Please try selecting again.';
+              } else {
+                errorMsg = 'Error uploading one image: ${e.toString()}';
+              }
               CustomSnackbar.showSnackbar(
                 context,
-                'Error uploading one image: ${e.toString()}',
+                errorMsg,
               );
             }
           }
@@ -341,18 +360,39 @@ class _GalleryScreenState extends State<GalleryScreen> {
       String? mimeType;
       String fileName = imageFile.name;
       
-      if (fileName.isEmpty) {
-        final pathParts = imageFile.path.split('/');
-        if (pathParts.isNotEmpty) {
-          fileName = pathParts.last;
-          if (fileName.contains('?')) {
-            fileName = fileName.split('?').first;
+      // Try to get filename from name first, then from path
+      if (fileName.isEmpty || fileName.trim().isEmpty) {
+        try {
+          final path = imageFile.path;
+          if (path.isNotEmpty && path.trim().isNotEmpty) {
+            // Handle blob URLs and data URLs on mobile browsers
+            if (path.startsWith('blob:') || path.startsWith('data:')) {
+              // For blob/data URLs, generate a filename
+              print('📤 Gallery: Detected blob/data URL, generating filename');
+            } else {
+              // Regular file path
+              final pathParts = path.split('/');
+              if (pathParts.isNotEmpty) {
+                final lastPart = pathParts.last;
+                if (lastPart.isNotEmpty && !lastPart.startsWith('blob:') && !lastPart.startsWith('data:')) {
+                  fileName = lastPart;
+                  // Remove query parameters if present
+                  if (fileName.contains('?')) {
+                    fileName = fileName.split('?').first;
+                  }
+                }
+              }
+            }
           }
+        } catch (e) {
+          print('⚠️ Gallery: Error parsing path: $e');
         }
       }
       
+      // Generate filename if still empty
       if (fileName.isEmpty || !fileName.contains('.')) {
-        fileName = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        fileName = 'image_$timestamp.jpg';
       }
       
       // Detect MIME type from file extension
@@ -378,25 +418,47 @@ class _GalleryScreenState extends State<GalleryScreen> {
       
       if (kIsWeb) {
         // On web (including mobile browsers), read bytes from XFile
-        final bytes = await imageFile.readAsBytes();
-        
-        print('📤 Gallery Web: Uploading ${bytes.length} bytes as $fileName (${mimeType})');
+        try {
+          // Check if file path is valid
+          final path = imageFile.path;
+          if (path.isEmpty && imageFile.name.isEmpty) {
+            throw Exception('Invalid file: missing path and name');
+          }
+          
+          final bytes = await imageFile.readAsBytes();
+          
+          if (bytes.isEmpty) {
+            throw Exception('Image file is empty or could not be read');
+          }
+          
+          print('📤 Gallery Web: Uploading ${bytes.length} bytes as $fileName (${mimeType})');
+          print('📤 Gallery Web: File path: $path, name: ${imageFile.name}');
 
-        final formData = FormData.fromMap({
-          'shopId': shopId.toString(),
-          'owner': GlobalVariables.userId?.toString() ?? '',
-          'file': MultipartFile.fromBytes(
-            bytes,
-            filename: fileName,
-            contentType: DioMediaType.parse(mimeType),
-          ),
-        });
+          final formData = FormData.fromMap({
+            'shopId': shopId.toString(),
+            'owner': GlobalVariables.userId?.toString() ?? '',
+            'file': MultipartFile.fromBytes(
+              bytes,
+              filename: fileName,
+              contentType: DioMediaType.parse(mimeType),
+            ),
+          });
 
-        response = await ApiService().postFormData(
-          '${Urls.gallery}/$shopId/upload',
-          context,
-          formData,
-        );
+          response = await ApiService().postFormData(
+            '${Urls.gallery}/$shopId/upload',
+            context,
+            formData,
+          );
+        } catch (e, stackTrace) {
+          print('❌ Gallery Web: Error reading file bytes: $e');
+          print('❌ Gallery Web: Stack trace: $stackTrace');
+          print('❌ Gallery Web: File path: ${imageFile.path}, name: ${imageFile.name}');
+          // Provide more specific error message
+          if (e.toString().contains('Invalid argument')) {
+            throw Exception('Could not read image file. The file may be corrupted or inaccessible. Please try selecting a different image.');
+          }
+          rethrow;
+        }
       } else {
         // On mobile native, use File
         final file = File(imageFile.path);
@@ -422,25 +484,43 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (response.data != null && response.data['success'] == true) {
         print('✅ Gallery: Image uploaded successfully');
         // Reload gallery images from backend
-        await _loadGalleryImages();
+        try {
+          await _loadGalleryImages();
+        } catch (reloadError) {
+          print('⚠️ Gallery: Error reloading images after upload: $reloadError');
+          // Don't fail the upload if reload fails
+        }
         if (mounted) {
           CustomSnackbar.showSnackbar(context, 'Image uploaded successfully');
         }
       } else {
         throw Exception('Upload failed: ${response.data?['message'] ?? 'Unknown error'}');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Gallery: Error uploading image: $e');
+      print('❌ Gallery: Stack trace: $stackTrace');
+      print('❌ Gallery: File path: ${imageFile.path}, name: ${imageFile.name}');
       if (mounted) {
+        // Show user-friendly error message
+        String errorMessage = 'Error uploading image';
+        if (e.toString().contains('Invalid argument')) {
+          errorMessage = 'Error: Could not read image file. Please try selecting the image again.';
+        } else if (e.toString().contains('index')) {
+          errorMessage = 'Error: File processing issue. Please try again.';
+        } else {
+          errorMessage = 'Error uploading image: ${e.toString()}';
+        }
         CustomSnackbar.showSnackbar(
           context,
-          'Error uploading image: ${e.toString()}',
+          errorMessage,
         );
       }
     } finally {
-      setState(() {
-        _isUploading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
     }
   }
 
