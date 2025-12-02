@@ -1386,47 +1386,49 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           await _picker.pickImage(source: ImageSource.camera);
       if (pickedFile != null) {
         print('📷 Image picked: ${pickedFile.name}, path: ${pickedFile.path}');
-        setState(() {
-          if (kIsWeb) {
-            // On web, store XFile directly
+        if (kIsWeb) {
+          // On web, store XFile directly
+          setState(() {
             item.images.add(pickedFile);
             print('✅ Added XFile to item.images. Total images: ${item.images.length}');
-          } else {
-            // On mobile, convert to File and verify it exists
-            try {
-              final file = File(pickedFile.path);
-              if (await file.exists()) {
-                final fileSize = await file.length();
-                if (fileSize > 0) {
+          });
+        } else {
+          // On mobile, convert to File and verify it exists
+          try {
+            final file = File(pickedFile.path);
+            if (await file.exists()) {
+              final fileSize = await file.length();
+              if (fileSize > 0) {
+                setState(() {
                   item.images.add(file);
                   print('✅ Added file from camera: ${file.path} (${fileSize} bytes)');
-                } else {
-                  print('⚠️ Camera file is empty: ${file.path}');
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: Camera image is empty. Please try again.')),
-                    );
-                  }
-                }
+                  print('✅ Total images after camera: ${item.images.length}');
+                });
               } else {
-                print('❌ Camera file does not exist: ${file.path}');
+                print('⚠️ Camera file is empty: ${file.path}');
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: Camera image not found. Please try again.')),
+                    SnackBar(content: Text('Error: Camera image is empty. Please try again.')),
                   );
                 }
               }
-            } catch (e) {
-              print('❌ Error processing camera file: $e');
+            } else {
+              print('❌ Camera file does not exist: ${file.path}');
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error processing camera image: ${e.toString()}')),
+                  SnackBar(content: Text('Error: Camera image not found. Please try again.')),
                 );
               }
             }
-            print('✅ Total images after camera: ${item.images.length}');
+          } catch (e) {
+            print('❌ Error processing camera file: $e');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error processing camera image: ${e.toString()}')),
+              );
+            }
           }
-        });
+        }
       } else {
         print('⚠️ No image picked from camera');
       }
@@ -1446,50 +1448,54 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       final List<XFile>? pickedFiles = await _picker.pickMultiImage();
       if (pickedFiles != null && pickedFiles.isNotEmpty) {
         print('🖼️ Picked ${pickedFiles.length} image(s) from gallery');
-        setState(() {
-          if (kIsWeb) {
-            // On web, store XFile directly
+        if (kIsWeb) {
+          // On web, store XFile directly
+          setState(() {
             item.images.addAll(pickedFiles);
             print('✅ Added ${pickedFiles.length} XFile(s) to item.images. Total images: ${item.images.length}');
-          } else {
-            // On mobile, convert to File and verify each file exists
-            for (var xFile in pickedFiles) {
-              try {
-                final file = File(xFile.path);
-                // Verify file exists and is readable
-                if (await file.exists()) {
-                  final fileSize = await file.length();
-                  if (fileSize > 0) {
-                    item.images.add(file);
-                    print('✅ Added file: ${file.path} (${fileSize} bytes)');
-                  } else {
-                    print('⚠️ Skipping empty file: ${file.path}');
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Warning: One image file is empty and was skipped')),
-                      );
-                    }
-                  }
+          });
+        } else {
+          // On mobile, convert to File and verify each file exists
+          List<File> validFiles = [];
+          for (var xFile in pickedFiles) {
+            try {
+              final file = File(xFile.path);
+              // Verify file exists and is readable
+              if (await file.exists()) {
+                final fileSize = await file.length();
+                if (fileSize > 0) {
+                  validFiles.add(file);
+                  print('✅ Added file: ${file.path} (${fileSize} bytes)');
                 } else {
-                  print('❌ File does not exist: ${file.path}');
+                  print('⚠️ Skipping empty file: ${file.path}');
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: Image file not found. Please try again.')),
+                      SnackBar(content: Text('Warning: One image file is empty and was skipped')),
                     );
                   }
                 }
-              } catch (e) {
-                print('❌ Error processing file ${xFile.path}: $e');
+              } else {
+                print('❌ File does not exist: ${file.path}');
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error processing image: ${e.toString()}')),
+                    SnackBar(content: Text('Error: Image file not found. Please try again.')),
                   );
                 }
               }
+            } catch (e) {
+              print('❌ Error processing file ${xFile.path}: $e');
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error processing image: ${e.toString()}')),
+                );
+              }
             }
-            print('✅ Added ${item.images.length} valid File(s) to item.images. Total images: ${item.images.length}');
           }
-        });
+          setState(() {
+            item.images.addAll(validFiles);
+            print('✅ Added ${validFiles.length} valid File(s) to item.images. Total images: ${item.images.length}');
+          });
+        }
       } else {
         print('⚠️ No images picked from gallery');
       }
