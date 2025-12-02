@@ -2810,6 +2810,41 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         print('✅ CONDITIONS MET: Starting media upload process for orderId: $savedOrderId, shopId: $shopId');
         print('📤 Total order items: ${orderItems.length}');
         
+        // For update mode, fetch the order details to get newly created orderItemIds
+        Map<int, int>? orderItemIdMap;
+        if (widget.orderId != null) {
+          try {
+            print('📥 Fetching order details to get orderItemIds for newly created items...');
+            final fetchUrl = "${Urls.ordersSave}/$shopId?pageNumber=1&pageSize=10&orderId=$savedOrderId";
+            final fetchResponse = await ApiService().get(fetchUrl, context);
+            
+            if (fetchResponse.data != null && fetchResponse.data['data'] != null) {
+              final orders = fetchResponse.data['data'] as List<dynamic>;
+              if (orders.isNotEmpty) {
+                final order = orders[0] as Map<String, dynamic>;
+                final savedItems = order['items'] as List<dynamic>? ?? [];
+                
+                print('📥 Fetched ${savedItems.length} items from order details');
+                
+                // Create a map: frontend item index -> orderItemId
+                // Match by index (items should be in the same order)
+                orderItemIdMap = {};
+                for (int i = 0; i < savedItems.length && i < orderItems.length; i++) {
+                  final savedItem = savedItems[i];
+                  final orderItemId = savedItem['orderItemId'];
+                  if (orderItemId != null && orderItemId > 0) {
+                    orderItemIdMap[i] = orderItemId;
+                    print('📥 Mapped item index $i -> orderItemId $orderItemId');
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            print('⚠️ Error fetching order details for media upload: $e');
+            // Continue with existing logic as fallback
+          }
+        }
+        
         // Upload media for each item
         for (int i = 0; i < orderItems.length; i++) {
           final item = orderItems[i];
@@ -2820,11 +2855,16 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           int? orderItemId;
           
           if (widget.orderId != null) {
-            // Updating existing order - use the orderItemId from the item
-            // Only use if it's a valid ID (greater than 0)
+            // Updating existing order
+            // First try to use the orderItemId from the item (for existing items)
             if (item.orderItemId != null && item.orderItemId! > 0) {
               orderItemId = item.orderItemId;
-              print('✅ Update mode: Using orderItemId ${orderItemId} for item $i');
+              print('✅ Update mode: Using existing orderItemId ${orderItemId} for item $i');
+            } 
+            // If item doesn't have orderItemId, it's a new item - get from fetched order details
+            else if (orderItemIdMap != null && orderItemIdMap.containsKey(i)) {
+              orderItemId = orderItemIdMap[i];
+              print('✅ Update mode: Using fetched orderItemId ${orderItemId} for new item $i');
             } else {
               print('❌ Update mode: Invalid orderItemId ${item.orderItemId} for item $i');
               print('❌ Item details: selectedDressTypeId=${item.selectedDressTypeId}, images=${item.images.length}');

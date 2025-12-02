@@ -5,7 +5,7 @@ class DressIcons {
   // Map of dress types to their corresponding icons
   static const Map<String, IconData> _dressIconMap = {
     // Formal wear
-    'blouse': Icons.checkroom, // Changed from woman to checkroom (clothing icon)
+    'blouse': Icons.woman, // Women's top/blouse
     'blazer': Icons.checkroom, // Changed from business_center to checkroom
     'suit': Icons.checkroom, // Changed from business_center to checkroom
     'coat': Icons.checkroom, // Changed from outbond to checkroom
@@ -13,7 +13,7 @@ class DressIcons {
     
     // Traditional wear
     'kurta': Icons.checkroom, // Changed from self_improvement to checkroom
-    'kurti': Icons.checkroom, // Changed from self_improvement to checkroom
+    'kurti': Icons.woman, // Women's traditional top
     'saree': Icons.checkroom, // Changed from woman to checkroom
     'lehenga': Icons.checkroom, // Changed from celebration to checkroom
     'anarkali': Icons.checkroom, // Changed from celebration to checkroom
@@ -57,9 +57,9 @@ class DressIcons {
     'jumpsuit': Icons.checkroom, // Changed from child_care to checkroom
     
     // Men's wear
-    'dhoti': Icons.checkroom, // Changed from man to checkroom
-    'lungi': Icons.checkroom, // Changed from man to checkroom
-    'veshti': Icons.checkroom, // Changed from man to checkroom
+    'dhoti': Icons.man, // Traditional men's lower garment
+    'lungi': Icons.man, // Traditional men's lower garment
+    'veshti': Icons.man, // Traditional men's lower garment
     
     // Special occasion
     'wedding': Icons.checkroom, // Changed from favorite to checkroom
@@ -146,6 +146,78 @@ class DressIcons {
     // Default color
     return ColorPalatte.primary;
   }
+
+  // Map of dress types to default image URLs
+  // Using simple icon-style images (clean, minimal outline style like the reference)
+  // Using Iconify API for simple, clean clothing icons
+  static const Map<String, String> _defaultImageMap = {
+    // Women's wear - Traditional
+    'blouse': 'https://api.iconify.design/mdi/shirt-outline.svg?color=%23000000&width=200&height=200',
+    'kurti': 'https://api.iconify.design/mdi/shirt-outline.svg?color=%23000000&width=200&height=200',
+    'saree': 'https://api.iconify.design/mdi/dress-outline.svg?color=%23000000&width=200&height=200',
+    'lehenga': 'https://api.iconify.design/mdi/dress-outline.svg?color=%23000000&width=200&height=200',
+    'anarkali': 'https://api.iconify.design/mdi/dress-outline.svg?color=%23000000&width=200&height=200',
+    'salwar': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'churidar': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'palazzo': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    
+    // Women's wear - Western
+    'dress': 'https://api.iconify.design/mdi/dress-outline.svg?color=%23000000&width=200&height=200',
+    'gown': 'https://api.iconify.design/mdi/dress-outline.svg?color=%23000000&width=200&height=200',
+    'maxi': 'https://api.iconify.design/mdi/dress-outline.svg?color=%23000000&width=200&height=200',
+    'top': 'https://api.iconify.design/mdi/shirt-outline.svg?color=%23000000&width=200&height=200',
+    'skirt': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    
+    // Men's wear - Traditional
+    'kurta': 'https://api.iconify.design/mdi/shirt-outline.svg?color=%23000000&width=200&height=200',
+    'dhoti': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'lungi': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'veshti': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    
+    // Men's wear - Western
+    'shirt': 'https://api.iconify.design/mdi/shirt-outline.svg?color=%23000000&width=200&height=200',
+    't-shirt': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'tshirt': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    
+    // Formal wear
+    'blazer': 'https://api.iconify.design/mdi/coat-rack.svg?color=%23000000&width=200&height=200',
+    'suit': 'https://api.iconify.design/mdi/coat-rack.svg?color=%23000000&width=200&height=200',
+    'coat': 'https://api.iconify.design/mdi/coat-rack.svg?color=%23000000&width=200&height=200',
+    'jacket': 'https://api.iconify.design/mdi/coat-rack.svg?color=%23000000&width=200&height=200',
+    
+    // Bottom wear
+    'pant': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'pants': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'trouser': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'trousers': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'jeans': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'shorts': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+    'leggings': 'https://api.iconify.design/mdi/tshirt-crew-outline.svg?color=%23000000&width=200&height=200',
+  };
+
+  // Get default image URL for a dress type
+  static String? getDefaultImageUrl(String? dressType) {
+    if (dressType == null || dressType.isEmpty) {
+      return null;
+    }
+    
+    // Convert to lowercase for case-insensitive matching
+    String lowerDressType = dressType.toLowerCase().trim();
+    
+    // Direct match first
+    if (_defaultImageMap.containsKey(lowerDressType)) {
+      return _defaultImageMap[lowerDressType];
+    }
+    
+    // Partial match - check if any key contains the dress type or vice versa
+    for (String key in _defaultImageMap.keys) {
+      if (lowerDressType.contains(key) || key.contains(lowerDressType)) {
+        return _defaultImageMap[key];
+      }
+    }
+    
+    return null;
+  }
 }
 
 // Custom widget for dress icons
@@ -173,8 +245,15 @@ class DressIconWidget extends StatelessWidget {
     final Color bgColor = backgroundColor ?? DressIcons.getColorForDressType(dressType);
     final Color icColor = iconColor ?? Colors.white;
     
-    // If imageUrl is provided, show image instead of icon
-    if (imageUrl != null && imageUrl!.isNotEmpty) {
+    // Determine which image URL to use: custom imageUrl > default image > icon
+    String? imageUrlToUse = imageUrl;
+    if (imageUrlToUse == null || imageUrlToUse.isEmpty) {
+      // Try to get default image URL for this dress type
+      imageUrlToUse = DressIcons.getDefaultImageUrl(dressType);
+    }
+    
+    // If we have an image URL (custom or default), show image
+    if (imageUrlToUse != null && imageUrlToUse.isNotEmpty) {
       return Container(
         width: size,
         height: size,
@@ -191,7 +270,7 @@ class DressIconWidget extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(size / 2),
           child: Image.network(
-            imageUrl!,
+            imageUrlToUse,
             width: size,
             height: size,
             fit: BoxFit.cover,
@@ -220,7 +299,7 @@ class DressIconWidget extends StatelessWidget {
       );
     }
     
-    // Show icon if no imageUrl
+    // Show icon if no imageUrl (custom or default)
     return _buildIconWidget(icon, bgColor, icColor);
   }
   

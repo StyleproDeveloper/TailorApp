@@ -565,8 +565,11 @@ class _CustomerscreenState extends State<Customerscreen> {
                             ),
                             onTap: () {
                               if (customer.isNotEmpty) {
-                                _showEditcustomerModal(
-                                    context, customer['customerId']);
+                                Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.customerDetailScreen,
+                                  arguments: customer['customerId'],
+                                );
                               }
                             },
                           ),

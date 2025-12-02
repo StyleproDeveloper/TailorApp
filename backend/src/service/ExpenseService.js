@@ -38,10 +38,26 @@ const createExpenseService = async (expenseData) => {
       });
     }
 
+    // Auto-generate name from first entry's expenseType and date if not provided
+    let expenseName = data.name;
+    if (!expenseName || expenseName.trim() === '') {
+      if (processedEntries.length > 0 && processedEntries[0].expenseType && processedEntries[0].date) {
+        const firstEntry = processedEntries[0];
+        const expenseType = firstEntry.expenseType.charAt(0).toUpperCase() + firstEntry.expenseType.slice(1);
+        const entryDate = firstEntry.date instanceof Date ? firstEntry.date : new Date(firstEntry.date);
+        const dateStr = entryDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+        expenseName = `${expenseType} ${dateStr}`;
+      } else {
+        // Fallback if no entries
+        expenseName = `Expense ${new Date().toISOString().split('T')[0]}`;
+      }
+    }
+
     const newExpense = new ExpenseModel({ 
       expenseId, 
       shop_id, 
       ...data,
+      name: expenseName,
       entries: processedEntries.length > 0 ? processedEntries : []
     });
     return await newExpense.save();
@@ -115,6 +131,17 @@ const updateExpenseService = async (shop_id, expenseId, expenseData) => {
         }
         return processedEntry;
       });
+      
+      // Auto-generate name from first entry if name is not provided or empty
+      if (!updateData.name || updateData.name.trim() === '') {
+        const firstEntry = updateData.entries[0];
+        if (firstEntry.expenseType && firstEntry.date) {
+          const expenseType = firstEntry.expenseType.charAt(0).toUpperCase() + firstEntry.expenseType.slice(1);
+          const entryDate = firstEntry.date instanceof Date ? firstEntry.date : new Date(firstEntry.date);
+          const dateStr = entryDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+          updateData.name = `${expenseType} ${dateStr}`;
+        }
+      }
     }
     
     return await ExpenseModel.findOneAndUpdate(

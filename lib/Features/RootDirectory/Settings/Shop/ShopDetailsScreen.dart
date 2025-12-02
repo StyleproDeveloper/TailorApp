@@ -91,7 +91,25 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
       cityController.text = shopData!['city']?.toString() ?? '';
       stateController.text = shopData!['state']?.toString() ?? '';
       postalCodeController.text = shopData!['postalCode']?.toString() ?? '';
-      selectedShopType = shopData!['shopType']?.toString() ?? 'Store';
+      
+      // Handle shopType - it might come as integer (1) or string ('Store', 'Workshop')
+      final shopTypeValue = shopData!['shopType'];
+      if (shopTypeValue != null) {
+        final shopTypeStr = shopTypeValue.toString();
+        // If it's a number, map it: 1 = Store, 2 = Workshop (or check actual mapping)
+        if (shopTypeStr == '1' || shopTypeStr == 'Store') {
+          selectedShopType = 'Store';
+        } else if (shopTypeStr == '2' || shopTypeStr == 'Workshop') {
+          selectedShopType = 'Workshop';
+        } else if (shopTypes.contains(shopTypeStr)) {
+          // If it's already a valid string value
+          selectedShopType = shopTypeStr;
+        } else {
+          selectedShopType = 'Store'; // Default fallback
+        }
+      } else {
+        selectedShopType = 'Store';
+      }
       
       // Set country codes if available, otherwise keep default +91
       if (shopData!['countryCode'] != null && shopData!['countryCode'].toString().isNotEmpty) {
@@ -231,7 +249,7 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
-                  value: selectedShopType,
+                  value: shopTypes.contains(selectedShopType) ? selectedShopType : shopTypes.first,
                   isExpanded: true,
                   items: shopTypes.map((String type) {
                     return DropdownMenuItem<String>(
@@ -240,7 +258,7 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                     );
                   }).toList(),
                   onChanged: isEditing ? (String? newValue) {
-                    if (newValue != null) {
+                    if (newValue != null && shopTypes.contains(newValue)) {
                       setState(() => selectedShopType = newValue);
                     }
                   } : null,

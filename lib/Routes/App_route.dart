@@ -9,6 +9,7 @@ import 'package:tailorapp/Features/RootDirectory/Settings/Branches/BranchesScree
 import 'package:tailorapp/Features/RootDirectory/Settings/Shop/ShopDetailsScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/Settings/contactUs/ContactSupportScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/customer/CustomerInfo.dart';
+import 'package:tailorapp/Features/RootDirectory/customer/CustomerDetailScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/BottomTabs/BottomTabs.dart';
 import 'package:tailorapp/Features/AuthDirectory/Subscribe/SubscribeScreen.dart';
 import 'package:tailorapp/Features/RootDirectory/Orders/CreateOrder/CreateOrderScreen.dart';
@@ -38,6 +39,7 @@ class AppRoutes {
   static const String billingTermsScreen = './billingTermsScreen';
   static const String orderDetailsScreen = './orderDetailsScreen';
   static const String shopDetailsScreen = './shopDetailsScreen';
+  static const String customerDetailScreen = './customerDetailScreen';
   static const String registrationSuccess = './registrationSuccess';
   static const String subscribe = './subscribe';
 
@@ -58,8 +60,20 @@ class AppRoutes {
     customerScreen: (context) => Customerscreen(),
     contactSupportScreen: (context) => ContactSupportScreen(),
     billingTermsScreen: (context) => BillingDetailsScreen(),
-    orderDetailsScreen: (context) => OrderDetailsScreen(),
+    orderDetailsScreen: (context) {
+      return OrderDetailsScreen();
+    },
     shopDetailsScreen: (context) => ShopDetailsScreen(),
+    customerDetailScreen: (context) {
+      final customerId = ModalRoute.of(context)?.settings.arguments as int?;
+      if (customerId == null) {
+        return Scaffold(
+          appBar: AppBar(title: Text('Error')),
+          body: Center(child: Text('Customer ID is required')),
+        );
+      }
+      return CustomerDetailScreen(customerId: customerId);
+    },
     registrationSuccess: (context) => const RegistrationSuccessScreen(),
     subscribe: (context) => const SubscribeScreen(),
   };

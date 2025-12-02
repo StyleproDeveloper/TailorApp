@@ -43,15 +43,12 @@ class Addexpensemodal extends StatefulWidget {
 }
 
 class _AddexpensemodalState extends State<Addexpensemodal> {
-  final TextEditingController nameController = TextEditingController();
   List<ExpenseEntry> expenseEntries = [];
 
   @override
   void initState() {
     super.initState();
     if (widget.expenseData != null) {
-      nameController.text = widget.expenseData!['name']?.trim() ?? '';
-      
       // Load expense entries if they exist
       if (widget.expenseData!['entries'] != null && 
           (widget.expenseData!['entries'] as List).isNotEmpty) {
@@ -140,14 +137,6 @@ class _AddexpensemodalState extends State<Addexpensemodal> {
           ));
       return;
     }
-    if (nameController.text.isEmpty) {
-      CustomSnackbar.showSnackbar(
-        context,
-        'Expense name is required',
-        duration: const Duration(seconds: 1),
-      );
-      return;
-    }
     
     // Validate entries
     for (int i = 0; i < expenseEntries.length; i++) {
@@ -182,10 +171,14 @@ class _AddexpensemodalState extends State<Addexpensemodal> {
         'date': entry.date!.toIso8601String(),
       }).toList();
       
+      // Get owner name from GlobalVariables (roleName or userId as fallback)
+      String? ownerName = GlobalVariables.roleName ?? 
+                          (GlobalVariables.userId != null ? 'User ${GlobalVariables.userId}' : null);
+      
       final payload = {
         'shop_id': id,
-        'name': capitalize(nameController.text),
         'entries': entries,
+        if (ownerName != null) 'owner': ownerName,
       };
       
       Response response;
@@ -224,7 +217,6 @@ class _AddexpensemodalState extends State<Addexpensemodal> {
 
   @override
   void dispose() {
-    nameController.dispose();
     for (var entry in expenseEntries) {
       entry.dispose();
     }
@@ -261,69 +253,7 @@ class _AddexpensemodalState extends State<Addexpensemodal> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: nameController,
-                  style: Expensestyle.expenseText,
-                  decoration: InputDecoration(
-                    labelText: 'Expense Name',
-                    labelStyle: Expensestyle.expenseText,
-                    enabledBorder: const UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.black),
-                    ),
-                    focusedBorder: const UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.black, width: 2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Table header
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: ColorPalatte.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'Expense Type',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: ColorPalatte.primary,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'Amount (₹)',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: ColorPalatte.primary,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'Date',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: ColorPalatte.primary,
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 40), // Space for delete button
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Expense entries table
+                // Expense entries - vertical layout for mobile
                 Expanded(
                   child: ListView.builder(
                     shrinkWrap: true,
@@ -331,85 +261,122 @@ class _AddexpensemodalState extends State<Addexpensemodal> {
                     itemBuilder: (context, index) {
                       final entry = expenseEntries[index];
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(8),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey[300]!),
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.grey[50],
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Entry ${index + 1}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: ColorPalatte.primary,
+                                  ),
+                                ),
+                                if (expenseEntries.length > 1)
+                                  IconButton(
+                                    icon: Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () => _removeExpenseEntry(index),
+                                    tooltip: 'Remove entry',
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
                             // Expense Type Dropdown
-                            Expanded(
-                              flex: 2,
-                              child: DropdownButtonFormField<String>(
-                                value: entry.expenseType,
-                                decoration: InputDecoration(
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                ),
-                                items: ['rent', 'electricity', 'salary', 'miscellaneous']
-                                    .map((type) => DropdownMenuItem(
-                                          value: type,
-                                          child: Text(
-                                            type[0].toUpperCase() + type.substring(1),
-                                            style: TextStyle(fontSize: 14),
-                                          ),
-                                        ))
-                                    .toList(),
-                                onChanged: (value) {
-                                  setState(() {
-                                    entry.expenseType = value!;
-                                  });
-                                },
+                            Text(
+                              'Expense Type',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(height: 4),
+                            DropdownButtonFormField<String>(
+                              value: entry.expenseType,
+                              decoration: InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                              items: ['rent', 'electricity', 'salary', 'miscellaneous']
+                                  .map((type) => DropdownMenuItem(
+                                        value: type,
+                                        child: Text(
+                                          type[0].toUpperCase() + type.substring(1),
+                                          style: TextStyle(fontSize: 14),
+                                        ),
+                                      ))
+                                  .toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  entry.expenseType = value!;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 16),
                             // Amount Field
-                            Expanded(
-                              flex: 2,
-                              child: TextField(
-                                controller: entry.amountController,
-                                keyboardType: TextInputType.numberWithOptions(decimal: true),
-                                decoration: InputDecoration(
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  hintText: '0.00',
-                                ),
-                                style: TextStyle(fontSize: 14),
+                            Text(
+                              'Amount (₹)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(height: 4),
+                            TextField(
+                              controller: entry.amountController,
+                              keyboardType: TextInputType.numberWithOptions(decimal: true),
+                              decoration: InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                hintText: '0.00',
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                              style: TextStyle(fontSize: 14),
+                            ),
+                            const SizedBox(height: 16),
                             // Date Field
-                            Expanded(
-                              flex: 2,
-                              child: TextField(
-                                controller: entry.dateController,
-                                readOnly: true,
-                                decoration: InputDecoration(
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  suffixIcon: Icon(Icons.calendar_today, size: 18),
-                                  hintText: 'Select date',
-                                ),
-                                style: TextStyle(fontSize: 14),
-                                onTap: () => _selectDate(context, index),
+                            Text(
+                              'Date',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            // Delete Button
-                            IconButton(
-                              icon: Icon(Icons.delete, color: Colors.red),
-                              onPressed: expenseEntries.length > 1
-                                  ? () => _removeExpenseEntry(index)
-                                  : null,
-                              tooltip: 'Remove row',
+                            const SizedBox(height: 4),
+                            TextField(
+                              controller: entry.dateController,
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                suffixIcon: Icon(Icons.calendar_today, size: 20),
+                                hintText: 'Select date',
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                              style: TextStyle(fontSize: 14),
+                              onTap: () => _selectDate(context, index),
                             ),
                           ],
                         ),
@@ -418,14 +385,14 @@ class _AddexpensemodalState extends State<Addexpensemodal> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Add Row Button
+                // Add Entry Button
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
                     onPressed: _addExpenseEntry,
                     icon: Icon(Icons.add, color: ColorPalatte.primary),
                     label: Text(
-                      'Add Row',
+                      'Add Entry',
                       style: TextStyle(color: ColorPalatte.primary),
                     ),
                   ),

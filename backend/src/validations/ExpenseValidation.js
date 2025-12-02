@@ -24,8 +24,7 @@ const createExpenseSchema = Joi.object({
   shop_id: Joi.number().required().messages({
     'any.required': 'Shop ID is required!',
   }),
-  name: Joi.string().required().max(100).messages({
-    'any.required': 'Expense name is required!',
+  name: Joi.string().allow(null, '').max(100).optional().messages({
     'string.max': 'Expense name cannot exceed 100 characters!',
   }),
   entries: Joi.array().items(expenseEntrySchema).min(1).required().messages({

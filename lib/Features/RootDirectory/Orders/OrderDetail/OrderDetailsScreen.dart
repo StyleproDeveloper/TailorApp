@@ -305,30 +305,6 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             _buildCostSummary(),
             const SizedBox(height: 16),
             _buildDeliveryInfo(),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFB28C6E),
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: () {
-                  CustomSnackbar.showSnackbar(
-                    context,
-                    'Tracking feature Under Development.',
-                    duration: Duration(seconds: 1),
-                  );
-                },
-                child: const Text(
-                  'Track Order',
-                  style: Orderdetailstyles.trackOrderBtnText,
-                ),
-              ),
-            ),
           ],
         ),
       ),
