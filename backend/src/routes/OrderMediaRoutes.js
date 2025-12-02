@@ -17,13 +17,20 @@ const upload = multer({
     fileSize: 50 * 1024 * 1024, // 50MB limit
   },
   fileFilter: (req, file, cb) => {
-    // Allow images and audio files
+    // Allow images and audio files - comprehensive list including HEIC
     const allowedMimes = [
       'image/jpeg',
       'image/jpg',
       'image/png',
       'image/gif',
       'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/bmp',
+      'image/tiff',
+      'image/tif',
+      'image/x-icon',
+      'image/svg+xml',
       'audio/mpeg',
       'audio/mp3',
       'audio/wav',
@@ -47,6 +54,13 @@ const upload = multer({
         'png': 'image/png',
         'gif': 'image/gif',
         'webp': 'image/webp',
+        'heic': 'image/heic',
+        'heif': 'image/heic',
+        'bmp': 'image/bmp',
+        'tiff': 'image/tiff',
+        'tif': 'image/tiff',
+        'ico': 'image/x-icon',
+        'svg': 'image/svg+xml',
         'mp3': 'audio/mpeg',
         'wav': 'audio/wav',
         'ogg': 'audio/ogg',

@@ -232,6 +232,18 @@ class ApiService {
     try {
       if (kDebugMode) {
         print('UPLOAD MEDIA: $baseUrl$endpoint');
+        print('📁 File path: ${file.path}');
+      }
+      
+      // Check if file exists
+      if (!await file.exists()) {
+        throw Exception('File does not exist: ${file.path}');
+      }
+      
+      // Get file size
+      final fileSize = await file.length();
+      if (kDebugMode) {
+        print('📊 File size: ${fileSize} bytes (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)');
       }
       
       final formData = FormData();
@@ -239,7 +251,29 @@ class ApiService {
       // Determine MIME type from file extension
       String? mimeType;
       final fileName = file.path.split('/').last.toLowerCase();
-      if (fileName.endsWith('.m4a')) {
+      
+      // Image MIME types - comprehensive list
+      if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
+        mimeType = 'image/jpeg';
+      } else if (fileName.endsWith('.png')) {
+        mimeType = 'image/png';
+      } else if (fileName.endsWith('.gif')) {
+        mimeType = 'image/gif';
+      } else if (fileName.endsWith('.webp')) {
+        mimeType = 'image/webp';
+      } else if (fileName.endsWith('.heic') || fileName.endsWith('.heif')) {
+        mimeType = 'image/heic';
+      } else if (fileName.endsWith('.bmp')) {
+        mimeType = 'image/bmp';
+      } else if (fileName.endsWith('.tiff') || fileName.endsWith('.tif')) {
+        mimeType = 'image/tiff';
+      } else if (fileName.endsWith('.ico')) {
+        mimeType = 'image/x-icon';
+      } else if (fileName.endsWith('.svg')) {
+        mimeType = 'image/svg+xml';
+      }
+      // Audio MIME types
+      else if (fileName.endsWith('.m4a')) {
         mimeType = 'audio/mp4';
       } else if (fileName.endsWith('.mp3')) {
         mimeType = 'audio/mpeg';
@@ -249,6 +283,10 @@ class ApiService {
         mimeType = 'audio/ogg';
       } else if (fileName.endsWith('.aac')) {
         mimeType = 'audio/aac';
+      }
+      
+      if (kDebugMode) {
+        print('📄 Detected MIME type: ${mimeType ?? 'unknown'}');
       }
       
       // Add file with proper MIME type if detected
@@ -266,10 +304,42 @@ class ApiService {
         });
       }
       
-      final response = await _dio.post(endpoint, data: formData);
+      if (kDebugMode) {
+        print('📤 Uploading file with ${formData.fields.length} fields and ${formData.files.length} files');
+      }
+      
+      final response = await _dio.post(
+        endpoint, 
+        data: formData,
+        options: Options(
+          sendTimeout: const Duration(seconds: 60), // Increase timeout for large files
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
+      
+      if (kDebugMode) {
+        print('✅ Upload successful: ${response.statusCode}');
+      }
+      
       return response;
     } on DioException catch (e) {
+      if (kDebugMode) {
+        print('❌ DioException during upload: ${e.message}');
+        print('❌ Error type: ${e.type}');
+        print('❌ Response: ${e.response?.data}');
+      }
       _handleDioError(e, context);
+      rethrow;
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print('❌ General error during upload: $e');
+        print('❌ Stack trace: $stackTrace');
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error uploading file: ${e.toString()}')),
+        );
+      }
       rethrow;
     }
   }

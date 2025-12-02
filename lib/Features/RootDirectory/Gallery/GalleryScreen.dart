@@ -189,12 +189,56 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (pickedFiles != null && pickedFiles.isNotEmpty) {
         print('🖼️ Gallery: Processing ${pickedFiles.length} image(s)');
         
-        // Upload all selected images
-        for (var file in pickedFiles) {
-          await _uploadImageToBackend(file);
+        // Validate and upload all selected images
+        int successCount = 0;
+        for (var xFile in pickedFiles) {
+          try {
+            // Verify file exists (for mobile native)
+            if (!kIsWeb) {
+              final file = File(xFile.path);
+              if (!await file.exists()) {
+                print('⚠️ Gallery: File does not exist: ${file.path}');
+                if (mounted) {
+                  CustomSnackbar.showSnackbar(
+                    context,
+                    'Warning: One image file not found and was skipped',
+                  );
+                }
+                continue;
+              }
+              final fileSize = await file.length();
+              if (fileSize == 0) {
+                print('⚠️ Gallery: File is empty: ${file.path}');
+                if (mounted) {
+                  CustomSnackbar.showSnackbar(
+                    context,
+                    'Warning: One image file is empty and was skipped',
+                  );
+                }
+                continue;
+              }
+            }
+            
+            await _uploadImageToBackend(xFile);
+            successCount++;
+          } catch (e) {
+            print('❌ Gallery: Error uploading file ${xFile.path}: $e');
+            if (mounted) {
+              CustomSnackbar.showSnackbar(
+                context,
+                'Error uploading one image: ${e.toString()}',
+              );
+            }
+          }
         }
 
-        print('✅ Gallery: Uploaded ${pickedFiles.length} image(s)');
+        print('✅ Gallery: Uploaded $successCount of ${pickedFiles.length} image(s)');
+        if (mounted && successCount > 0) {
+          CustomSnackbar.showSnackbar(
+            context,
+            'Successfully uploaded $successCount image(s)',
+          );
+        }
       } else {
         print('⚠️ Gallery: No files selected');
       }
@@ -293,22 +337,50 @@ class _GalleryScreenState extends State<GalleryScreen> {
       
       Response response;
       
-      if (kIsWeb) {
-        // On web, read bytes from XFile
-        final bytes = await imageFile.readAsBytes();
-        String fileName = imageFile.name;
-        if (fileName.isEmpty) {
-          final pathParts = imageFile.path.split('/');
-          if (pathParts.isNotEmpty) {
-            fileName = pathParts.last;
-            if (fileName.contains('?')) {
-              fileName = fileName.split('?').first;
-            }
+      // Determine MIME type from file extension
+      String? mimeType;
+      String fileName = imageFile.name;
+      
+      if (fileName.isEmpty) {
+        final pathParts = imageFile.path.split('/');
+        if (pathParts.isNotEmpty) {
+          fileName = pathParts.last;
+          if (fileName.contains('?')) {
+            fileName = fileName.split('?').first;
           }
         }
-        if (fileName.isEmpty || !fileName.contains('.')) {
-          fileName = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        }
+      }
+      
+      if (fileName.isEmpty || !fileName.contains('.')) {
+        fileName = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      }
+      
+      // Detect MIME type from file extension
+      final fileNameLower = fileName.toLowerCase();
+      if (fileNameLower.endsWith('.jpg') || fileNameLower.endsWith('.jpeg')) {
+        mimeType = 'image/jpeg';
+      } else if (fileNameLower.endsWith('.png')) {
+        mimeType = 'image/png';
+      } else if (fileNameLower.endsWith('.gif')) {
+        mimeType = 'image/gif';
+      } else if (fileNameLower.endsWith('.webp')) {
+        mimeType = 'image/webp';
+      } else if (fileNameLower.endsWith('.heic') || fileNameLower.endsWith('.heif')) {
+        mimeType = 'image/heic';
+      } else if (fileNameLower.endsWith('.bmp')) {
+        mimeType = 'image/bmp';
+      } else if (fileNameLower.endsWith('.tiff') || fileNameLower.endsWith('.tif')) {
+        mimeType = 'image/tiff';
+      } else {
+        // Default to JPEG if unknown
+        mimeType = 'image/jpeg';
+      }
+      
+      if (kIsWeb) {
+        // On web (including mobile browsers), read bytes from XFile
+        final bytes = await imageFile.readAsBytes();
+        
+        print('📤 Gallery Web: Uploading ${bytes.length} bytes as $fileName (${mimeType})');
 
         final formData = FormData.fromMap({
           'shopId': shopId.toString(),
@@ -316,7 +388,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           'file': MultipartFile.fromBytes(
             bytes,
             filename: fileName,
-            contentType: DioMediaType.parse('image/jpeg'),
+            contentType: DioMediaType.parse(mimeType),
           ),
         });
 
@@ -326,8 +398,16 @@ class _GalleryScreenState extends State<GalleryScreen> {
           formData,
         );
       } else {
-        // On mobile, use File
+        // On mobile native, use File
         final file = File(imageFile.path);
+        
+        // Verify file exists
+        if (!await file.exists()) {
+          throw Exception('Image file not found. Please try selecting the image again.');
+        }
+        
+        print('📤 Gallery Mobile: Uploading file: ${file.path} (${mimeType})');
+        
         response = await ApiService().uploadMediaFile(
           '${Urls.gallery}/$shopId/upload',
           context,

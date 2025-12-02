@@ -16,13 +16,20 @@ const upload = multer({
     fileSize: 50 * 1024 * 1024, // 50MB limit
   },
   fileFilter: (req, file, cb) => {
-    // Allow only image files
+    // Allow only image files - comprehensive list including HEIC
     const allowedMimes = [
       'image/jpeg',
       'image/jpg',
       'image/png',
       'image/gif',
       'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/bmp',
+      'image/tiff',
+      'image/tif',
+      'image/x-icon',
+      'image/svg+xml',
     ];
 
     // Log for debugging
@@ -38,6 +45,13 @@ const upload = multer({
         'png': 'image/png',
         'gif': 'image/gif',
         'webp': 'image/webp',
+        'heic': 'image/heic',
+        'heif': 'image/heic',
+        'bmp': 'image/bmp',
+        'tiff': 'image/tiff',
+        'tif': 'image/tiff',
+        'ico': 'image/x-icon',
+        'svg': 'image/svg+xml',
       };
       mimetype = mimeMap[ext] || 'image/jpeg'; // Default to jpeg if unknown
       console.log('📤 Inferred mimetype from extension:', mimetype);

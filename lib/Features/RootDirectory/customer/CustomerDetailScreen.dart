@@ -400,11 +400,56 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen>
     );
   }
 
+  double _calculateOrderTotal(Map<String, dynamic> order) {
+    try {
+      // Calculate items total
+      final items = order['items'] as List<dynamic>? ?? [];
+      double itemsTotal = 0.0;
+      for (var item in items) {
+        itemsTotal += (item['amount'] ?? 0).toDouble();
+      }
+
+      // Calculate additional costs total
+      final additionalCosts = order['additionalCosts'] as List<dynamic>? ?? [];
+      double additionalCostsTotal = 0.0;
+      for (var cost in additionalCosts) {
+        additionalCostsTotal += (cost['additionalCost'] ?? 0).toDouble();
+      }
+
+      // Calculate subtotal
+      double subtotal = itemsTotal + additionalCostsTotal;
+      
+      // Fallback to estimationCost if subtotal is 0
+      if (subtotal == 0.0 && order['estimationCost'] != null) {
+        subtotal = (order['estimationCost'] ?? 0).toDouble();
+      }
+
+      // Apply discount
+      final discount = (order['discount'] ?? 0).toDouble();
+      final subtotalAfterDiscount = (subtotal - discount).clamp(0.0, double.infinity);
+
+      // Add courier charge
+      final courierCharge = (order['courierCharge'] ?? 0).toDouble();
+
+      // Calculate GST (18% on discounted subtotal if GST is enabled)
+      final gstAmount = order['gst'] == true ? (subtotalAfterDiscount * 0.18) : 0.0;
+
+      // Final total: discounted subtotal + courier + GST
+      final total = subtotalAfterDiscount + courierCharge + gstAmount;
+      
+      return total;
+    } catch (e) {
+      print('Error calculating order total: $e');
+      // Fallback to totalAmount if calculation fails
+      return (order['totalAmount'] ?? 0.0).toDouble();
+    }
+  }
+
   Widget _buildOrderCard(Map<String, dynamic> order) {
     final orderId = order['orderId'] ?? 'N/A';
     final status = order['status']?.toString() ?? 'N/A';
     final items = order['items'] as List<dynamic>? ?? [];
-    final totalAmount = order['totalAmount'] ?? 0.0;
+    final totalAmount = _calculateOrderTotal(order);
     final deliveryDate = _getDeliveryDate(order);
     
     return Card(
@@ -469,8 +514,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen>
                   Icon(Icons.currency_rupee, size: 16, color: Colors.grey.shade600),
                   SizedBox(width: 8),
                   Text(
-                    _formatCurrency(totalAmount is double ? totalAmount : 
-                        (totalAmount is int ? totalAmount.toDouble() : 0.0)),
+                    _formatCurrency(totalAmount),
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,

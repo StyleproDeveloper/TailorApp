@@ -1392,9 +1392,39 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
             item.images.add(pickedFile);
             print('✅ Added XFile to item.images. Total images: ${item.images.length}');
           } else {
-            // On mobile, convert to File
-            item.images.add(File(pickedFile.path));
-            print('✅ Added File to item.images. Total images: ${item.images.length}');
+            // On mobile, convert to File and verify it exists
+            try {
+              final file = File(pickedFile.path);
+              if (await file.exists()) {
+                final fileSize = await file.length();
+                if (fileSize > 0) {
+                  item.images.add(file);
+                  print('✅ Added file from camera: ${file.path} (${fileSize} bytes)');
+                } else {
+                  print('⚠️ Camera file is empty: ${file.path}');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: Camera image is empty. Please try again.')),
+                    );
+                  }
+                }
+              } else {
+                print('❌ Camera file does not exist: ${file.path}');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: Camera image not found. Please try again.')),
+                  );
+                }
+              }
+            } catch (e) {
+              print('❌ Error processing camera file: $e');
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error processing camera image: ${e.toString()}')),
+                );
+              }
+            }
+            print('✅ Total images after camera: ${item.images.length}');
           }
         });
       } else {
@@ -1422,9 +1452,42 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
             item.images.addAll(pickedFiles);
             print('✅ Added ${pickedFiles.length} XFile(s) to item.images. Total images: ${item.images.length}');
           } else {
-            // On mobile, convert to File
-            item.images.addAll(pickedFiles.map((file) => File(file.path)));
-            print('✅ Added ${pickedFiles.length} File(s) to item.images. Total images: ${item.images.length}');
+            // On mobile, convert to File and verify each file exists
+            for (var xFile in pickedFiles) {
+              try {
+                final file = File(xFile.path);
+                // Verify file exists and is readable
+                if (await file.exists()) {
+                  final fileSize = await file.length();
+                  if (fileSize > 0) {
+                    item.images.add(file);
+                    print('✅ Added file: ${file.path} (${fileSize} bytes)');
+                  } else {
+                    print('⚠️ Skipping empty file: ${file.path}');
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Warning: One image file is empty and was skipped')),
+                      );
+                    }
+                  }
+                } else {
+                  print('❌ File does not exist: ${file.path}');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: Image file not found. Please try again.')),
+                    );
+                  }
+                }
+              } catch (e) {
+                print('❌ Error processing file ${xFile.path}: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error processing image: ${e.toString()}')),
+                  );
+                }
+              }
+            }
+            print('✅ Added ${item.images.length} valid File(s) to item.images. Total images: ${item.images.length}');
           }
         });
       } else {
@@ -2333,7 +2396,28 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
               fileName = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
             }
             
-            print('📤 Web: Uploading ${bytes.length} bytes as $fileName');
+            // Detect MIME type from file extension
+            String? mimeType;
+            final fileNameLower = fileName.toLowerCase();
+            if (fileNameLower.endsWith('.jpg') || fileNameLower.endsWith('.jpeg')) {
+              mimeType = 'image/jpeg';
+            } else if (fileNameLower.endsWith('.png')) {
+              mimeType = 'image/png';
+            } else if (fileNameLower.endsWith('.gif')) {
+              mimeType = 'image/gif';
+            } else if (fileNameLower.endsWith('.webp')) {
+              mimeType = 'image/webp';
+            } else if (fileNameLower.endsWith('.heic') || fileNameLower.endsWith('.heif')) {
+              mimeType = 'image/heic';
+            } else if (fileNameLower.endsWith('.bmp')) {
+              mimeType = 'image/bmp';
+            } else if (fileNameLower.endsWith('.tiff') || fileNameLower.endsWith('.tif')) {
+              mimeType = 'image/tiff';
+            } else {
+              mimeType = 'image/jpeg'; // Default to JPEG
+            }
+            
+            print('📤 Web: Uploading ${bytes.length} bytes as $fileName (${mimeType})');
             print('📤 Web: Upload URL: ${Urls.orderMedia}/upload');
             print('📤 Web: shopId=$shopId, orderId=$orderId, orderItemId=$orderItemId');
             
@@ -2347,7 +2431,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
               'file': MultipartFile.fromBytes(
                 bytes,
                 filename: fileName,
-                contentType: DioMediaType.parse('image/jpeg'), // Set mimetype explicitly
+                contentType: DioMediaType.parse(mimeType),
               ),
             });
             
@@ -2377,6 +2461,20 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
             // On mobile, use File directly
             final fileToUpload = imageData as File;
             print('📤 Mobile: Uploading file: ${fileToUpload.path}');
+            
+            // Verify file exists before uploading
+            if (!await fileToUpload.exists()) {
+              print('❌ Mobile: File does not exist: ${fileToUpload.path}');
+              throw Exception('Image file not found. Please try selecting the image again.');
+            }
+            
+            // Check file size (warn if too large, but still try to upload)
+            final fileSize = await fileToUpload.length();
+            print('📊 Mobile: File size: ${fileSize} bytes (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)');
+            
+            if (fileSize > 10 * 1024 * 1024) { // 10MB
+              print('⚠️ Mobile: Large file detected (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)');
+            }
             
             response = await ApiService().uploadMediaFile(
               '${Urls.orderMedia}/upload',

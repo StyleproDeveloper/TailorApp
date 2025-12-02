@@ -50,6 +50,13 @@ const uploadGalleryImageService = async (shopId, file, owner) => {
         '.png': 'image/png',
         '.gif': 'image/gif',
         '.webp': 'image/webp',
+        '.heic': 'image/heic',
+        '.heif': 'image/heic',
+        '.bmp': 'image/bmp',
+        '.tiff': 'image/tiff',
+        '.tif': 'image/tiff',
+        '.ico': 'image/x-icon',
+        '.svg': 'image/svg+xml',
       };
       contentType = mimeMap[ext] || 'image/jpeg';
     }
