@@ -78,6 +78,13 @@ class _ExpensescreenState extends State<Expensescreen> {
       builder: (context) => Addexpensemodal(
         onClose: () => {Navigator.of(context).pop()},
         submit: () {
+          // Refresh the list immediately
+          setState(() {
+            expenses.clear();
+            pageNumber = 1;
+            hasMoreData = true;
+            isLoading = false;
+          });
           _fetchExpenseData();
         },
       ),
