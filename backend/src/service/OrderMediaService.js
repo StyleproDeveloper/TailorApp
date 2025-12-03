@@ -84,7 +84,7 @@ const uploadOrderMediaService = async (shopId, orderId, orderItemId, file, media
         mediaUrl = await uploadToS3(
           shop.s3BucketName,
           s3Key,
-          file.buffer,
+          file.path || file.buffer, // Support both disk (path) and memory (buffer) storage
           contentType,
           {
             shopId: shopId.toString(),
@@ -96,6 +96,15 @@ const uploadOrderMediaService = async (shopId, orderId, orderItemId, file, media
         );
 
         logger.info('✅ File uploaded to S3 successfully', { mediaUrl });
+        
+        // Clean up temporary file if it exists (disk storage)
+        if (file.path) {
+          try {
+            await fs.unlink(file.path);
+          } catch (e) {
+            logger.warn('Failed to delete temporary file after S3 upload', { path: file.path, error: e.message });
+          }
+        }
       } catch (s3Error) {
         logger.error('Error uploading to S3, falling back to local storage', s3Error, {
           shopId,
@@ -105,7 +114,14 @@ const uploadOrderMediaService = async (shopId, orderId, orderItemId, file, media
         const uploadsDir = path.join(__dirname, '../../uploads', `shop_${shopId}`, `order_${orderId}`);
         await fs.mkdir(uploadsDir, { recursive: true });
         const filePath = path.join(uploadsDir, fileName);
-        await fs.writeFile(filePath, file.buffer);
+        
+        if (file.path) {
+          // Move file from temp to uploads dir
+          await fs.rename(file.path, filePath);
+        } else {
+          // Write buffer to file
+          await fs.writeFile(filePath, file.buffer);
+        }
         mediaUrl = `/uploads/shop_${shopId}/order_${orderId}/${fileName}`;
       }
     } else {
@@ -114,7 +130,14 @@ const uploadOrderMediaService = async (shopId, orderId, orderItemId, file, media
       const uploadsDir = path.join(__dirname, '../../uploads', `shop_${shopId}`, `order_${orderId}`);
       await fs.mkdir(uploadsDir, { recursive: true });
       const filePath = path.join(uploadsDir, fileName);
-      await fs.writeFile(filePath, file.buffer);
+      
+      if (file.path) {
+        // Move file from temp to uploads dir
+        await fs.rename(file.path, filePath);
+      } else {
+        // Write buffer to file
+        await fs.writeFile(filePath, file.buffer);
+      }
       mediaUrl = `/uploads/shop_${shopId}/order_${orderId}/${fileName}`;
     }
 

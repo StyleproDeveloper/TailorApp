@@ -1,4 +1,5 @@
 const { S3Client, CreateBucketCommand, PutObjectCommand, DeleteObjectCommand, HeadBucketCommand, PutBucketCorsCommand, PutBucketPolicyCommand, PutPublicAccessBlockCommand, GetPublicAccessBlockCommand } = require('@aws-sdk/client-s3');
+const fs = require('fs');
 const logger = require('./logger');
 
 // Lazy initialization of S3 client to ensure env vars are loaded
@@ -159,14 +160,26 @@ const createShopBucket = async (shopName, shopId) => {
 
 /**
  * Upload a file to S3
+ * @param {string} bucketName - Name of the S3 bucket
+ * @param {string} key - S3 key (path)
+ * @param {Buffer|string} fileBody - File content (Buffer) or file path (string)
+ * @param {string} contentType - MIME type of the file
+ * @param {Object} metadata - Optional metadata
  */
-const uploadToS3 = async (bucketName, key, fileBuffer, contentType, metadata = {}) => {
+const uploadToS3 = async (bucketName, key, fileBody, contentType, metadata = {}) => {
   try {
     const client = getS3Client();
+    
+    let body = fileBody;
+    // If fileBody is a string (path), create a read stream
+    if (typeof fileBody === 'string') {
+      body = fs.createReadStream(fileBody);
+    }
+
     const putCommand = new PutObjectCommand({
       Bucket: bucketName,
       Key: key,
-      Body: fileBuffer,
+      Body: body,
       ContentType: contentType,
       Metadata: metadata,
       // Note: ACL removed - bucket policy handles public access

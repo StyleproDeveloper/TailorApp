@@ -81,7 +81,7 @@ const uploadGalleryImageService = async (shopId, file, owner) => {
         imageUrl = await uploadToS3(
           shop.s3BucketName,
           s3Key,
-          file.buffer,
+          file.path || file.buffer, // Support both disk (path) and memory (buffer) storage
           contentType,
           {
             shopId: shopId.toString(),
@@ -90,6 +90,15 @@ const uploadGalleryImageService = async (shopId, file, owner) => {
         );
 
         logger.info('✅ Gallery image uploaded to S3 successfully', { imageUrl });
+        
+        // Clean up temporary file if it exists (disk storage)
+        if (file.path) {
+          try {
+            await fs.unlink(file.path);
+          } catch (e) {
+            logger.warn('Failed to delete temporary file after S3 upload', { path: file.path, error: e.message });
+          }
+        }
       } catch (s3Error) {
         logger.error('Error uploading gallery image to S3, falling back to local storage', s3Error, {
           shopId,
@@ -99,7 +108,14 @@ const uploadGalleryImageService = async (shopId, file, owner) => {
         const uploadsDir = path.join(__dirname, '../../uploads', `shop_${shopId}`, 'gallery');
         await fs.mkdir(uploadsDir, { recursive: true });
         const filePath = path.join(uploadsDir, fileName);
-        await fs.writeFile(filePath, file.buffer);
+        
+        if (file.path) {
+          // Move file from temp to uploads dir
+          await fs.rename(file.path, filePath);
+        } else {
+          // Write buffer to file
+          await fs.writeFile(filePath, file.buffer);
+        }
         imageUrl = `/uploads/shop_${shopId}/gallery/${fileName}`;
       }
     } else {
@@ -108,7 +124,14 @@ const uploadGalleryImageService = async (shopId, file, owner) => {
       const uploadsDir = path.join(__dirname, '../../uploads', `shop_${shopId}`, 'gallery');
       await fs.mkdir(uploadsDir, { recursive: true });
       const filePath = path.join(uploadsDir, fileName);
-      await fs.writeFile(filePath, file.buffer);
+      
+      if (file.path) {
+        // Move file from temp to uploads dir
+        await fs.rename(file.path, filePath);
+      } else {
+        // Write buffer to file
+        await fs.writeFile(filePath, file.buffer);
+      }
       imageUrl = `/uploads/shop_${shopId}/gallery/${fileName}`;
     }
 

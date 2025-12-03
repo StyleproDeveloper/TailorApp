@@ -1,5 +1,7 @@
 const express = require('express');
 const multer = require('multer');
+const path = require('path');
+const os = require('os');
 const {
   uploadOrderMedia,
   getOrderItemMedia,
@@ -9,8 +11,18 @@ const {
 
 const router = express.Router();
 
-// Configure multer for memory storage (we'll save files manually)
-const storage = multer.memoryStorage();
+// Configure multer for disk storage (temporary storage in system temp dir)
+// This prevents OOM errors with large files by writing them to disk instead of RAM
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, os.tmpdir());
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
 const upload = multer({
   storage: storage,
   limits: {
