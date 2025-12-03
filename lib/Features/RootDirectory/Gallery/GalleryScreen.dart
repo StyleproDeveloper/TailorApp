@@ -194,7 +194,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         for (var xFile in pickedFiles) {
           try {
             // Verify file can be accessed (for mobile native only)
-            // On web, we'll validate during upload
+            // On web, we'll validate during upload (blob URLs need special handling)
             if (!kIsWeb) {
               try {
                 final file = File(xFile.path);
@@ -228,6 +228,44 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   );
                 }
                 continue;
+              }
+            } else {
+              // On web, try to validate that we can read the file
+              // But don't fail if it's a blob URL - we'll handle that during upload
+              try {
+                final path = xFile.path;
+                if (path.isNotEmpty && !path.startsWith('blob:') && !path.startsWith('http://') && !path.startsWith('https://')) {
+                  // Try a quick read test for non-blob URLs
+                  final testBytes = await xFile.readAsBytes();
+                  if (testBytes.isEmpty) {
+                    print('⚠️ Gallery: File is empty: ${xFile.name}');
+                    if (mounted) {
+                      CustomSnackbar.showSnackbar(
+                        context,
+                        'Warning: One image file is empty and was skipped',
+                      );
+                    }
+                    continue;
+                  }
+                }
+                // For blob URLs, we'll handle them during upload
+              } catch (readError) {
+                // Don't skip blob URLs - they'll be handled during upload
+                final path = xFile.path;
+                if (path.startsWith('blob:') || path.startsWith('http://') || path.startsWith('https://')) {
+                  print('📤 Gallery: Blob/HTTP URL detected, will fetch during upload: $path');
+                  // Continue - we'll handle this during upload
+                } else {
+                  print('⚠️ Gallery: Cannot read file ${xFile.name}: $readError');
+                  // For non-blob URLs that fail, skip them
+                  if (mounted) {
+                    CustomSnackbar.showSnackbar(
+                      context,
+                      'Warning: One image file could not be read and was skipped',
+                    );
+                  }
+                  continue;
+                }
               }
             }
             
@@ -425,14 +463,40 @@ class _GalleryScreenState extends State<GalleryScreen> {
             throw Exception('Invalid file: missing path and name');
           }
           
-          final bytes = await imageFile.readAsBytes();
+          print('📤 Gallery Web: File path: $path, name: ${imageFile.name}');
+          
+          // Try to read bytes - on mobile browsers, blob URLs might need HTTP fetch
+          Uint8List bytes;
+          try {
+            bytes = await imageFile.readAsBytes();
+            print('✅ Gallery Web: Successfully read ${bytes.length} bytes directly');
+          } catch (readError) {
+            // If direct read fails, try fetching from URL (for blob URLs on mobile browsers)
+            print('⚠️ Gallery Web: Direct read failed, trying HTTP fetch: $readError');
+            if (path.startsWith('blob:') || path.startsWith('http://') || path.startsWith('https://')) {
+              try {
+                final httpResponse = await http.get(Uri.parse(path));
+                if (httpResponse.statusCode == 200) {
+                  bytes = httpResponse.bodyBytes;
+                  print('✅ Gallery Web: Successfully fetched ${bytes.length} bytes via HTTP');
+                } else {
+                  throw Exception('Failed to fetch image: HTTP ${httpResponse.statusCode}');
+                }
+              } catch (httpError) {
+                print('❌ Gallery Web: HTTP fetch also failed: $httpError');
+                throw Exception('Could not read image file. Please try selecting the image again.');
+              }
+            } else {
+              // Not a blob/HTTP URL, rethrow the original error
+              throw Exception('Could not read image file. The file may be corrupted or inaccessible. Please try selecting a different image.');
+            }
+          }
           
           if (bytes.isEmpty) {
             throw Exception('Image file is empty or could not be read');
           }
           
           print('📤 Gallery Web: Uploading ${bytes.length} bytes as $fileName (${mimeType})');
-          print('📤 Gallery Web: File path: $path, name: ${imageFile.name}');
 
           final formData = FormData.fromMap({
             'shopId': shopId.toString(),
@@ -450,13 +514,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
             formData,
           );
         } catch (e, stackTrace) {
-          print('❌ Gallery Web: Error reading file bytes: $e');
+          print('❌ Gallery Web: Error uploading image: $e');
           print('❌ Gallery Web: Stack trace: $stackTrace');
           print('❌ Gallery Web: File path: ${imageFile.path}, name: ${imageFile.name}');
-          // Provide more specific error message
-          if (e.toString().contains('Invalid argument')) {
-            throw Exception('Could not read image file. The file may be corrupted or inaccessible. Please try selecting a different image.');
-          }
           rethrow;
         }
       } else {
