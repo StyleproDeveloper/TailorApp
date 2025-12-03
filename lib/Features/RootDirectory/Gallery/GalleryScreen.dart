@@ -9,7 +9,8 @@ import 'package:tailorapp/Core/Widgets/CustomSnakBar.dart';
 import 'package:tailorapp/Core/Services/Services.dart';
 import 'package:tailorapp/Core/Services/Urls.dart';
 import 'package:tailorapp/GlobalVariables.dart';
-import 'package:dio/dio.dart' show Dio, FormData, MultipartFile, DioMediaType, Response;
+import 'package:http_parser/http_parser.dart' show MediaType; // Use MediaType directly
+import 'package:dio/dio.dart' show Dio, FormData, MultipartFile, Response, Options, DioException;
 import 'package:http/http.dart' as http;
 
 class GalleryScreen extends StatefulWidget {
@@ -391,6 +392,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
     try {
       print('📤 Gallery: Uploading image to backend...');
+      print('📤 Gallery: File path: ${imageFile.path}, name: ${imageFile.name}');
       
       Response response;
       
@@ -454,70 +456,71 @@ class _GalleryScreenState extends State<GalleryScreen> {
         mimeType = 'image/jpeg';
       }
       
-      if (kIsWeb) {
-        // On web (including mobile browsers), read bytes from XFile
-        try {
-          // Check if file path is valid
-          final path = imageFile.path;
-          if (path.isEmpty && imageFile.name.isEmpty) {
-            throw Exception('Invalid file: missing path and name');
-          }
-          
-          print('📤 Gallery Web: File path: $path, name: ${imageFile.name}');
-          
-          // Try to read bytes - on mobile browsers, blob URLs might need HTTP fetch
-          Uint8List bytes;
-          try {
-            bytes = await imageFile.readAsBytes();
-            print('✅ Gallery Web: Successfully read ${bytes.length} bytes directly');
-          } catch (readError) {
-            // If direct read fails, try fetching from URL (for blob URLs on mobile browsers)
-            print('⚠️ Gallery Web: Direct read failed, trying HTTP fetch: $readError');
-            if (path.startsWith('blob:') || path.startsWith('http://') || path.startsWith('https://')) {
-              try {
-                final httpResponse = await http.get(Uri.parse(path));
-                if (httpResponse.statusCode == 200) {
-                  bytes = httpResponse.bodyBytes;
-                  print('✅ Gallery Web: Successfully fetched ${bytes.length} bytes via HTTP');
-                } else {
-                  throw Exception('Failed to fetch image: HTTP ${httpResponse.statusCode}');
-                }
-              } catch (httpError) {
-                print('❌ Gallery Web: HTTP fetch also failed: $httpError');
-                throw Exception('Could not read image file. Please try selecting the image again.');
-              }
-            } else {
-              // Not a blob/HTTP URL, rethrow the original error
-              throw Exception('Could not read image file. The file may be corrupted or inaccessible. Please try selecting a different image.');
-            }
-          }
-          
-          if (bytes.isEmpty) {
-            throw Exception('Image file is empty or could not be read');
-          }
-          
-          print('📤 Gallery Web: Uploading ${bytes.length} bytes as $fileName (${mimeType})');
+      print('📤 Gallery: Prepared upload for $fileName ($mimeType)');
 
+      if (kIsWeb) {
+        // On web (including mobile browsers), use streaming to avoid memory issues
+        // This works for blob URLs too as openRead handles them
+        try {
+          // Get file length
+          final length = await imageFile.length();
+          print('📤 Gallery Web: File size: $length bytes');
+          
+          if (length == 0) {
+             throw Exception('Image file is empty (0 bytes)');
+          }
+          
+          // Create a stream from the file
+          final stream = imageFile.openRead();
+          
           final formData = FormData.fromMap({
             'shopId': shopId.toString(),
             'owner': GlobalVariables.userId?.toString() ?? '',
-            'file': MultipartFile.fromBytes(
-              bytes,
+            'file': MultipartFile(
+              stream,
+              length,
               filename: fileName,
-              contentType: DioMediaType.parse(mimeType),
+              contentType: MediaType.parse(mimeType),
             ),
           });
 
+          print('📤 Gallery Web: Sending request via postFormData...');
           response = await ApiService().postFormData(
             '${Urls.gallery}/$shopId/upload',
             context,
             formData,
           );
         } catch (e, stackTrace) {
-          print('❌ Gallery Web: Error uploading image: $e');
+          print('❌ Gallery Web: Error during streaming/upload: $e');
           print('❌ Gallery Web: Stack trace: $stackTrace');
-          print('❌ Gallery Web: File path: ${imageFile.path}, name: ${imageFile.name}');
-          rethrow;
+          
+          // Fallback: If streaming fails (some mobile browsers might handle blob streams poorly),
+          // try reading bytes as a last resort, but use chunked upload if possible (not implemented here)
+          // or just try the byte-loading method one last time.
+          print('⚠️ Gallery Web: Streaming failed, trying load-to-memory fallback...');
+          try {
+            final bytes = await imageFile.readAsBytes();
+            if (bytes.isEmpty) throw Exception('Read bytes returned empty');
+            
+            final formData = FormData.fromMap({
+              'shopId': shopId.toString(),
+              'owner': GlobalVariables.userId?.toString() ?? '',
+              'file': MultipartFile.fromBytes(
+                bytes,
+                filename: fileName,
+                contentType: MediaType.parse(mimeType),
+              ),
+            });
+            
+            response = await ApiService().postFormData(
+              '${Urls.gallery}/$shopId/upload',
+              context,
+              formData,
+            );
+          } catch (fallbackError) {
+             print('❌ Gallery Web: Fallback also failed: $fallbackError');
+             rethrow; // Throw original or fallback error
+          }
         }
       } else {
         // On mobile native, use File
@@ -548,7 +551,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
           await _loadGalleryImages();
         } catch (reloadError) {
           print('⚠️ Gallery: Error reloading images after upload: $reloadError');
-          // Don't fail the upload if reload fails
         }
         if (mounted) {
           CustomSnackbar.showSnackbar(context, 'Image uploaded successfully');
@@ -559,14 +561,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
     } catch (e, stackTrace) {
       print('❌ Gallery: Error uploading image: $e');
       print('❌ Gallery: Stack trace: $stackTrace');
-      print('❌ Gallery: File path: ${imageFile.path}, name: ${imageFile.name}');
       if (mounted) {
         // Show user-friendly error message
         String errorMessage = 'Error uploading image';
         if (e.toString().contains('Invalid argument')) {
-          errorMessage = 'Error: Could not read image file. Please try selecting the image again.';
-        } else if (e.toString().contains('index')) {
-          errorMessage = 'Error: File processing issue. Please try again.';
+          errorMessage = 'Error: File processing issue. Please try selecting the image again.';
+        } else if (e.toString().contains('image file is empty')) {
+           errorMessage = 'Error: The selected image is empty or corrupted.';
         } else {
           errorMessage = 'Error uploading image: ${e.toString()}';
         }
