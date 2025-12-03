@@ -14,7 +14,7 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit
+    fileSize: 500 * 1024 * 1024, // 500MB limit (increased for large images/audio)
   },
   fileFilter: (req, file, cb) => {
     // Allow images and audio files - comprehensive list including HEIC

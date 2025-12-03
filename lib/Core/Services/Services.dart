@@ -24,8 +24,8 @@ class ApiService {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 60),
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 300), // 5 minutes for large file uploads
     );
 
     // Enable Logging Interceptor only in debug mode
@@ -214,7 +214,14 @@ class ApiService {
       if (kDebugMode) {
         print('POST FORMDATA: $baseUrl$endpoint');
       }
-      final response = await _dio.post(endpoint, data: formData);
+      final response = await _dio.post(
+        endpoint,
+        data: formData,
+        options: Options(
+          sendTimeout: const Duration(seconds: 300), // 5 minutes for large file uploads
+          receiveTimeout: const Duration(seconds: 300), // 5 minutes for large file uploads
+        ),
+      );
       return response;
     } on DioException catch (e) {
       _handleDioError(e, context);
@@ -312,8 +319,8 @@ class ApiService {
         endpoint, 
         data: formData,
         options: Options(
-          sendTimeout: const Duration(seconds: 60), // Increase timeout for large files
-          receiveTimeout: const Duration(seconds: 60),
+          sendTimeout: const Duration(seconds: 300), // 5 minutes for large file uploads
+          receiveTimeout: const Duration(seconds: 300), // 5 minutes for large file uploads
         ),
       );
       
