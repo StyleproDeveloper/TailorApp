@@ -47,9 +47,9 @@ const upload = multer({
     // Log for debugging
     console.log('📤 Gallery file upload - mimetype:', file.mimetype, 'originalname:', file.originalname);
     
-    // If mimetype is missing, try to infer from filename
+    // If mimetype is missing or generic, try to infer from filename
     let mimetype = file.mimetype;
-    if (!mimetype && file.originalname) {
+    if ((!mimetype || mimetype === 'application/octet-stream') && file.originalname) {
       const ext = file.originalname.toLowerCase().split('.').pop();
       const mimeMap = {
         'jpg': 'image/jpeg',
@@ -65,7 +65,7 @@ const upload = multer({
         'ico': 'image/x-icon',
         'svg': 'image/svg+xml',
       };
-      mimetype = mimeMap[ext] || 'image/jpeg'; // Default to jpeg if unknown
+      mimetype = mimeMap[ext] || mimetype; // Use inferred type or keep original if not found
       console.log('📤 Inferred mimetype from extension:', mimetype);
     }
 
